@@ -10,6 +10,7 @@ const DEFAULT_SETTINGS: StudioSettings = {
     filterPreset: 'none',
     backgroundMode: 'none',
     backgroundImageUrl: null,
+    inputMode: 'camera',
     scriptText: 'Type or paste your script here...\n\nWelcome to your new video studio. Keep your eyes on the camera lens while reading smoothly.'
 };
 
