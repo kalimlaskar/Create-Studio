@@ -10,7 +10,14 @@ interface TeleprompterOverlayProps {
 export function TeleprompterOverlay({ scriptText }: TeleprompterOverlayProps) {
     const [isScrolling, setIsScrolling] = useState(false);
     const [isAtEnd, setIsAtEnd] = useState(false);
+    const [prevScriptText, setPrevScriptText] = useState(scriptText);
     const scrollRef = useRef<HTMLDivElement>(null);
+
+    // Reset isAtEnd safely during render when scriptText changes (replaces the bad useEffect)
+    if (scriptText !== prevScriptText) {
+        setPrevScriptText(scriptText);
+        setIsAtEnd(false);
+    }
 
     useEffect(() => {
         if (!isScrolling) return;
@@ -31,10 +38,6 @@ export function TeleprompterOverlay({ scriptText }: TeleprompterOverlayProps) {
 
         return () => window.clearInterval(interval);
     }, [isScrolling]);
-
-    useEffect(() => {
-        setIsAtEnd(false);
-    }, [scriptText]);
 
     if (!scriptText.trim()) return null;
 
