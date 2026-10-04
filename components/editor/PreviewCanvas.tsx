@@ -8,6 +8,7 @@ import { getFrameCrop, getRecordingDimensions } from '@/components/recordingQual
 import { drawActiveCaption } from './captionRendering';
 import { drawFreeTierWatermark } from '@/components/freeTier';
 import { applyArtisticEffect } from '@/components/studio/artisticEffects';
+import { drawActiveOverlays } from './overlayRendering';
 
 interface PreviewCanvasProps {
     videoRef: RefObject<HTMLVideoElement | null>;
@@ -68,22 +69,7 @@ export function PreviewCanvas({ videoRef, project }: PreviewCanvasProps) {
 
                 ctx.restore(); // overlays drawn AFTER restore, so text stays fixed size/position, not zoomed
 
-                for (const overlay of showOriginal ? [] : project.tracks.overlays) {
-                    if (currentMs < overlay.startMs || currentMs > overlay.endMs) continue;
-                    if (overlay.type === 'text') {
-                        const fontSize = overlay.fontSize ?? 32;
-                        ctx.font = `bold ${fontSize}px sans-serif`;
-                        ctx.fillStyle = overlay.color ?? '#ffffff';
-                        ctx.textAlign = 'center';
-                        ctx.textBaseline = 'middle';
-                        ctx.strokeStyle = 'rgba(0,0,0,0.6)';
-                        ctx.lineWidth = fontSize * 0.12;
-                        const x = overlay.x * canvas.width;
-                        const y = overlay.y * canvas.height;
-                        ctx.strokeText(overlay.content, x, y);
-                        ctx.fillText(overlay.content, x, y);
-                    }
-                }
+                if (!showOriginal) drawActiveOverlays(ctx, project.tracks.overlays, currentMs, canvas.width, canvas.height);
                 if (!showOriginal) drawActiveCaption(ctx, project.tracks.captions, currentMs, project.captionStyle, canvas.width, canvas.height);
                 if (!showOriginal) applyArtisticEffect(canvas, project.cameraArtEffect);
                 if (!showOriginal) drawFreeTierWatermark(ctx, canvas.width, canvas.height);

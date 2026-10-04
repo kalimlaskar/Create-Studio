@@ -23,7 +23,7 @@ const DEFAULT_SETTINGS: StudioSettings = {
 
 export const FREE_RECORDING_LIMIT_SECONDS = 60;
 
-export function useStudioSession() {
+export function useStudioSession(enabled = true) {
     const [settings, setSettings] = useState<StudioSettings>(DEFAULT_SETTINGS);
     const [isRecording, setIsRecording] = useState(false);
     const [isRecordingPaused, setIsRecordingPaused] = useState(false);
@@ -52,6 +52,7 @@ export function useStudioSession() {
 
     // Initialize Camera & Mic with AI Noise Suppression
     useEffect(() => {
+        if (!enabled) return;
         let cancelled = false;
 
         async function setupCamera() {
@@ -86,8 +87,10 @@ export function useStudioSession() {
         return () => {
             cancelled = true;
             mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
+            mediaStreamRef.current = null;
+            if (videoRef.current) videoRef.current.srcObject = null;
         };
-    }, []);
+    }, [enabled]);
 
     const updateSettings = useCallback((newSettings: Partial<StudioSettings>) => {
         setSettings((prev) => ({ ...prev, ...newSettings }));

@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Creator Studio | Record, Edit & Export Videos",
-  description: "Record polished videos, edit color and overlays, add music, and export in the frame that fits your platform.",
+  title: "CreatorStudio | Make lessons and reels",
+  description: "Create classroom lessons, narrated presentations, and social-ready reels with a simple browser-based video studio.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

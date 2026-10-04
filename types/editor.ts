@@ -1,6 +1,7 @@
 import { AspectRatioType, CameraArtEffect, ScriptLanguage } from './studio';
 
-export type OverlayType = 'text' | 'icon';
+export type OverlayType = 'text' | 'image' | 'icon';
+export type TextOverlayStyle = 'classic' | 'banner' | 'highlight' | 'outline';
 
 export interface BaseClip {
     id: string;
@@ -15,6 +16,8 @@ export interface OverlayClip extends BaseClip {
     y: number;                 // 0-1, fraction of canvas height
     fontSize?: number;         // text only
     color?: string;
+    textStyle?: TextOverlayStyle;
+    width?: number;            // image width as a fraction of canvas width
     iconSize?: number;         // icon only
 }
 
@@ -42,6 +45,7 @@ export interface BackgroundSegment extends BaseClip {
 export interface AudioTrackClip extends BaseClip {
     url: string;
     volume: number; // 0-1
+    loop?: boolean;
     fadeInMs?: number;
     fadeOutMs?: number;
 }

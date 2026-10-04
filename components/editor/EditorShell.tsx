@@ -17,6 +17,7 @@ import { captureSourceAudio } from './captureSourceAudio';
 import { TranscriptionLanguage } from './CaptionsPanel';
 import { drawFreeTierWatermark, FREE_VIDEO_LIMIT_MS } from '@/components/freeTier';
 import { applyArtisticEffect } from '@/components/studio/artisticEffects';
+import { drawActiveOverlays } from './overlayRendering';
 
 interface EditorShellProps {
     sourceVideoUrl: string;
@@ -235,20 +236,7 @@ export function EditorShell({ sourceVideoUrl, aspectRatio, initialScript, initia
                 ctx.filter = 'none';
                 ctx.restore();
 
-                for (const overlay of project.tracks.overlays) {
-                    if (currentMs < overlay.startMs || currentMs > overlay.endMs || overlay.type !== 'text') continue;
-                    const fontSize = (overlay.fontSize ?? 32) * scale;
-                    ctx.font = `bold ${fontSize}px sans-serif`;
-                    ctx.fillStyle = overlay.color ?? '#ffffff';
-                    ctx.textAlign = 'center';
-                    ctx.textBaseline = 'middle';
-                    ctx.strokeStyle = 'rgba(0,0,0,0.6)';
-                    ctx.lineWidth = fontSize * 0.12;
-                    const x = overlay.x * exportCanvas.width;
-                    const y = overlay.y * exportCanvas.height;
-                    ctx.strokeText(overlay.content, x, y);
-                    ctx.fillText(overlay.content, x, y);
-                }
+                drawActiveOverlays(ctx, project.tracks.overlays, currentMs, exportCanvas.width, exportCanvas.height, scale);
                 drawActiveCaption(ctx, project.tracks.captions, currentMs, project.captionStyle, exportCanvas.width, exportCanvas.height);
                 applyArtisticEffect(exportCanvas, project.cameraArtEffect);
                 drawFreeTierWatermark(ctx, exportCanvas.width, exportCanvas.height);
@@ -380,6 +368,8 @@ export function EditorShell({ sourceVideoUrl, aspectRatio, initialScript, initia
                     onUpdateOverlay={updateOverlay}
                     onRemoveOverlay={removeOverlay}
                     onSetAudioTracks={setAudioTracks}
+                    isSourceMuted={isSourceMuted}
+                    onMuteSourceAudio={toggleSourceAudio}
                     onAddZoomKeyframe={addZoomKeyframe}
                     onUpdateZoomKeyframe={updateZoomKeyframe}
                     onRemoveZoomKeyframe={removeZoomKeyframe}

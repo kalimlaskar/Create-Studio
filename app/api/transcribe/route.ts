@@ -1,3 +1,5 @@
+import { hasAuthenticatedSupabaseUser } from '@/lib/supabase/authorization';
+
 const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
 const LANGUAGE_CODES = new Set(['auto', 'en', 'hi', 'hinglish']);
 export const maxDuration = 120;
@@ -8,6 +10,9 @@ interface TranscriptionResponse {
 }
 
 export async function POST(request: Request) {
+    if (!await hasAuthenticatedSupabaseUser()) {
+        return Response.json({ error: 'Sign in to generate captions.' }, { status: 401 });
+    }
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
         return Response.json({ error: 'Automatic captions need an OPENAI_API_KEY configured on the server.' }, { status: 503 });

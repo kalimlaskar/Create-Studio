@@ -28,6 +28,8 @@ interface EditorSidebarProps {
     onUpdateOverlay: (id: string, patch: Partial<OverlayClip>) => void;
     onRemoveOverlay: (id: string) => void;
     onSetAudioTracks: (tracks: AudioTrackClip[]) => void;
+    isSourceMuted: boolean;
+    onMuteSourceAudio: () => void;
     onAddZoomKeyframe: (atMs: number, scale: number) => void;
     onUpdateZoomKeyframe: (id: string, patch: Partial<ZoomKeyframe>) => void;
     onRemoveZoomKeyframe: (id: string) => void;
@@ -47,7 +49,7 @@ interface EditorSidebarProps {
 
 export function EditorSidebar({
     project, undoCounts, onUndoTab, onResetTab, onApplyStylePreset, onTightenToSpeech, playheadMs, onBack,
-    onColorGradeChange, onAddOverlay, onUpdateOverlay, onRemoveOverlay, onSetAudioTracks,
+    onColorGradeChange, onAddOverlay, onUpdateOverlay, onRemoveOverlay, onSetAudioTracks, isSourceMuted, onMuteSourceAudio,
     onAddZoomKeyframe, onUpdateZoomKeyframe, onRemoveZoomKeyframe,
     onAddSpeedSegment, onUpdateSpeedSegment, onRemoveSpeedSegment,
     onAddCaption, onUpdateCaption, onRemoveCaption, onCaptionStyleChange, onGenerateCaptions,
@@ -159,6 +161,9 @@ export function EditorSidebar({
                 <MusicPanel
                     audioTracks={project.tracks.audio}
                     durationMs={project.durationMs}
+                    scriptText={project.teleprompterScript}
+                    isSourceMuted={isSourceMuted}
+                    onMuteSourceAudio={onMuteSourceAudio}
                     onSet={onSetAudioTracks}
                 />
             )}

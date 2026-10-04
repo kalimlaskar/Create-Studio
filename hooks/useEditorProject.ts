@@ -201,7 +201,7 @@ export function useEditorProject(sourceVideoUrl: string, initialProject?: Editor
             musicGainRef.current?.disconnect();
             musicGainRef.current = null;
             const audio = new Audio(track.url);
-            audio.loop = false;
+            audio.loop = track.loop !== false;
             audioElRef.current = audio;
             if (audioContextRef.current && audioDestinationRef.current) {
                 const source = audioContextRef.current.createMediaElementSource(audio);
@@ -224,11 +224,12 @@ export function useEditorProject(sourceVideoUrl: string, initialProject?: Editor
                 return;
             }
             const trackTime = Math.max(0, video.currentTime * 1000 - track.startMs) / 1000;
-            if (trackTime * 1000 > track.endMs - track.startMs) {
+            const trackWindowSeconds = (track.endMs - track.startMs) / 1000;
+            if (trackTime >= trackWindowSeconds || (track.loop === false && trackTime >= audio.duration)) {
                 audio.pause();
                 return;
             }
-            const audioTime = trackTime % audio.duration;
+            const audioTime = track.loop === false ? trackTime : trackTime % audio.duration;
             if (Math.abs(audio.currentTime - audioTime) > 0.35) audio.currentTime = audioTime;
             audio.playbackRate = video.playbackRate;
             if (isPlaying && !audio.paused) return;

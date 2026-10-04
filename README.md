@@ -14,9 +14,20 @@ pnpm dev
 bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000) with your browser to see the public product page. Create an account or sign in to open `/studio`.
 
-Creator Studio is a browser-based video recording and editing workspace built with Next.js.
+CreatorStudio is a browser-based lesson, presentation, and social-reel creation workspace built with Next.js.
+
+## Supabase authentication setup
+
+1. For immediate local preview before creating a Supabase project, run `npm run dev` and use the temporary demo login: username `teacher`, password `lesson-demo-2026`. This is a shared local-only admin demo account, not a real user account; it is disabled automatically in production and when Supabase is configured. Set `TEMP_AUTH_ENABLED=false` to disable it locally.
+2. Create a free Supabase project when you're ready for real accounts.
+3. Copy its Project URL and **publishable** key from the project's Connect/API settings into `.env.local` as `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`. For production also set `NEXT_PUBLIC_SITE_URL` to the deployed HTTPS origin.
+4. In Supabase Authentication URL Configuration, set the local Site URL to `http://localhost:3000` and add `http://localhost:3000/auth/callback` to the Redirect URLs. For deployment, add the deployed origin and its `/auth/callback` URL too.
+5. Configure email delivery in Supabase Auth. Until SMTP is configured, confirmation emails may be limited by the provider's default email service.
+6. Restart `npm run dev`, then use **Sign up** and confirm the email if email confirmation is enabled. Adding Supabase credentials automatically switches off the temporary demo account.
+
+Only the Supabase project URL and publishable key belong in `NEXT_PUBLIC_` variables. Never put a Supabase secret/service-role key in browser-visible environment variables. Sign-in and sign-up are handled by server actions; the `/studio` route and paid AI generation routes verify the Supabase session. Editor and reel drafts are still local to the browser and are not synced to Supabase.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
@@ -39,7 +50,7 @@ Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/bui
 
 Automatic captions use OpenAI Whisper word timestamps. Set `OPENAI_API_KEY` in `.env.local` on the server before using the Captions tab. The key is never sent to the browser. Audio is captured from the source video and sent to OpenAI; the transcription API accepts files up to 25 MB. Hindi, Hinglish, and English (including accented English) can be selected, and generated words remain editable in the editor.
 
-The teleprompter's AI script builder uses the same server-side `OPENAI_API_KEY` and supports English, Hindi, Hinglish, Bengali, Marathi, Tamil, and Telugu. Generated text is a draft; review it before recording.
+The teleprompter's AI script builder and photo-reel caption/voiceover generation use the server-side `GEMINI_API_KEY` and support the languages shown in the UI. Generated text/audio should be reviewed before publishing.
 
 ## Cartoon and photo-avatar effects
 
@@ -47,13 +58,13 @@ Comic, pencil sketch, pixel, and anime looks are processed locally on a small wo
 
 Accuracy varies with the recording, accent, background noise, and code-switching. Review generated captions before publishing.
 
-Copy `.env.example` to `.env.local` and set the server-only values before using AI script generation, captions, or feedback delivery.
+Copy `.env.example` to `.env.local` and configure the Supabase URL/publishable key to enable registration and protected studio access. Set `GEMINI_API_KEY` for AI scripts, reel captions, dubbing, and voiceovers; set `OPENAI_API_KEY` for Whisper transcription. These provider keys stay on the server.
 
 ## Local projects and free plan
 
-Saved editor projects are stored in IndexedDB on the current browser/device; they are not synced to an account or another device. The current free-plan prototype adds a visible watermark and limits camera recordings and exports to 60 seconds. Payments and paid-plan entitlements are not enabled until a billing provider, credentials, and a persistent account/database service are configured.
+Saved editor projects and photo/video reel drafts are stored in IndexedDB on the current browser/device; they are not synced to an account or another device. The current free-plan prototype adds a visible watermark and limits recordings/exports to 60 seconds. Payments and paid-plan entitlements are not enabled.
 
-The Creator Profile name is a local browser label, not an authenticated account. The Upgrade control is deliberately disabled: no Stripe/Razorpay checkout, subscription verification, or paid-limit bypass should be presented as live until auth, database entitlements, provider secrets, and verified webhooks are configured.
+The Creator Profile name remains a local browser label. Supabase Auth identifies users, but account-backed project sync is not implemented. The Upgrade control is deliberately disabled: no Stripe/Razorpay checkout, subscription verification, or paid-limit bypass should be presented as live until billing and verified webhooks are configured.
 
 ## Creator feedback
 

@@ -1,277 +1,69 @@
-'use client';
+import Link from 'next/link';
+import { ArrowDown, ArrowRight, AudioLines, Check, Clapperboard, Images, Layers3, Play, Sparkles, WandSparkles } from 'lucide-react';
 
-import React, { useState, useEffect } from 'react';
-import { Video, Pause, Play, Square, FolderOpen, Trash2 } from 'lucide-react';
-import { SidebarControls } from '@/components/studio/SidebarControls';
-import { VideoCanvas } from '@/components/studio/VideoCanvas';
-import { ExportModal } from '@/components/studio/ExportModal';
-import { EditorShell } from '@/components/editor/EditorShell';
-import { useStudioSession } from '@/hooks/useStudioSession';
-import { deleteEditorDraft, DraftSummary, LoadedDraft, listEditorDrafts, loadEditorDraft } from '@/components/editor/drafts';
-import { FeedbackWidget } from '@/components/studio/FeedbackWidget';
+const features = [
+    { icon: Clapperboard, title: 'Record with confidence', text: 'Read naturally from a teleprompter, choose your frame, and record right in your browser.' },
+    { icon: Images, title: 'Turn photos into a reel', text: 'Mix photos and video clips, add titles, transitions, music, and narration.' },
+    { icon: WandSparkles, title: 'Polish without the hassle', text: 'Style captions, color, and overlays, then preview every change before exporting.' },
+];
 
-export default function CreatorStudioDashboard() {
-  const {
-    settings,
-    updateSettings,
-    microphoneLevelRef,
-    startAvatarAudioMeter,
-    stopAvatarAudioMeter,
-    videoRef,
-    canvasStreamRef,
-    isRecording,
-    isRecordingPaused,
-    countdown,
-    recordedVideoUrl,
-    recordedVideoMimeType,
-    recordedDurationMs,
-    recordingSeconds,
-    freeRecordingLimitSeconds,
-    startRecordingSequence,
-    stopRecording,
-    pauseRecording,
-    resumeRecording,
-    resetRecording,
-    cameraError,
-  } = useStudioSession();
+const steps = [
+    { number: '01', title: 'Choose your story', text: 'Start with a camera recording or bring your photos and clips.' },
+    { number: '02', title: 'Make it yours', text: 'Add a script, captions, designed text, music, transitions, and a voiceover.' },
+    { number: '03', title: 'Export and share', text: 'Preview the result and download a polished video ready to post or present.' },
+];
 
-  const [view, setView] = useState<'record' | 'edit'>('record');
-  const [savedDrafts, setSavedDrafts] = useState<DraftSummary[]>([]);
-  const [restoredDraft, setRestoredDraft] = useState<LoadedDraft | null>(null);
-  const [isLoadingDraft, setIsLoadingDraft] = useState(false);
-  const [showWelcome, setShowWelcome] = useState(false);
-  const [creatorName, setCreatorName] = useState('My creator space');
+function Wordmark() {
+    return <Link href="/" className="inline-flex items-center gap-2.5 font-semibold tracking-tight text-white"><span className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-500 shadow-lg shadow-indigo-950/40"><Sparkles className="h-5 w-5" /></span><span>Creator<span className="text-indigo-300">Studio</span></span></Link>;
+}
 
-  const refreshDrafts = async () => {
-    try {
-      setSavedDrafts(await listEditorDrafts());
-    } catch (error) {
-      console.error('Could not load saved drafts:', error);
-    }
-  };
-
-  useEffect(() => {
-    let cancelled = false;
-    listEditorDrafts().then((drafts) => {
-      if (!cancelled) setSavedDrafts(drafts);
-    }).catch((error) => console.error('Could not load saved drafts:', error));
-    return () => { cancelled = true; };
-  }, []);
-
-  useEffect(() => {
-    const frame = window.requestAnimationFrame(() => {
-      if (!window.localStorage.getItem('creator-studio-first-run-v1')) setShowWelcome(true);
-      setCreatorName(window.localStorage.getItem('creator-studio-creator-name') || 'My creator space');
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, []);
-
-  const updateCreatorName = (name: string) => {
-    const safeName = name.slice(0, 48);
-    setCreatorName(safeName);
-    window.localStorage.setItem('creator-studio-creator-name', safeName);
-  };
-
-  const dismissWelcome = (useSample: boolean) => {
-    window.localStorage.setItem('creator-studio-first-run-v1', 'complete');
-    setShowWelcome(false);
-    if (useSample) {
-      updateSettings({
-        scriptLanguage: 'hinglish',
-        aspectRatio: '9:16',
-        scriptText: 'Hey, creator! Aaj main share karunga ek simple idea jo aapke next video ko instantly better bana sakta hai.\n\nPehla step: apni opening line ko clear rakho. Doosra: ek useful example dikhao. Aur end mein, audience se ek simple sawaal poochho.\n\nTry this in your next reel, and tell me what you think!',
-      });
-    }
-  };
-
-  const removeDraft = async (id: string) => {
-    try {
-      await deleteEditorDraft(id);
-      await refreshDrafts();
-    } catch (error) {
-      console.error('Could not delete saved project:', error);
-    }
-  };
-
-  const setCameraArtEffect = (cameraArtEffect: typeof settings.cameraArtEffect) => {
-    updateSettings({ cameraArtEffect });
-    if (cameraArtEffect === 'photo-avatar') startAvatarAudioMeter();
-    else stopAvatarAudioMeter();
-  };
-
-  const openDraft = async (id: string) => {
-    setIsLoadingDraft(true);
-    try {
-      const draft = await loadEditorDraft(id);
-      setRestoredDraft(draft);
-      setView('edit');
-    } catch (error) {
-      console.error('Could not open saved draft:', error);
-      window.alert('Could not open this draft. It may have been removed or its media is unavailable.');
-    } finally {
-      setIsLoadingDraft(false);
-    }
-  };
-
-  // Handle source switching for the video element if needed
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
-
-    if (settings.inputMode === 'upload' && settings.uploadedVideoUrl) {
-      video.srcObject = null;
-      video.src = settings.uploadedVideoUrl;
-      video.loop = true;
-      video.play().catch((err) => console.error("Error playing uploaded video:", err));
-    }
-  }, [settings.inputMode, settings.uploadedVideoUrl, videoRef]);
-
-  // Active Video URL to pass to the Editor (either freshly recorded or newly uploaded)
-  const activeVideoUrl = restoredDraft?.project.sourceVideoUrl || recordedVideoUrl || settings.uploadedVideoUrl;
-  const isEditorOpen = Boolean(activeVideoUrl && (view === 'edit' || (settings.inputMode === 'upload' && settings.uploadedVideoUrl)));
-
-  useEffect(() => {
-    if (isEditorOpen) stopAvatarAudioMeter();
-    else if (settings.cameraArtEffect === 'photo-avatar') startAvatarAudioMeter();
-  }, [isEditorOpen, settings.cameraArtEffect, startAvatarAudioMeter, stopAvatarAudioMeter]);
-
-  // If we are in edit mode and have a video ready, render the dedicated editor shell
-  if ((view === 'edit' || (settings.inputMode === 'upload' && Boolean(settings.uploadedVideoUrl))) && activeVideoUrl) {
+export default function HomePage() {
     return (
-      <EditorShell
-        sourceVideoUrl={activeVideoUrl}
-        aspectRatio={restoredDraft?.project.aspectRatio ?? settings.aspectRatio}
-        initialScript={settings.scriptText}
-        initialScriptLanguage={settings.scriptLanguage}
-        creatorName={creatorName}
-        sourceDurationMs={restoredDraft?.project.durationMs ?? recordedDurationMs ?? undefined}
-        initialCameraArtEffect={restoredDraft?.project.cameraArtEffect ?? (recordedVideoUrl || settings.cameraArtEffect === 'photo-avatar' || settings.cameraArtEffect === 'avatar' ? 'none' : settings.cameraArtEffect)}
-        initialProject={restoredDraft?.project}
-        onDraftSaved={() => { void refreshDrafts(); }}
-        onBack={() => {
-          if (restoredDraft) URL.revokeObjectURL(restoredDraft.project.sourceVideoUrl);
-          restoredDraft?.project.tracks.audio.forEach((track) => URL.revokeObjectURL(track.url));
-          setRestoredDraft(null);
-          resetRecording();
-          updateSettings({ inputMode: 'camera', uploadedVideoUrl: undefined });
-          setView('record');
-        }}
-      />
+        <main className="min-h-dvh overflow-hidden bg-[#080a12] text-white selection:bg-indigo-400/30">
+            <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(ellipse_at_15%_0%,rgba(79,70,229,0.16),transparent_34%),radial-gradient(ellipse_at_85%_42%,rgba(56,189,248,0.09),transparent_32%)]" />
+            <header className="relative z-10 mx-auto flex w-full max-w-7xl items-center justify-between px-5 py-5 sm:px-8 lg:px-12">
+                <Wordmark />
+                <nav aria-label="Main navigation" className="hidden items-center gap-8 text-sm text-neutral-400 md:flex"><a href="#features" className="transition hover:text-white">Features</a><a href="#how-it-works" className="transition hover:text-white">How it works</a><a href="#for-teachers" className="transition hover:text-white">For educators</a></nav>
+                <div className="flex items-center gap-2 sm:gap-3"><Link href="/login" className="rounded-xl px-3 py-2 text-sm font-medium text-neutral-300 transition hover:text-white sm:px-4">Log in</Link><Link href="/signup" className="rounded-xl bg-white px-3.5 py-2.5 text-sm font-semibold text-neutral-950 transition hover:bg-indigo-100 sm:px-5">Get started <span className="hidden sm:inline">free</span></Link></div>
+            </header>
+
+            <section className="relative z-10 mx-auto grid min-h-170 max-w-7xl items-center gap-14 px-5 pb-24 pt-14 sm:px-8 lg:grid-cols-[1.02fr_.98fr] lg:px-12 lg:pb-32 lg:pt-20">
+                <div className="max-w-2xl">
+                    <div className="mb-7 inline-flex items-center gap-2 rounded-full border border-indigo-300/20 bg-indigo-300/[0.07] px-3.5 py-2 text-xs font-medium text-indigo-100"><span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,.7)]" />Your idea deserves a great video</div>
+                    <h1 className="text-5xl font-semibold leading-[1.04] tracking-[-0.055em] text-white sm:text-6xl lg:text-[4.65rem]">Teach it. Tell it.<br /><span className="bg-linear-to-r from-indigo-300 via-sky-200 to-fuchsia-300 bg-clip-text text-transparent">Make it a reel.</span></h1>
+                    <p className="mt-7 max-w-xl text-base leading-7 text-neutral-400 sm:text-lg sm:leading-8">A welcoming video studio for teachers, students, and creators. Record a clear lesson or turn your photos and clips into something people want to watch.</p>
+                    <div className="mt-9 flex flex-col gap-3 sm:flex-row"><Link href="/signup" className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-500 px-6 py-3.5 text-sm font-semibold text-white shadow-xl shadow-indigo-950/50 transition hover:bg-indigo-400">Create your free account <ArrowRight className="h-4 w-4" /></Link><a href="#how-it-works" className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/3 px-6 py-3.5 text-sm font-semibold text-neutral-200 transition hover:border-white/20 hover:bg-white/6">See how it works <ArrowDown className="h-4 w-4" /></a></div>
+                    <div className="mt-8 flex flex-wrap items-center gap-x-6 gap-y-2 text-xs text-neutral-500"><span className="inline-flex items-center gap-1.5"><Check className="h-3.5 w-3.5 text-emerald-400" />Start free</span><span className="inline-flex items-center gap-1.5"><Check className="h-3.5 w-3.5 text-emerald-400" />No editing experience needed</span><span className="inline-flex items-center gap-1.5"><Check className="h-3.5 w-3.5 text-emerald-400" />Create in your browser</span></div>
+                </div>
+
+                <div className="relative mx-auto w-full max-w-135 lg:ml-auto">
+                    <div className="absolute -inset-10 rounded-[3rem] bg-indigo-500/10 blur-3xl" />
+                    <div className="relative rounded-4xl border border-white/10 bg-[#11141f]/90 p-3 shadow-2xl shadow-black/50 backdrop-blur-xl sm:p-4">
+                        <div className="flex items-center justify-between px-2 pb-3"><div className="flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-rose-400" /><span className="h-2 w-2 rounded-full bg-amber-300" /><span className="h-2 w-2 rounded-full bg-emerald-400" /></div><span className="text-[10px] font-medium uppercase tracking-[0.18em] text-neutral-500">Your creative workspace</span><span className="w-9" /></div>
+                        <div className="relative overflow-hidden rounded-[1.45rem] border border-white/10 bg-[#181b28] p-4 sm:p-5">
+                            <div className="mb-4 flex items-center justify-between"><div><p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-indigo-300">Quick lesson · 00:24</p><p className="mt-1 text-sm font-semibold text-white">The water cycle, simply</p></div><span className="rounded-lg border border-white/10 bg-black/20 px-2.5 py-1.5 text-[10px] text-neutral-300">9:16</span></div>
+                            <div className="relative mx-auto flex aspect-9/10 max-h-90 items-end overflow-hidden rounded-xl border border-white/10 bg-[radial-gradient(circle_at_50%_32%,rgba(56,189,248,.6),transparent_26%),linear-gradient(160deg,#1e3a5f_0%,#101827_58%,#412d50_100%)] p-5">
+                                <div className="absolute inset-0 opacity-50" style={{ backgroundImage: 'linear-gradient(155deg, transparent 25%, rgba(255,255,255,.12) 25.3%, transparent 25.8%), linear-gradient(25deg, transparent 59%, rgba(255,255,255,.14) 59.3%, transparent 59.8%)' }} />
+                                <div className="absolute left-[17%] top-[22%] h-20 w-20 rounded-full bg-sky-100/10 blur-2xl" /><div className="absolute right-[15%] top-[32%] h-16 w-16 rounded-full bg-indigo-300/20 blur-xl" />
+                                <div className="relative z-10 w-full rounded-xl border border-white/15 bg-black/35 p-4 backdrop-blur-md"><p className="text-[9px] font-semibold uppercase tracking-[0.2em] text-sky-200">Science · chapter 04</p><p className="mt-1.5 text-lg font-semibold leading-tight text-white">Water is always<br />on the move.</p><div className="mt-3 flex items-center gap-2"><span className="h-1 flex-1 overflow-hidden rounded-full bg-white/15"><span className="block h-full w-2/3 rounded-full bg-indigo-300" /></span><span className="text-[9px] text-neutral-300">00:24</span></div></div>
+                                <div className="absolute right-3 top-3 flex items-center gap-1.5 rounded-full border border-white/10 bg-black/35 px-2.5 py-1.5 text-[9px] text-white"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-rose-400" />REC</div>
+                            </div>
+                            <div className="mt-4 flex items-center justify-between gap-3"><div className="flex items-center gap-2"><span className="flex h-8 w-8 items-center justify-center rounded-full bg-indigo-500/20 text-indigo-200"><AudioLines className="h-4 w-4" /></span><div><p className="text-[10px] font-medium text-white">Captions ready</p><p className="text-[9px] text-neutral-500">Clear, readable, on time</p></div></div><button aria-label="Preview example video" className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-neutral-950 shadow-lg"><Play className="ml-0.5 h-4 w-4 fill-current" /></button></div>
+                        </div>
+                        <div className="mt-3 grid grid-cols-3 gap-2"><div className="rounded-xl border border-white/8 bg-white/3 p-3"><Images className="h-4 w-4 text-fuchsia-300" /><p className="mt-2 text-[10px] font-medium text-neutral-200">Photo reel</p></div><div className="rounded-xl border border-white/8 bg-white/3 p-3"><AudioLines className="h-4 w-4 text-sky-300" /><p className="mt-2 text-[10px] font-medium text-neutral-200">Voice + music</p></div><div className="rounded-xl border border-white/8 bg-white/3 p-3"><Layers3 className="h-4 w-4 text-indigo-300" /><p className="mt-2 text-[10px] font-medium text-neutral-200">Text + style</p></div></div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="features" className="relative z-10 border-y border-white/[0.07] bg-white/[0.018]">
+                <div className="mx-auto max-w-7xl px-5 py-20 sm:px-8 lg:px-12 lg:py-24"><div className="max-w-xl"><p className="text-xs font-semibold uppercase tracking-[0.2em] text-indigo-300">Everything in one place</p><h2 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Less fiddling with tools.<br />More time for your story.</h2><p className="mt-4 text-sm leading-7 text-neutral-400">From first take to final export, keep your creative flow simple and focused.</p></div><div className="mt-10 grid gap-4 md:grid-cols-3">{features.map(({ icon: Icon, title, text }, index) => <article key={title} className="rounded-2xl border border-white/8 bg-[#10131d] p-6 transition hover:-translate-y-1 hover:border-indigo-400/25"><span className={`flex h-11 w-11 items-center justify-center rounded-xl ${index === 1 ? 'bg-fuchsia-400/10 text-fuchsia-300' : 'bg-indigo-400/10 text-indigo-300'}`}><Icon className="h-5 w-5" /></span><h3 className="mt-5 text-base font-semibold">{title}</h3><p className="mt-2 text-sm leading-6 text-neutral-400">{text}</p></article>)}</div></div>
+            </section>
+
+            <section id="how-it-works" className="relative z-10 mx-auto max-w-7xl px-5 py-20 sm:px-8 lg:px-12 lg:py-24"><div className="grid gap-12 lg:grid-cols-[.8fr_1.2fr]"><div><p className="text-xs font-semibold uppercase tracking-[0.2em] text-indigo-300">A simple creative flow</p><h2 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">From idea to<br />ready-to-share.</h2><p className="mt-4 max-w-sm text-sm leading-7 text-neutral-400">No complicated timeline to learn. Start with what you have and build from there.</p></div><div className="grid gap-3 sm:grid-cols-3">{steps.map((step) => <article key={step.number} className="rounded-2xl border border-white/8 bg-white/2.5 p-5"><p className="font-mono text-xs text-indigo-300">{step.number}</p><h3 className="mt-6 text-base font-semibold">{step.title}</h3><p className="mt-2 text-sm leading-6 text-neutral-400">{step.text}</p></article>)}</div></div></section>
+
+            <section id="for-teachers" className="relative z-10 mx-5 mb-20 overflow-hidden rounded-4xl border border-indigo-300/15 bg-[linear-gradient(120deg,rgba(79,70,229,.15),rgba(30,41,59,.65)_52%,rgba(14,165,233,.1))] px-6 py-12 sm:mx-8 sm:px-10 lg:mx-auto lg:mb-24 lg:max-w-7xl lg:px-14 lg:py-16"><div className="absolute -right-20 -top-24 h-72 w-72 rounded-full bg-indigo-400/10 blur-3xl" /><div className="relative flex flex-col items-start justify-between gap-8 md:flex-row md:items-center"><div className="max-w-2xl"><p className="text-xs font-semibold uppercase tracking-[0.2em] text-indigo-200">Made for explaining things</p><h2 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">A more human way to teach on screen.</h2><p className="mt-4 text-sm leading-7 text-neutral-300">Create mini-lessons, revision explainers, project presentations, and classroom updates with tools designed to keep the focus on your message.</p></div><Link href="/signup" className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-white px-5 py-3.5 text-sm font-semibold text-neutral-950 transition hover:bg-indigo-100">Start creating <ArrowRight className="h-4 w-4" /></Link></div></section>
+
+            <footer className="relative z-10 border-t border-white/[0.07]"><div className="mx-auto flex max-w-7xl flex-col gap-4 px-5 py-8 text-xs text-neutral-500 sm:px-8 md:flex-row md:items-center md:justify-between lg:px-12"><Wordmark /><p>Make a lesson. Make a reel. Make it yours.</p><div className="flex items-center gap-5"><Link href="/login" className="transition hover:text-white">Log in</Link><Link href="/signup" className="transition hover:text-white">Sign up</Link></div></div></footer>
+        </main>
     );
-  }
-
-  return (
-    <div className="flex min-h-dvh flex-col bg-neutral-950 text-neutral-100 font-sans md:h-dvh md:flex-row md:overflow-hidden">
-      <SidebarControls settings={settings} onUpdateSettings={updateSettings} onCameraArtEffectChange={setCameraArtEffect} />
-
-      <div className="relative flex min-h-[62dvh] min-w-0 flex-1 flex-col md:min-h-0">
-        <details className="relative z-40 mx-3 mt-3 self-end md:absolute md:right-4 md:top-4 md:mx-0 md:mt-0">
-          <summary className="flex cursor-pointer list-none items-center gap-2 rounded-lg border border-neutral-700 bg-neutral-900/95 px-3 py-2 text-xs font-semibold text-neutral-200 shadow-lg hover:bg-neutral-800">
-            <FolderOpen className="h-4 w-4" /> Projects ({savedDrafts.length})
-          </summary>
-          <div className="absolute right-0 mt-2 max-h-[60dvh] w-[min(22rem,calc(100vw-1.5rem))] overflow-y-auto rounded-xl border border-neutral-700 bg-neutral-900 p-2 shadow-2xl">
-            <label htmlFor="creator-name" className="block px-3 pt-2 text-[10px] font-semibold uppercase tracking-wider text-neutral-500">Creator profile · this browser</label>
-            <input id="creator-name" value={creatorName} onChange={(event) => updateCreatorName(event.target.value)} maxLength={48}
-              className="mx-3 mt-1 w-[calc(100%-1.5rem)] rounded-md border border-neutral-800 bg-neutral-950 px-2 py-1.5 text-xs text-neutral-200 focus:border-indigo-500 focus:outline-none" />
-            <p className="px-3 py-2 text-[10px] leading-relaxed text-neutral-500">Local profile only. Projects are saved on this device, not synced to an online account.</p>
-            {savedDrafts.map((draft) => (
-              <div key={draft.id} className="flex items-center gap-1 rounded-lg hover:bg-neutral-800">
-                <button onClick={() => void openDraft(draft.id)} disabled={isLoadingDraft}
-                  className="min-w-0 flex-1 rounded-lg px-3 py-2 text-left text-xs text-neutral-200 disabled:opacity-50">
-                  <span className="block truncate font-semibold">{draft.title || 'Untitled creator project'}</span>
-                  <span className="mt-1 block text-neutral-500">{draft.creatorName} · {Math.round(draft.durationMs / 1000)} sec · {new Date(draft.savedAt).toLocaleDateString()}</span>
-                </button>
-                <button onClick={() => void removeDraft(draft.id)} aria-label={`Delete ${draft.title}`} className="rounded-md p-2 text-neutral-600 hover:text-red-400">
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            ))}
-            {savedDrafts.length === 0 && <p className="px-3 py-2 text-xs text-neutral-400">Your saved edits will appear here.</p>}
-            {isLoadingDraft && <p className="px-3 py-2 text-xs text-neutral-400">Opening project…</p>}
-            <div className="mx-2 mt-2 rounded-lg border border-neutral-800 bg-neutral-950 p-3">
-              <span className="text-xs font-semibold text-neutral-200">Free plan</span>
-              <p className="mt-1 text-[10px] leading-relaxed text-neutral-500">60-second recordings and exports · watermark included. Secure account sync and billing will need backend/provider setup.</p>
-              <button type="button" disabled className="mt-2 w-full cursor-not-allowed rounded-md border border-neutral-800 px-2 py-1.5 text-[10px] font-semibold text-neutral-500">Upgrade · payments not configured</button>
-            </div>
-          </div>
-        </details>
-        {cameraError && (
-          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-40 bg-red-600/90 text-white text-sm px-4 py-2 rounded-lg shadow-lg">
-            {cameraError}
-          </div>
-        )}
-
-        <VideoCanvas
-          videoRef={videoRef}
-          canvasStreamRef={canvasStreamRef}
-          settings={settings}
-          onAvatarMouthPositionChange={(cameraAvatarMouthX, cameraAvatarMouthY) => updateSettings({ cameraAvatarMouthX, cameraAvatarMouthY })}
-          microphoneLevelRef={microphoneLevelRef}
-          isRecording={isRecording}
-          isRecordingPaused={isRecordingPaused}
-          countdown={countdown}
-        />
-
-        <div className="pointer-events-none absolute bottom-4 left-1/2 z-30 -translate-x-1/2 md:bottom-6">
-          {!isRecording ? (
-            <button
-              onClick={startRecordingSequence}
-              disabled={countdown !== null}
-              className="pointer-events-auto flex items-center gap-2 whitespace-nowrap rounded-full border border-red-400/50 bg-red-600/95 px-5 py-2.5 text-sm font-semibold text-white shadow-[0_8px_32px_rgba(220,38,38,.35)] backdrop-blur-md transition-all hover:bg-red-500 active:scale-95 disabled:opacity-70 sm:px-6">
-              <Video className="h-4 w-4" /> {countdown !== null ? `Starting in ${countdown}…` : 'Record'}
-            </button>
-          ) : (
-            <div className="pointer-events-auto flex items-center gap-1.5 rounded-full border border-white/10 bg-neutral-950/85 p-1.5 text-white shadow-[0_8px_32px_rgba(0,0,0,.42)] backdrop-blur-xl sm:gap-2 sm:p-2">
-              <span className={`ml-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${isRecordingPaused ? 'bg-amber-400' : 'animate-pulse bg-red-500'}`} />
-              <span className="min-w-[4.4rem] px-1 font-mono text-xs tabular-nums sm:min-w-20 sm:text-sm">
-                {Math.floor(recordingSeconds / 60)}:{String(recordingSeconds % 60).padStart(2, '0')}
-                <span className="ml-1 text-[9px] text-neutral-400 sm:text-[10px]"> / {Math.floor(freeRecordingLimitSeconds / 60)}:00</span>
-              </span>
-              <span className="hidden h-6 w-px bg-white/15 sm:block" />
-              <button
-                type="button"
-                onClick={isRecordingPaused ? resumeRecording : pauseRecording}
-                aria-label={isRecordingPaused ? 'Resume recording' : 'Pause recording'}
-                title={isRecordingPaused ? 'Resume recording' : 'Pause recording'}
-                className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 sm:h-10 sm:w-10">
-                {isRecordingPaused ? <Play className="h-4 w-4 fill-current" /> : <Pause className="h-4 w-4 fill-current" />}
-              </button>
-              <button
-                type="button"
-                onClick={stopRecording}
-                aria-label="Stop recording"
-                title="Stop recording"
-                className="flex h-9 w-9 items-center justify-center rounded-full bg-red-600 text-white shadow-md shadow-red-950/40 transition-colors hover:bg-red-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-300 sm:h-10 sm:w-10">
-                <Square className="h-3.5 w-3.5 fill-current" />
-              </button>
-            </div>
-          )}
-        </div>
-
-        {recordedVideoUrl && (
-          <ExportModal
-            videoUrl={recordedVideoUrl}
-            mimeType={recordedVideoMimeType ?? 'video/webm'}
-            onReset={resetRecording}
-            onEdit={() => setView('edit')}
-          />
-        )}
-      </div>
-      {showWelcome && (
-        <div className="fixed inset-0 z-100 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm">
-          <section role="dialog" aria-modal="true" aria-labelledby="welcome-title" className="w-full max-w-lg rounded-3xl border border-neutral-700 bg-neutral-900 p-6 shadow-2xl sm:p-8">
-            <div className="mb-4 inline-flex rounded-2xl bg-indigo-500/15 p-3 text-indigo-300"><FolderOpen className="h-6 w-6" /></div>
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-indigo-300">Your creator workspace</p>
-            <h2 id="welcome-title" className="mt-2 text-2xl font-bold text-white">Let’s make your first video.</h2>
-            <p className="mt-3 text-sm leading-relaxed text-neutral-400">Start with a ready-to-read Hinglish reel script, or jump straight into the studio. You can edit the script and language any time.</p>
-            <div className="mt-6 flex flex-col gap-2 sm:flex-row">
-              <button onClick={() => dismissWelcome(true)} className="flex-1 rounded-xl bg-indigo-600 px-4 py-3 text-sm font-semibold text-white hover:bg-indigo-500">Try the sample template</button>
-              <button onClick={() => dismissWelcome(false)} className="flex-1 rounded-xl border border-neutral-700 px-4 py-3 text-sm font-semibold text-neutral-200 hover:bg-neutral-800">Start with my own script</button>
-            </div>
-          </section>
-        </div>
-      )}
-      {!showWelcome && <FeedbackWidget />}
-    </div>
-  );
 }
