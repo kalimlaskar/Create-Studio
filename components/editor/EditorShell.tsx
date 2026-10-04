@@ -11,11 +11,12 @@ import { saveEditorDraft } from './drafts';
 import { EditorProject } from '@/types/editor';
 import { createExportRecorder, getExportDimensions, getFrameCrop, getRecordingDimensions, RECORDING_FRAME_RATE, ExportFormat, ExportResolution } from '@/components/recordingQuality';
 import { AspectRatioType } from '@/types/studio';
-import { ScriptLanguage } from '@/types/studio';
+import { CameraArtEffect, ScriptLanguage } from '@/types/studio';
 import { drawActiveCaption } from './captionRendering';
 import { captureSourceAudio } from './captureSourceAudio';
 import { TranscriptionLanguage } from './CaptionsPanel';
 import { drawFreeTierWatermark, FREE_VIDEO_LIMIT_MS } from '@/components/freeTier';
+import { applyArtisticEffect } from '@/components/studio/artisticEffects';
 
 interface EditorShellProps {
     sourceVideoUrl: string;
@@ -24,6 +25,7 @@ interface EditorShellProps {
     initialScriptLanguage: ScriptLanguage;
     creatorName: string;
     sourceDurationMs?: number;
+    initialCameraArtEffect: CameraArtEffect;
     onBack: () => void;
     initialProject?: EditorProject;
     onDraftSaved?: () => void;
@@ -44,7 +46,7 @@ function getZoomScale(zoomKeyframes: EditorProject['tracks']['zoom'], currentMs:
     return 1;
 }
 
-export function EditorShell({ sourceVideoUrl, aspectRatio, initialScript, initialScriptLanguage, creatorName, sourceDurationMs, onBack, initialProject, onDraftSaved }: EditorShellProps) {
+export function EditorShell({ sourceVideoUrl, aspectRatio, initialScript, initialScriptLanguage, creatorName, sourceDurationMs, initialCameraArtEffect, onBack, initialProject, onDraftSaved }: EditorShellProps) {
     const {
         project,
         projectLoadError,
@@ -53,6 +55,7 @@ export function EditorShell({ sourceVideoUrl, aspectRatio, initialScript, initia
         resetTab,
         applyStylePreset,
         renameProject,
+        updateCameraArtEffect,
         videoRef,
         playheadMs,
         isPlaying,
@@ -82,7 +85,7 @@ export function EditorShell({ sourceVideoUrl, aspectRatio, initialScript, initia
         updateCaptionStyle,
         removeCaption,
         replaceCaptions,
-    } = useEditorProject(sourceVideoUrl, initialProject, aspectRatio, initialScript, initialScriptLanguage, sourceDurationMs);
+    } = useEditorProject(sourceVideoUrl, initialProject, aspectRatio, initialScript, initialScriptLanguage, sourceDurationMs, initialCameraArtEffect);
 
     const [isExporting, setIsExporting] = useState(false);
     const [exportProgress, setExportProgress] = useState(0);
@@ -247,6 +250,7 @@ export function EditorShell({ sourceVideoUrl, aspectRatio, initialScript, initia
                     ctx.fillText(overlay.content, x, y);
                 }
                 drawActiveCaption(ctx, project.tracks.captions, currentMs, project.captionStyle, exportCanvas.width, exportCanvas.height);
+                applyArtisticEffect(exportCanvas, project.cameraArtEffect);
                 drawFreeTierWatermark(ctx, exportCanvas.width, exportCanvas.height);
 
                 const percent = Math.min(85, Math.floor(((video.currentTime * 1000 - trimStartMs) / trimmedDurationMs) * 85));
@@ -416,6 +420,20 @@ export function EditorShell({ sourceVideoUrl, aspectRatio, initialScript, initia
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2">
+                        <label className="sr-only" htmlFor="editor-art-effect">Cartoon filter</label>
+                        <select
+                            id="editor-art-effect"
+                            value={project?.cameraArtEffect === 'avatar' ? 'none' : project?.cameraArtEffect ?? 'none'}
+                            onChange={(event) => updateCameraArtEffect(event.target.value as CameraArtEffect)}
+                            disabled={isExporting || !project}
+                            className="max-w-32 rounded-lg border border-neutral-700 bg-neutral-900 px-2 py-2 text-xs text-neutral-200 focus:border-indigo-500 focus:outline-none disabled:opacity-50"
+                            title="On-device cartoon and sketch effects">
+                            <option value="none">Original</option>
+                            <option value="comic">Comic</option>
+                            <option value="sketch">Sketch</option>
+                            <option value="pixel">Pixel</option>
+                            <option value="anime">Anime</option>
+                        </select>
                         <button
                             onClick={toggleSourceAudio}
                             disabled={isExporting}

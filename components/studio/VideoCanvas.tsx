@@ -6,11 +6,14 @@ import { FilesetResolver, ImageSegmenter, ImageSegmenterResult } from '@mediapip
 import { TeleprompterOverlay } from './TeleprompterOverlay';
 import { getFrameCrop, getRecordingDimensions, RECORDING_FRAME_RATE } from '@/components/recordingQuality';
 import { drawFreeTierWatermark } from '@/components/freeTier';
+import { applyArtisticEffect, CameraArtEffect, drawPhotoAvatar, drawTrackedAvatar, FaceLandmarkPoint } from './artisticEffects';
 
 interface VideoCanvasProps {
     videoRef: RefObject<HTMLVideoElement | null>;
     canvasStreamRef: React.MutableRefObject<MediaStream | null>;
     settings: StudioSettings;
+    microphoneLevelRef: React.MutableRefObject<number>;
+    onAvatarMouthPositionChange: (x: number, y: number) => void;
     isRecording: boolean;
     countdown: number | null;
 }
@@ -18,6 +21,8 @@ interface VideoCanvasProps {
 const WASM_FILESET_URL = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm';
 const MODEL_ASSET_URL =
     'https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter/float16/1/selfie_segmenter.tflite';
+const FACE_MODEL_ASSET_URL =
+    'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task';
 
 function getVideoFilter(settings: StudioSettings) {
     const preset = settings.filterPreset === 'cinematic'
@@ -31,10 +36,12 @@ function getVideoFilter(settings: StudioSettings) {
     return `brightness(${settings.brightness}%) contrast(${settings.contrast}%) ${preset}`.trim();
 }
 
-export function VideoCanvas({ videoRef, canvasStreamRef, settings, isRecording, countdown }: VideoCanvasProps) {
+export function VideoCanvas({ videoRef, canvasStreamRef, settings, microphoneLevelRef, onAvatarMouthPositionChange, isRecording, countdown }: VideoCanvasProps) {
     const visibleCanvasRef = useRef<HTMLCanvasElement>(null);
     const segmenterRef = useRef<ImageSegmenter | null>(null);
+    const faceLandmarkerRef = useRef<{ detectForVideo: (video: HTMLVideoElement, timestampMs: number) => { faceLandmarks?: FaceLandmarkPoint[][] }; close: () => void } | null>(null);
     const bgImageRef = useRef<HTMLImageElement | null>(null);
+    const avatarImageRef = useRef<HTMLImageElement | null>(null);
     const settingsRef = useRef(settings);
     const isRecordingRef = useRef(isRecording);
 
@@ -52,6 +59,15 @@ export function VideoCanvas({ videoRef, canvasStreamRef, settings, isRecording, 
     useEffect(() => {
         settingsRef.current = settings;
     }, [settings]);
+
+    useEffect(() => {
+        avatarImageRef.current = null;
+        if (!settings.cameraAvatarImageUrl) return;
+        const image = new Image();
+        image.onload = () => { avatarImageRef.current = image; };
+        image.src = settings.cameraAvatarImageUrl;
+        return () => { avatarImageRef.current = null; };
+    }, [settings.cameraAvatarImageUrl]);
 
     useEffect(() => {
         isRecordingRef.current = isRecording;
@@ -97,6 +113,13 @@ export function VideoCanvas({ videoRef, canvasStreamRef, settings, isRecording, 
     // Init the Tasks Vision ImageSegmenter, with a GPU->CPU fallback and
     // pinned model/fileset versions (avoids silent 404s from "@latest" paths).
     useEffect(() => {
+        const needsSegmentation = ['green', 'blur', 'image', 'transparent'].includes(settings.backgroundMode);
+        if (!needsSegmentation) {
+            segmenterRef.current?.close();
+            segmenterRef.current = null;
+            prevMaskRef.current = null;
+            return;
+        }
         let cancelled = false;
 
         const createSegmenter = async (delegate: 'GPU' | 'CPU') => {
@@ -138,7 +161,45 @@ export function VideoCanvas({ videoRef, canvasStreamRef, settings, isRecording, 
             cancelled = true;
             segmenterRef.current?.close();
         };
-    }, []);
+    }, [settings.backgroundMode]);
+
+    useEffect(() => {
+        if (settings.cameraArtEffect !== 'avatar') {
+            faceLandmarkerRef.current?.close();
+            faceLandmarkerRef.current = null;
+            return;
+        }
+        let cancelled = false;
+        let landmarker: { detectForVideo: (video: HTMLVideoElement, timestampMs: number) => { faceLandmarks?: FaceLandmarkPoint[][] }; close: () => void } | null = null;
+
+        const initialize = async () => {
+            try {
+                const visionModule = await import('@mediapipe/tasks-vision');
+                const visionApi = visionModule as unknown as {
+                    FaceLandmarker: {
+                        createFromOptions: (resolver: unknown, options: Record<string, unknown>) => Promise<typeof landmarker>;
+                    };
+                };
+                const resolver = await FilesetResolver.forVisionTasks(WASM_FILESET_URL);
+                landmarker = await visionApi.FaceLandmarker.createFromOptions(resolver, {
+                    baseOptions: { modelAssetPath: FACE_MODEL_ASSET_URL, delegate: 'GPU' },
+                    runningMode: 'VIDEO',
+                    numFaces: 1,
+                    outputFaceBlendshapes: false,
+                });
+                if (cancelled) landmarker?.close();
+                else faceLandmarkerRef.current = landmarker;
+            } catch (error) {
+                console.error('Face Landmarker could not be initialized:', error);
+            }
+        };
+        void initialize();
+        return () => {
+            cancelled = true;
+            landmarker?.close();
+            faceLandmarkerRef.current = null;
+        };
+    }, [settings.cameraArtEffect]);
 
     const drawImageCover = (ctx: CanvasRenderingContext2D, img: HTMLImageElement, w: number, h: number) => {
         const imgRatio = img.naturalWidth / img.naturalHeight;
@@ -187,10 +248,10 @@ export function VideoCanvas({ videoRef, canvasStreamRef, settings, isRecording, 
         return softened;
     };
 
-    const renderFrame = (result: ImageSegmenterResult) => {
+    const renderFrame = (result?: ImageSegmenterResult) => {
         const video = videoRef.current;
         const canvas = visibleCanvasRef.current;
-        if (!video || !canvas || !result.confidenceMasks?.[0]) return;
+        if (!video || !canvas) return;
 
         const ctx = canvas.getContext('2d', { willReadFrequently: true });
         if (!ctx) return;
@@ -205,6 +266,19 @@ export function VideoCanvas({ videoRef, canvasStreamRef, settings, isRecording, 
             canvas.height = outputHeight;
         }
         const sourceCrop = getFrameCrop(vWidth, vHeight, currentSettings.aspectRatio);
+
+        if (!result?.confidenceMasks?.[0]) {
+            ctx.save();
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.translate(canvas.width, 0);
+            ctx.scale(-1, 1);
+            ctx.filter = videoFilter;
+            ctx.drawImage(video, sourceCrop.x, sourceCrop.y, sourceCrop.width, sourceCrop.height, 0, 0, canvas.width, canvas.height);
+            ctx.restore();
+            applyArtisticEffect(canvas, currentSettings.cameraArtEffect as CameraArtEffect);
+            if (isRecordingRef.current) drawFreeTierWatermark(ctx, canvas.width, canvas.height);
+            return;
+        }
 
         const maskData = result.confidenceMasks[0]; // MPMask
         const maskFloat = maskData.getAsFloat32Array();
@@ -296,6 +370,7 @@ export function VideoCanvas({ videoRef, canvasStreamRef, settings, isRecording, 
         }
 
         ctx.restore();
+        applyArtisticEffect(canvas, currentSettings.cameraArtEffect as CameraArtEffect);
         if (isRecordingRef.current) {
             drawFreeTierWatermark(ctx, canvas.width, canvas.height);
         }
@@ -309,9 +384,45 @@ export function VideoCanvas({ videoRef, canvasStreamRef, settings, isRecording, 
         let animationFrameId: number;
 
         const processFrame = () => {
-            if (video.readyState >= video.HAVE_CURRENT_DATA && segmenterRef.current) {
-                const result = segmenterRef.current.segmentForVideo(video, performance.now());
-                renderFrame(result);
+            const currentSettings = settingsRef.current;
+            const { width, height } = getRecordingDimensions(currentSettings.aspectRatio);
+            if (canvas.width !== width || canvas.height !== height) {
+                canvas.width = width;
+                canvas.height = height;
+            }
+            if (video.readyState >= video.HAVE_CURRENT_DATA && currentSettings.cameraArtEffect === 'photo-avatar') {
+                const context = canvas.getContext('2d');
+                if (context) {
+                    drawPhotoAvatar(
+                        context,
+                        canvas.width,
+                        canvas.height,
+                        avatarImageRef.current,
+                        microphoneLevelRef.current,
+                        currentSettings.cameraAvatarMouthX,
+                        currentSettings.cameraAvatarMouthY,
+                        currentSettings.cameraAvatarMouthWidth
+                    );
+                    if (isRecordingRef.current) drawFreeTierWatermark(context, canvas.width, canvas.height);
+                }
+            } else if (video.readyState >= video.HAVE_CURRENT_DATA && currentSettings.cameraArtEffect === 'avatar') {
+                try {
+                    const landmarks = faceLandmarkerRef.current?.detectForVideo(video, performance.now()).faceLandmarks?.[0];
+                    const context = canvas.getContext('2d');
+                    if (context) {
+                        drawTrackedAvatar(context, canvas.width, canvas.height, landmarks);
+                        if (isRecordingRef.current) drawFreeTierWatermark(context, canvas.width, canvas.height);
+                    }
+                } catch (error) {
+                    console.error('Face tracking frame failed:', error);
+                }
+            } else if (video.readyState >= video.HAVE_CURRENT_DATA) {
+                if (segmenterRef.current) {
+                    const result = segmenterRef.current.segmentForVideo(video, performance.now());
+                    renderFrame(result);
+                } else {
+                    renderFrame();
+                }
             }
             animationFrameId = requestAnimationFrame(processFrame);
         };
@@ -323,7 +434,7 @@ export function VideoCanvas({ videoRef, canvasStreamRef, settings, isRecording, 
         }
 
         return () => cancelAnimationFrame(animationFrameId);
-    }, [videoRef, canvasStreamRef]);
+    }, [videoRef, canvasStreamRef, microphoneLevelRef]);
 
     const getAspectRatioClass = (ratio: AspectRatioType) => {
         switch (ratio) {
@@ -343,8 +454,28 @@ export function VideoCanvas({ videoRef, canvasStreamRef, settings, isRecording, 
 
             <video ref={videoRef} autoPlay playsInline muted className="hidden" />
 
-            <div style={{ aspectRatio: settings.aspectRatio.replace(':', ' / ') }} className={`relative h-full max-h-full max-w-full shrink-0 overflow-hidden rounded-2xl border-2 border-neutral-800 bg-black shadow-2xl transition-all duration-300 ${getAspectRatioClass(settings.aspectRatio)}`}>
+            <div
+                style={{ aspectRatio: settings.aspectRatio.replace(':', ' / ') }}
+                onPointerDown={(event) => {
+                    if (settings.cameraArtEffect !== 'photo-avatar' || !settings.cameraAvatarImageUrl) return;
+                    const rect = event.currentTarget.getBoundingClientRect();
+                    onAvatarMouthPositionChange(
+                        Math.max(0.15, Math.min(0.85, (event.clientX - rect.left) / rect.width)),
+                        Math.max(0.35, Math.min(0.9, (event.clientY - rect.top) / rect.height))
+                    );
+                }}
+                className={`relative h-full max-h-full max-w-full shrink-0 overflow-hidden rounded-2xl border-2 border-neutral-800 bg-black shadow-2xl transition-all duration-300 ${getAspectRatioClass(settings.aspectRatio)} ${settings.cameraArtEffect === 'photo-avatar' && settings.cameraAvatarImageUrl ? 'cursor-crosshair' : ''}`}>
                 <canvas ref={visibleCanvasRef} className="w-full h-full object-cover" />
+                {settings.cameraArtEffect === 'photo-avatar' && settings.cameraAvatarImageUrl && (
+                    <div
+                        aria-hidden="true"
+                        className="pointer-events-none absolute z-30 -translate-x-1/2 -translate-y-1/2"
+                        style={{ left: `${settings.cameraAvatarMouthX * 100}%`, top: `${settings.cameraAvatarMouthY * 100}%` }}>
+                        <span className="block h-5 w-5 rounded-full border-2 border-fuchsia-300 bg-fuchsia-500/35 shadow-[0_0_12px_rgba(217,70,239,.85)]" />
+                        <span className="absolute left-1/2 top-1/2 h-px w-8 -translate-x-1/2 -translate-y-1/2 bg-white/90" />
+                        <span className="absolute left-1/2 top-1/2 h-8 w-px -translate-x-1/2 -translate-y-1/2 bg-white/90" />
+                    </div>
+                )}
                 <TeleprompterOverlay scriptText={settings.scriptText} />
 
                 {isRecording && (

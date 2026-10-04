@@ -111,6 +111,7 @@ export async function loadEditorDraft(id: string): Promise<LoadedDraft> {
     const audioUrls = new Map(stored.musicBlobs.map(({ clipId, blob }) => [clipId, URL.createObjectURL(blob)]));
     const project: EditorProject = {
         ...stored.project,
+        cameraArtEffect: stored.project.cameraArtEffect ?? 'none',
         aspectRatio: stored.project.aspectRatio ?? '9:16',
         captionStyle: stored.project.captionStyle ?? 'classic',
         videoEdit: stored.project.videoEdit ?? { trimStartMs: 0, trimEndMs: stored.project.durationMs, splitPointsMs: [] },

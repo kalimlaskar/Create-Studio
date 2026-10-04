@@ -9,6 +9,11 @@ const DEFAULT_SETTINGS: StudioSettings = {
     brightness: 100,
     contrast: 100,
     filterPreset: 'none',
+    cameraArtEffect: 'none',
+    cameraAvatarImageUrl: null,
+    cameraAvatarMouthX: 0.5,
+    cameraAvatarMouthY: 0.68,
+    cameraAvatarMouthWidth: 0.09,
     backgroundMode: 'none',
     backgroundImageUrl: null,
     inputMode: 'camera',
@@ -31,6 +36,12 @@ export function useStudioSession() {
     const videoRef = useRef<HTMLVideoElement>(null);
     const canvasStreamRef = useRef<MediaStream | null>(null);
     const mediaStreamRef = useRef<MediaStream | null>(null);
+    const avatarAudioContextRef = useRef<AudioContext | null>(null);
+    const avatarAnalyserRef = useRef<AnalyserNode | null>(null);
+    const avatarAudioSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+    const avatarMeterFrameRef = useRef<number | null>(null);
+    const avatarMeterActiveRef = useRef(false);
+    const microphoneLevelRef = useRef(0);
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const recordedChunksRef = useRef<Blob[]>([]);
     const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -78,6 +89,62 @@ export function useStudioSession() {
     const updateSettings = useCallback((newSettings: Partial<StudioSettings>) => {
         setSettings((prev) => ({ ...prev, ...newSettings }));
     }, []);
+
+    const stopAvatarAudioMeter = useCallback(() => {
+        avatarMeterActiveRef.current = false;
+        if (avatarMeterFrameRef.current !== null) cancelAnimationFrame(avatarMeterFrameRef.current);
+        avatarMeterFrameRef.current = null;
+        avatarAudioSourceRef.current?.disconnect();
+        avatarAnalyserRef.current?.disconnect();
+        avatarAudioSourceRef.current = null;
+        avatarAnalyserRef.current = null;
+        microphoneLevelRef.current = 0;
+        void avatarAudioContextRef.current?.close().catch(() => undefined);
+        avatarAudioContextRef.current = null;
+    }, []);
+
+    const startAvatarAudioMeter = useCallback(() => {
+        if (avatarMeterActiveRef.current && avatarAnalyserRef.current) return true;
+        stopAvatarAudioMeter();
+        const microphoneTrack = mediaStreamRef.current?.getAudioTracks()[0];
+        if (!microphoneTrack) return false;
+
+        try {
+            const audioContext = new AudioContext();
+            const analyser = audioContext.createAnalyser();
+            analyser.fftSize = 512;
+            analyser.smoothingTimeConstant = 0.35;
+            const source = audioContext.createMediaStreamSource(new MediaStream([microphoneTrack]));
+            source.connect(analyser);
+            avatarAudioContextRef.current = audioContext;
+            avatarAnalyserRef.current = analyser;
+            avatarAudioSourceRef.current = source;
+            avatarMeterActiveRef.current = true;
+            void audioContext.resume().catch(() => undefined);
+
+            const samples = new Uint8Array(analyser.fftSize);
+            const updateLevel = () => {
+                analyser.getByteTimeDomainData(samples);
+                let energy = 0;
+                for (const sample of samples) {
+                    const amplitude = (sample - 128) / 128;
+                    energy += amplitude * amplitude;
+                }
+                const rms = Math.sqrt(energy / samples.length);
+                const voiceLevel = Math.max(0, Math.min(1, (rms - 0.012) * 8));
+                microphoneLevelRef.current = microphoneLevelRef.current * 0.55 + voiceLevel * 0.45;
+                avatarMeterFrameRef.current = requestAnimationFrame(updateLevel);
+            };
+            updateLevel();
+            return true;
+        } catch (error) {
+            console.warn('Microphone level meter could not start:', error);
+            stopAvatarAudioMeter();
+            return false;
+        }
+    }, [stopAvatarAudioMeter]);
+
+    useEffect(() => () => stopAvatarAudioMeter(), [stopAvatarAudioMeter]);
 
     const startActualRecording = useCallback(() => {
         recordedChunksRef.current = [];
@@ -176,6 +243,9 @@ export function useStudioSession() {
         // settings
         settings,
         updateSettings,
+        microphoneLevelRef,
+        startAvatarAudioMeter,
+        stopAvatarAudioMeter,
 
         // refs consumed by VideoCanvas
         videoRef,

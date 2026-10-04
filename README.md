@@ -41,6 +41,10 @@ Automatic captions use OpenAI Whisper word timestamps. Set `OPENAI_API_KEY` in `
 
 The teleprompter's AI script builder uses the same server-side `OPENAI_API_KEY` and supports English, Hindi, Hinglish, Bengali, Marathi, Tamil, and Telugu. Generated text is a draft; review it before recording.
 
+## Cartoon and photo-avatar effects
+
+Comic, pencil sketch, pixel, and anime looks are processed locally on a small working canvas. The live photo-avatar option accepts a PNG, JPEG, or WebP cartoon portrait and animates a calibrated mouth from the local microphone volume envelope. It does not upload the portrait or run a speech model, and its mouth motion is approximate rather than phoneme/word-accurate. The face-tracked vector avatar loads MediaPipe only when selected; image segmentation loads only when a segmentation background is selected.
+
 Accuracy varies with the recording, accent, background noise, and code-switching. Review generated captions before publishing.
 
 Copy `.env.example` to `.env.local` and set the server-only values before using AI script generation, captions, or feedback delivery.

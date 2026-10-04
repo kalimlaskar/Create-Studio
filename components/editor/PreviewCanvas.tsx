@@ -7,6 +7,7 @@ import { buildColorGradeFilter } from './colorGrade';
 import { getFrameCrop, getRecordingDimensions } from '@/components/recordingQuality';
 import { drawActiveCaption } from './captionRendering';
 import { drawFreeTierWatermark } from '@/components/freeTier';
+import { applyArtisticEffect } from '@/components/studio/artisticEffects';
 
 interface PreviewCanvasProps {
     videoRef: RefObject<HTMLVideoElement | null>;
@@ -84,6 +85,7 @@ export function PreviewCanvas({ videoRef, project }: PreviewCanvasProps) {
                     }
                 }
                 if (!showOriginal) drawActiveCaption(ctx, project.tracks.captions, currentMs, project.captionStyle, canvas.width, canvas.height);
+                if (!showOriginal) applyArtisticEffect(canvas, project.cameraArtEffect);
                 if (!showOriginal) drawFreeTierWatermark(ctx, canvas.width, canvas.height);
             }
             animationFrameId = requestAnimationFrame(drawFrame);

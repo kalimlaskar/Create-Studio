@@ -14,6 +14,9 @@ export default function CreatorStudioDashboard() {
   const {
     settings,
     updateSettings,
+    microphoneLevelRef,
+    startAvatarAudioMeter,
+    stopAvatarAudioMeter,
     videoRef,
     canvasStreamRef,
     isRecording,
@@ -87,6 +90,12 @@ export default function CreatorStudioDashboard() {
     }
   };
 
+  const setCameraArtEffect = (cameraArtEffect: typeof settings.cameraArtEffect) => {
+    updateSettings({ cameraArtEffect });
+    if (cameraArtEffect === 'photo-avatar') startAvatarAudioMeter();
+    else stopAvatarAudioMeter();
+  };
+
   const openDraft = async (id: string) => {
     setIsLoadingDraft(true);
     try {
@@ -116,6 +125,12 @@ export default function CreatorStudioDashboard() {
 
   // Active Video URL to pass to the Editor (either freshly recorded or newly uploaded)
   const activeVideoUrl = restoredDraft?.project.sourceVideoUrl || recordedVideoUrl || settings.uploadedVideoUrl;
+  const isEditorOpen = Boolean(activeVideoUrl && (view === 'edit' || (settings.inputMode === 'upload' && settings.uploadedVideoUrl)));
+
+  useEffect(() => {
+    if (isEditorOpen) stopAvatarAudioMeter();
+    else if (settings.cameraArtEffect === 'photo-avatar') startAvatarAudioMeter();
+  }, [isEditorOpen, settings.cameraArtEffect, startAvatarAudioMeter, stopAvatarAudioMeter]);
 
   // If we are in edit mode and have a video ready, render the dedicated editor shell
   if ((view === 'edit' || (settings.inputMode === 'upload' && Boolean(settings.uploadedVideoUrl))) && activeVideoUrl) {
@@ -127,6 +142,7 @@ export default function CreatorStudioDashboard() {
         initialScriptLanguage={settings.scriptLanguage}
         creatorName={creatorName}
         sourceDurationMs={restoredDraft?.project.durationMs ?? recordedDurationMs ?? undefined}
+        initialCameraArtEffect={restoredDraft?.project.cameraArtEffect ?? (recordedVideoUrl || settings.cameraArtEffect === 'photo-avatar' || settings.cameraArtEffect === 'avatar' ? 'none' : settings.cameraArtEffect)}
         initialProject={restoredDraft?.project}
         onDraftSaved={() => { void refreshDrafts(); }}
         onBack={() => {
@@ -143,7 +159,7 @@ export default function CreatorStudioDashboard() {
 
   return (
     <div className="flex min-h-dvh flex-col bg-neutral-950 text-neutral-100 font-sans md:h-dvh md:flex-row md:overflow-hidden">
-      <SidebarControls settings={settings} onUpdateSettings={updateSettings} />
+      <SidebarControls settings={settings} onUpdateSettings={updateSettings} onCameraArtEffectChange={setCameraArtEffect} />
 
       <div className="relative flex min-h-[62dvh] min-w-0 flex-1 flex-col md:min-h-0">
         <details className="relative z-40 mx-3 mt-3 self-end md:absolute md:right-4 md:top-4 md:mx-0 md:mt-0">
@@ -186,6 +202,8 @@ export default function CreatorStudioDashboard() {
           videoRef={videoRef}
           canvasStreamRef={canvasStreamRef}
           settings={settings}
+          onAvatarMouthPositionChange={(cameraAvatarMouthX, cameraAvatarMouthY) => updateSettings({ cameraAvatarMouthX, cameraAvatarMouthY })}
+          microphoneLevelRef={microphoneLevelRef}
           isRecording={isRecording}
           countdown={countdown}
         />

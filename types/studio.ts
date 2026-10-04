@@ -3,12 +3,18 @@ export type FilterPresetType = 'none' | 'cinematic' | 'warm' | 'mono';
 export type BackgroundModeType = 'none' | 'blur' | 'green' | 'transparent' | 'image';
 export type StudioInputMode = 'camera' | 'upload';
 export type ScriptLanguage = 'en' | 'hi' | 'hinglish' | 'bn' | 'mr' | 'ta' | 'te';
+export type CameraArtEffect = 'none' | 'comic' | 'sketch' | 'pixel' | 'anime' | 'avatar' | 'photo-avatar';
 
 export interface StudioSettings {
     aspectRatio: AspectRatioType;
     brightness: number;
     contrast: number;
     filterPreset: FilterPresetType;
+    cameraArtEffect: CameraArtEffect;
+    cameraAvatarImageUrl: string | null;
+    cameraAvatarMouthX: number;
+    cameraAvatarMouthY: number;
+    cameraAvatarMouthWidth: number;
     scriptText: string;
     scriptLanguage: ScriptLanguage;
     backgroundMode: BackgroundModeType;

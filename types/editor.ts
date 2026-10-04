@@ -1,4 +1,4 @@
-import { AspectRatioType, ScriptLanguage } from './studio';
+import { AspectRatioType, CameraArtEffect, ScriptLanguage } from './studio';
 
 export type OverlayType = 'text' | 'icon';
 
@@ -73,6 +73,7 @@ export interface EditorProject {
     aspectRatio: AspectRatioType;
     teleprompterScript: string;
     scriptLanguage: ScriptLanguage;
+    cameraArtEffect: CameraArtEffect;
     captionStyle: CaptionStyle;
     videoEdit: VideoEditState;
     muteOriginalAudio: boolean;
@@ -91,7 +92,7 @@ export interface ZoomKeyframe {
     atMs: number;
     scale: number; // 1 = 100% (no zoom), 1.5 = 150%, etc.
 }
-export function createEmptyProject(sourceVideoUrl: string, durationMs: number, aspectRatio: AspectRatioType = '16:9', teleprompterScript = '', scriptLanguage: ScriptLanguage = 'en'): EditorProject {
+export function createEmptyProject(sourceVideoUrl: string, durationMs: number, aspectRatio: AspectRatioType = '16:9', teleprompterScript = '', scriptLanguage: ScriptLanguage = 'en', cameraArtEffect: CameraArtEffect = 'none'): EditorProject {
     return {
         title: 'Untitled creator project',
         sourceVideoUrl,
@@ -99,6 +100,7 @@ export function createEmptyProject(sourceVideoUrl: string, durationMs: number, a
         aspectRatio,
         teleprompterScript,
         scriptLanguage,
+        cameraArtEffect,
         captionStyle: 'classic',
         videoEdit: { trimStartMs: 0, trimEndMs: durationMs, splitPointsMs: [] },
         muteOriginalAudio: false,

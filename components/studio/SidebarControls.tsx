@@ -2,16 +2,18 @@
 
 import React, { useRef } from 'react';
 import { Sun, Smartphone, Monitor, Square, Sparkles, Upload, X } from 'lucide-react';
-import { AspectRatioType, FilterPresetType, StudioSettings } from '@/types/studio';
+import { AspectRatioType, CameraArtEffect, FilterPresetType, StudioSettings } from '@/types/studio';
 import { Teleprompter } from './Teleprompter';
 
 interface SidebarControlsProps {
     settings: StudioSettings;
     onUpdateSettings: (newSettings: Partial<StudioSettings>) => void;
+    onCameraArtEffectChange: (effect: CameraArtEffect) => void;
 }
 
-export function SidebarControls({ settings, onUpdateSettings }: SidebarControlsProps) {
+export function SidebarControls({ settings, onUpdateSettings, onCameraArtEffectChange }: SidebarControlsProps) {
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const avatarInputRef = useRef<HTMLInputElement>(null);
 
     const setAspectRatio = (ratio: AspectRatioType) => onUpdateSettings({ aspectRatio: ratio });
     const setBrightness = (brightness: number) => onUpdateSettings({ brightness });
@@ -202,6 +204,78 @@ export function SidebarControls({ settings, onUpdateSettings }: SidebarControlsP
                             <option value="mono">B&W Documentary</option>
                         </select>
                     </div>
+                </div>
+
+                <div className="mb-6 space-y-2">
+                    <input
+                        ref={avatarInputRef}
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp"
+                        className="hidden"
+                        aria-label="Upload cartoon avatar photo"
+                        onChange={(event) => {
+                            const file = event.target.files?.[0];
+                            if (!file) return;
+                            if (file.size > 12 * 1024 * 1024) {
+                                window.alert('Choose an image smaller than 12 MB.');
+                                event.target.value = '';
+                                return;
+                            }
+                            if (settings.cameraAvatarImageUrl) URL.revokeObjectURL(settings.cameraAvatarImageUrl);
+                            onUpdateSettings({ cameraAvatarImageUrl: URL.createObjectURL(file) });
+                            event.target.value = '';
+                        }}
+                    />
+                    <label htmlFor="camera-art-effect" className="text-xs font-semibold uppercase tracking-wider text-neutral-400">Cartoon & sketch</label>
+                    <select
+                        id="camera-art-effect"
+                        value={settings.cameraArtEffect}
+                        onChange={(event) => {
+                            const effect = event.target.value as StudioSettings['cameraArtEffect'];
+                            onCameraArtEffectChange(effect);
+                            if (effect === 'photo-avatar' && !settings.cameraAvatarImageUrl) avatarInputRef.current?.click();
+                        }}
+                        className="w-full rounded-lg border border-neutral-700 bg-neutral-800 p-2 text-xs text-neutral-200 focus:border-indigo-500 focus:outline-none">
+                        <option value="none">Original camera</option>
+                        <option value="comic">Comic ink</option>
+                        <option value="sketch">Pencil sketch</option>
+                        <option value="pixel">Pixel art</option>
+                        <option value="anime">Anime color</option>
+                        <option value="avatar">Tracked cartoon avatar</option>
+                        <option value="photo-avatar">My cartoon photo · voice mouth</option>
+                    </select>
+                    {settings.cameraArtEffect === 'photo-avatar' && (
+                        <div className="space-y-2 rounded-lg border border-neutral-800 bg-neutral-950/60 p-3">
+                            {settings.cameraAvatarImageUrl ? (
+                                <div className="flex items-center gap-2">
+                                    <img src={settings.cameraAvatarImageUrl} alt="Selected cartoon avatar" className="h-14 w-12 rounded-md border border-neutral-700 object-cover" />
+                                    <button type="button" onClick={() => avatarInputRef.current?.click()} className="flex-1 rounded-lg border border-neutral-700 px-2 py-2 text-xs text-neutral-300 hover:bg-neutral-800">Change photo</button>
+                                    <button type="button" onClick={() => { URL.revokeObjectURL(settings.cameraAvatarImageUrl!); onUpdateSettings({ cameraAvatarImageUrl: null }); }} aria-label="Remove avatar photo" className="rounded-lg px-2 py-2 text-xs text-red-300 hover:bg-red-950/30">Remove</button>
+                                </div>
+                            ) : (
+                                <button type="button" onClick={() => avatarInputRef.current?.click()} className="w-full rounded-lg border border-dashed border-indigo-500/60 px-3 py-3 text-xs font-semibold text-indigo-200 hover:bg-indigo-500/10">Choose a cartoon portrait</button>
+                            )}
+                            <div className="rounded-md border border-fuchsia-500/30 bg-fuchsia-500/5 px-2.5 py-2 text-[10px] leading-relaxed text-neutral-300">
+                                Tap the mouth position on the large preview. The crosshair shows where voice animation will be drawn.
+                            </div>
+                            <div>
+                                <div className="flex justify-between text-[10px] text-neutral-400"><label htmlFor="avatar-mouth-y">Vertical mouth position</label><span>{Math.round(settings.cameraAvatarMouthY * 100)}%</span></div>
+                                <input id="avatar-mouth-y" type="range" min="35" max="90" value={Math.round(settings.cameraAvatarMouthY * 100)} onChange={(event) => onUpdateSettings({ cameraAvatarMouthY: Number(event.target.value) / 100 })} className="w-full accent-indigo-500" />
+                            </div>
+                            <div>
+                                <div className="flex justify-between text-[10px] text-neutral-400"><label htmlFor="avatar-mouth-x">Horizontal mouth position</label><span>{Math.round(settings.cameraAvatarMouthX * 100)}%</span></div>
+                                <input id="avatar-mouth-x" type="range" min="15" max="85" value={Math.round(settings.cameraAvatarMouthX * 100)} onChange={(event) => onUpdateSettings({ cameraAvatarMouthX: Number(event.target.value) / 100 })} className="w-full accent-indigo-500" />
+                            </div>
+                            <div>
+                                <div className="flex justify-between text-[10px] text-neutral-400"><label htmlFor="avatar-mouth-width">Mouth width</label><span>{Math.round(settings.cameraAvatarMouthWidth * 100)}%</span></div>
+                                <input id="avatar-mouth-width" type="range" min="4" max="18" value={Math.round(settings.cameraAvatarMouthWidth * 100)} onChange={(event) => onUpdateSettings({ cameraAvatarMouthWidth: Number(event.target.value) / 100 })} className="w-full accent-indigo-500" />
+                            </div>
+                            <p className="text-[10px] leading-relaxed text-neutral-500">The mouth opens with your voice volume. This is lightweight live mouth animation, not phoneme-perfect lip sync. Photo stays on this device.</p>
+                        </div>
+                    )}
+                    <p className="text-[10px] leading-relaxed text-neutral-500">
+                        Cartoon and sketch effects run locally and are included in recordings.
+                    </p>
                 </div>
 
                 {/* Teleprompter Module */}

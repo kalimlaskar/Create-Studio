@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { EditorProject, OverlayClip, CaptionCue, CaptionStyle, BackgroundSegment, AudioTrackClip, ColorGradeSettings, createEmptyProject, SpeedSegment, EditorTabId, DEFAULT_COLOR_GRADE } from '@/types/editor';
-import { AspectRatioType } from '@/types/studio';
+import { AspectRatioType, CameraArtEffect } from '@/types/studio';
 import { ScriptLanguage } from '@/types/studio';
 import { ZoomKeyframe } from '@/types/editor';
 import { COMPOSITE_STYLE_PRESETS, getStyleZoomKeyframe } from '@/components/editor/stylePresets';
@@ -42,7 +42,7 @@ function isTabDirty(project: EditorProject, tab: EditorTabId): boolean {
     }
 }
 
-export function useEditorProject(sourceVideoUrl: string, initialProject?: EditorProject, aspectRatio: AspectRatioType = '16:9', initialScript = '', initialScriptLanguage: ScriptLanguage = 'en', sourceDurationMs?: number) {
+export function useEditorProject(sourceVideoUrl: string, initialProject?: EditorProject, aspectRatio: AspectRatioType = '16:9', initialScript = '', initialScriptLanguage: ScriptLanguage = 'en', sourceDurationMs?: number, initialCameraArtEffect: CameraArtEffect = 'none') {
     const [project, setProject] = useState<EditorProject | null>(null);
     const [projectLoadError, setProjectLoadError] = useState<string | null>(null);
     const [undoCounts, setUndoCounts] = useState<Record<EditorTabId, number>>(EMPTY_UNDO_COUNTS);
@@ -295,8 +295,8 @@ export function useEditorProject(sourceVideoUrl: string, initialProject?: Editor
                 splitPointsMs: (savedVideoEdit?.splitPointsMs ?? []).filter((point) => Number.isFinite(point) && point > trimStartMs && point < trimEndMs),
             };
             const restored = initialProject
-                ? { ...initialProject, title: initialProject.title ?? 'Untitled creator project', teleprompterScript: initialProject.teleprompterScript ?? initialScript, scriptLanguage: initialProject.scriptLanguage ?? initialScriptLanguage, durationMs, aspectRatio: initialProject.aspectRatio ?? aspectRatio, captionStyle: initialProject.captionStyle ?? 'classic', videoEdit, sourceVideoUrl, tracks: { ...initialProject.tracks, captions: initialProject.tracks.captions ?? [], speed: initialProject.tracks.speed ?? [] } }
-                : createEmptyProject(sourceVideoUrl, durationMs, aspectRatio, initialScript, initialScriptLanguage);
+                ? { ...initialProject, title: initialProject.title ?? 'Untitled creator project', teleprompterScript: initialProject.teleprompterScript ?? initialScript, scriptLanguage: initialProject.scriptLanguage ?? initialScriptLanguage, cameraArtEffect: initialProject.cameraArtEffect ?? initialCameraArtEffect, durationMs, aspectRatio: initialProject.aspectRatio ?? aspectRatio, captionStyle: initialProject.captionStyle ?? 'classic', videoEdit, sourceVideoUrl, tracks: { ...initialProject.tracks, captions: initialProject.tracks.captions ?? [], speed: initialProject.tracks.speed ?? [] } }
+                : createEmptyProject(sourceVideoUrl, durationMs, aspectRatio, initialScript, initialScriptLanguage, initialCameraArtEffect);
             setProject((current) => current ?? restored);
             setIsSourceMuted(restored.muteOriginalAudio);
         };
@@ -645,6 +645,10 @@ export function useEditorProject(sourceVideoUrl: string, initialProject?: Editor
         setProject((prev) => prev ? { ...prev, title: normalizedTitle } : prev);
     }, []);
 
+    const updateCameraArtEffect = useCallback((cameraArtEffect: CameraArtEffect) => {
+        setProject((prev) => prev ? { ...prev, cameraArtEffect } : prev);
+    }, []);
+
     const applyStylePreset = useCallback((presetId: string) => {
         if (!project) return;
         const preset = COMPOSITE_STYLE_PRESETS.find((item) => item.id === presetId);
@@ -673,6 +677,7 @@ export function useEditorProject(sourceVideoUrl: string, initialProject?: Editor
         resetTab,
         applyStylePreset,
         renameProject,
+        updateCameraArtEffect,
         videoRef,
         playheadMs,
         isPlaying,
