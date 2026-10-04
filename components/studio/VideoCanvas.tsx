@@ -15,6 +15,7 @@ interface VideoCanvasProps {
     microphoneLevelRef: React.MutableRefObject<number>;
     onAvatarMouthPositionChange: (x: number, y: number) => void;
     isRecording: boolean;
+    isRecordingPaused: boolean;
     countdown: number | null;
 }
 
@@ -36,7 +37,7 @@ function getVideoFilter(settings: StudioSettings) {
     return `brightness(${settings.brightness}%) contrast(${settings.contrast}%) ${preset}`.trim();
 }
 
-export function VideoCanvas({ videoRef, canvasStreamRef, settings, microphoneLevelRef, onAvatarMouthPositionChange, isRecording, countdown }: VideoCanvasProps) {
+export function VideoCanvas({ videoRef, canvasStreamRef, settings, microphoneLevelRef, onAvatarMouthPositionChange, isRecording, isRecordingPaused, countdown }: VideoCanvasProps) {
     const visibleCanvasRef = useRef<HTMLCanvasElement>(null);
     const segmenterRef = useRef<ImageSegmenter | null>(null);
     const faceLandmarkerRef = useRef<{ detectForVideo: (video: HTMLVideoElement, timestampMs: number) => { faceLandmarks?: FaceLandmarkPoint[][] }; close: () => void } | null>(null);
@@ -479,8 +480,8 @@ export function VideoCanvas({ videoRef, canvasStreamRef, settings, microphoneLev
                 <TeleprompterOverlay scriptText={settings.scriptText} />
 
                 {isRecording && (
-                    <div className="absolute left-3 top-3 z-30 flex items-center gap-2 rounded-full bg-red-600/90 px-3 py-1.5 text-xs font-semibold text-white shadow-lg sm:left-4 sm:top-4">
-                        <span className="h-2 w-2 rounded-full bg-white"></span> RECORDING · FREE PLAN
+                    <div className={`absolute left-3 top-3 z-30 flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold text-white shadow-lg sm:left-4 sm:top-4 ${isRecordingPaused ? 'bg-amber-500/90' : 'bg-red-600/90'}`}>
+                        <span className={`h-2 w-2 rounded-full bg-white ${isRecordingPaused ? '' : 'animate-pulse'}`} /> {isRecordingPaused ? 'PAUSED' : 'RECORDING'} · FREE PLAN
                     </div>
                 )}
             </div>

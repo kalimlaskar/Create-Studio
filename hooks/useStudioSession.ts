@@ -26,6 +26,7 @@ export const FREE_RECORDING_LIMIT_SECONDS = 60;
 export function useStudioSession() {
     const [settings, setSettings] = useState<StudioSettings>(DEFAULT_SETTINGS);
     const [isRecording, setIsRecording] = useState(false);
+    const [isRecordingPaused, setIsRecordingPaused] = useState(false);
     const [countdown, setCountdown] = useState<number | null>(null);
     const [recordedVideoUrl, setRecordedVideoUrl] = useState<string | null>(null);
     const [recordedVideoMimeType, setRecordedVideoMimeType] = useState<string | null>(null);
@@ -46,6 +47,8 @@ export function useStudioSession() {
     const recordedChunksRef = useRef<Blob[]>([]);
     const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const recordingStartedAtRef = useRef(0);
+    const recordingAccumulatedMsRef = useRef(0);
+    const recordingSegmentStartedAtRef = useRef<number | null>(null);
 
     // Initialize Camera & Mic with AI Noise Suppression
     useEffect(() => {
@@ -169,9 +172,13 @@ export function useStudioSession() {
 
             mediaRecorder.onstop = () => {
                 setIsRecording(false);
+                setIsRecordingPaused(false);
                 if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
                 recordingTimerRef.current = null;
-                setRecordedDurationMs(Math.min(Date.now() - recordingStartedAtRef.current, FREE_RECORDING_LIMIT_SECONDS * 1000));
+                const finalElapsedMs = recordingAccumulatedMsRef.current + (recordingSegmentStartedAtRef.current === null ? 0 : Date.now() - recordingSegmentStartedAtRef.current);
+                recordingSegmentStartedAtRef.current = null;
+                recordingAccumulatedMsRef.current = 0;
+                setRecordedDurationMs(Math.min(finalElapsedMs, FREE_RECORDING_LIMIT_SECONDS * 1000));
                 const mimeType = mediaRecorder.mimeType || 'video/webm';
                 const blob = new Blob(recordedChunksRef.current, { type: mimeType });
                 if (blob.size === 0) {
@@ -186,17 +193,23 @@ export function useStudioSession() {
             mediaRecorder.onerror = () => {
                 setCameraError('Video recording stopped unexpectedly. Check camera permissions and try again.');
                 setIsRecording(false);
+                setIsRecordingPaused(false);
             };
 
             recordingStartedAtRef.current = Date.now();
+            recordingAccumulatedMsRef.current = 0;
+            recordingSegmentStartedAtRef.current = recordingStartedAtRef.current;
             setRecordingSeconds(0);
             mediaRecorder.start(1000);
             setIsRecording(true);
+            setIsRecordingPaused(false);
             recordingTimerRef.current = setInterval(() => {
-                const elapsed = Math.floor((Date.now() - recordingStartedAtRef.current) / 1000);
+                const elapsedMs = recordingAccumulatedMsRef.current + (recordingSegmentStartedAtRef.current === null ? 0 : Date.now() - recordingSegmentStartedAtRef.current);
+                const elapsed = Math.floor(elapsedMs / 1000);
                 setRecordingSeconds(elapsed);
-                if (elapsed >= FREE_RECORDING_LIMIT_SECONDS && mediaRecorder.state === 'recording') {
-                    mediaRecorder.stop();
+                const activeRecorder = mediaRecorderRef.current;
+                if (elapsed >= FREE_RECORDING_LIMIT_SECONDS && activeRecorder?.state === 'recording') {
+                    activeRecorder.stop();
                     setIsRecording(false);
                 }
             }, 250);
@@ -221,12 +234,35 @@ export function useStudioSession() {
     }, [startActualRecording]);
 
     const stopRecording = useCallback(() => {
-        if (mediaRecorderRef.current) {
-            mediaRecorderRef.current.stop();
+        const recorder = mediaRecorderRef.current;
+        if (recorder && recorder.state !== 'inactive') {
+            if (recordingSegmentStartedAtRef.current !== null) {
+                recordingAccumulatedMsRef.current += Date.now() - recordingSegmentStartedAtRef.current;
+                recordingSegmentStartedAtRef.current = null;
+            }
+            recorder.stop();
             setIsRecording(false);
+            setIsRecordingPaused(false);
         }
         if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
         recordingTimerRef.current = null;
+    }, []);
+
+    const pauseRecording = useCallback(() => {
+        const recorder = mediaRecorderRef.current;
+        if (!recorder || recorder.state !== 'recording' || recordingSegmentStartedAtRef.current === null) return;
+        recordingAccumulatedMsRef.current += Date.now() - recordingSegmentStartedAtRef.current;
+        recordingSegmentStartedAtRef.current = null;
+        recorder.pause();
+        setIsRecordingPaused(true);
+    }, []);
+
+    const resumeRecording = useCallback(() => {
+        const recorder = mediaRecorderRef.current;
+        if (!recorder || recorder.state !== 'paused') return;
+        recordingSegmentStartedAtRef.current = Date.now();
+        recorder.resume();
+        setIsRecordingPaused(false);
     }, []);
 
     const resetRecording = useCallback(() => {
@@ -253,6 +289,7 @@ export function useStudioSession() {
 
         // recording state + controls
         isRecording,
+        isRecordingPaused,
         countdown,
         recordedVideoUrl,
         recordedVideoMimeType,
@@ -261,6 +298,8 @@ export function useStudioSession() {
         freeRecordingLimitSeconds: FREE_RECORDING_LIMIT_SECONDS,
         startRecordingSequence,
         stopRecording,
+        pauseRecording,
+        resumeRecording,
         resetRecording,
 
         // camera status

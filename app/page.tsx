@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Video, StopCircle, FolderOpen, Trash2 } from 'lucide-react';
+import { Video, Pause, Play, Square, FolderOpen, Trash2 } from 'lucide-react';
 import { SidebarControls } from '@/components/studio/SidebarControls';
 import { VideoCanvas } from '@/components/studio/VideoCanvas';
 import { ExportModal } from '@/components/studio/ExportModal';
@@ -20,6 +20,7 @@ export default function CreatorStudioDashboard() {
     videoRef,
     canvasStreamRef,
     isRecording,
+    isRecordingPaused,
     countdown,
     recordedVideoUrl,
     recordedVideoMimeType,
@@ -28,6 +29,8 @@ export default function CreatorStudioDashboard() {
     freeRecordingLimitSeconds,
     startRecordingSequence,
     stopRecording,
+    pauseRecording,
+    resumeRecording,
     resetRecording,
     cameraError,
   } = useStudioSession();
@@ -205,27 +208,43 @@ export default function CreatorStudioDashboard() {
           onAvatarMouthPositionChange={(cameraAvatarMouthX, cameraAvatarMouthY) => updateSettings({ cameraAvatarMouthX, cameraAvatarMouthY })}
           microphoneLevelRef={microphoneLevelRef}
           isRecording={isRecording}
+          isRecordingPaused={isRecordingPaused}
           countdown={countdown}
         />
 
-        <div className="absolute bottom-4 left-1/2 z-20 -translate-x-1/2 md:bottom-6">
+        <div className="pointer-events-none absolute bottom-4 left-1/2 z-30 -translate-x-1/2 md:bottom-6">
           {!isRecording ? (
             <button
               onClick={startRecordingSequence}
-              className="flex items-center gap-2 whitespace-nowrap bg-red-600 px-6 py-3 rounded-full font-semibold text-white shadow-lg shadow-red-600/30 transition-all hover:bg-red-500 sm:px-8">
-              <Video className="w-5 h-5" /> Start Recording
+              disabled={countdown !== null}
+              className="pointer-events-auto flex items-center gap-2 whitespace-nowrap rounded-full border border-red-400/50 bg-red-600/95 px-5 py-2.5 text-sm font-semibold text-white shadow-[0_8px_32px_rgba(220,38,38,.35)] backdrop-blur-md transition-all hover:bg-red-500 active:scale-95 disabled:opacity-70 sm:px-6">
+              <Video className="h-4 w-4" /> {countdown !== null ? `Starting in ${countdown}…` : 'Record'}
             </button>
           ) : (
-            <button
-              onClick={stopRecording}
-              className="flex items-center gap-2 whitespace-nowrap bg-neutral-100 px-6 py-3 rounded-full font-semibold text-neutral-950 shadow-lg transition-all hover:bg-white sm:px-8">
-              <StopCircle className="w-5 h-5 text-red-600" /> Stop Recording
-            </button>
-          )}
-          {isRecording && (
-            <p className="mt-2 rounded-full bg-black/65 px-3 py-1 text-center font-mono text-[11px] text-white">
-              {Math.floor(recordingSeconds / 60)}:{String(recordingSeconds % 60).padStart(2, '0')} / {Math.floor(freeRecordingLimitSeconds / 60)}:{String(freeRecordingLimitSeconds % 60).padStart(2, '0')} max
-            </p>
+            <div className="pointer-events-auto flex items-center gap-1.5 rounded-full border border-white/10 bg-neutral-950/85 p-1.5 text-white shadow-[0_8px_32px_rgba(0,0,0,.42)] backdrop-blur-xl sm:gap-2 sm:p-2">
+              <span className={`ml-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${isRecordingPaused ? 'bg-amber-400' : 'animate-pulse bg-red-500'}`} />
+              <span className="min-w-[4.4rem] px-1 font-mono text-xs tabular-nums sm:min-w-20 sm:text-sm">
+                {Math.floor(recordingSeconds / 60)}:{String(recordingSeconds % 60).padStart(2, '0')}
+                <span className="ml-1 text-[9px] text-neutral-400 sm:text-[10px]"> / {Math.floor(freeRecordingLimitSeconds / 60)}:00</span>
+              </span>
+              <span className="hidden h-6 w-px bg-white/15 sm:block" />
+              <button
+                type="button"
+                onClick={isRecordingPaused ? resumeRecording : pauseRecording}
+                aria-label={isRecordingPaused ? 'Resume recording' : 'Pause recording'}
+                title={isRecordingPaused ? 'Resume recording' : 'Pause recording'}
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 sm:h-10 sm:w-10">
+                {isRecordingPaused ? <Play className="h-4 w-4 fill-current" /> : <Pause className="h-4 w-4 fill-current" />}
+              </button>
+              <button
+                type="button"
+                onClick={stopRecording}
+                aria-label="Stop recording"
+                title="Stop recording"
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-red-600 text-white shadow-md shadow-red-950/40 transition-colors hover:bg-red-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-300 sm:h-10 sm:w-10">
+                <Square className="h-3.5 w-3.5 fill-current" />
+              </button>
+            </div>
           )}
         </div>
 
