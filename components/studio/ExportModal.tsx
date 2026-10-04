@@ -5,11 +5,13 @@ import { Download, RefreshCw, Pencil } from 'lucide-react';
 
 interface ExportModalProps {
     videoUrl: string;
+    mimeType: string;
     onReset: () => void;
     onEdit: () => void;
 }
 
-export function ExportModal({ videoUrl, onReset, onEdit }: ExportModalProps) {
+export function ExportModal({ videoUrl, mimeType, onReset, onEdit }: ExportModalProps) {
+    const extension = mimeType.includes('mp4') ? 'mp4' : 'webm';
     return (
         <div className="absolute inset-0 bg-neutral-950/90 z-40 flex flex-col items-center justify-center p-6">
             <div className="bg-neutral-900 border border-neutral-800 p-6 rounded-2xl max-w-xl w-full flex flex-col items-center shadow-2xl">
@@ -26,7 +28,7 @@ export function ExportModal({ videoUrl, onReset, onEdit }: ExportModalProps) {
                     </button>
                     <a
                         href={videoUrl}
-                        download="creator-studio-recording.webm"
+                        download={`creator-studio-recording.${extension}`}
                         className="flex items-center gap-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 px-6 py-2.5 rounded-xl font-semibold text-sm transition-all">
                         <Download className="w-4 h-4" /> Download Original (Unedited)
                     </a>

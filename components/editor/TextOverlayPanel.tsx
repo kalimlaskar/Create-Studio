@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Plus, Trash2 } from 'lucide-react';
+import { Plus, Sparkles, Trash2 } from 'lucide-react';
 import { OverlayClip } from '@/types/editor';
 
 interface TextOverlayPanelProps {
@@ -15,6 +15,15 @@ interface TextOverlayPanelProps {
 
 export function TextOverlayPanel({ overlays, durationMs, playheadMs, onAdd, onUpdate, onRemove }: TextOverlayPanelProps) {
     const [draft, setDraft] = useState('');
+    const [hookDraft, setHookDraft] = useState('');
+
+    const useHook = () => {
+        const content = hookDraft.trim();
+        if (!content || durationMs === 0) return;
+        const startMs = Math.max(0, Math.min(playheadMs, durationMs - 250));
+        onAdd({ type: 'text', content, startMs, endMs: Math.min(durationMs, startMs + 3500), x: 0.5, y: 0.2, fontSize: 42, color: '#ffffff' });
+        setHookDraft('');
+    };
 
     const handleAdd = () => {
         if (!draft.trim() || durationMs === 0) return;
@@ -36,14 +45,29 @@ export function TextOverlayPanel({ overlays, durationMs, playheadMs, onAdd, onUp
     return (
         <div className="space-y-4">
             <div>
-                <label className="text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-2 block">
-                    Add text at {(playheadMs / 1000).toFixed(1)}s
-                </label>
+                <div className="mb-2 flex items-center gap-2"><Sparkles className="h-4 w-4 text-amber-300" /><h3 className="text-sm font-semibold text-neutral-100">Hook builder</h3></div>
+                <p className="mb-2 text-[11px] leading-relaxed text-neutral-500">Write the opening line that earns the next few seconds of attention.</p>
+                <div className="mb-2 flex flex-wrap gap-1.5">
+                    {['Stop scrolling if you want to…', '3 things I wish I knew about…', 'Here’s the easiest way to…'].map((suggestion) => (
+                        <button key={suggestion} type="button" onClick={() => setHookDraft(suggestion)} className="rounded-full border border-neutral-700 px-2 py-1 text-[10px] text-neutral-400 hover:border-indigo-500 hover:text-neutral-200">{suggestion}</button>
+                    ))}
+                </div>
+                <div className="flex gap-2">
+                    <input value={hookDraft} onChange={(event) => setHookDraft(event.target.value)} placeholder="Your hook or opening line…"
+                        className="min-w-0 flex-1 rounded-lg border border-neutral-700 bg-neutral-800 px-3 py-2 text-sm text-neutral-200 focus:border-indigo-500 focus:outline-none" />
+                    <button type="button" onClick={useHook} disabled={!hookDraft.trim()} title="Add hook as an opening overlay"
+                        className="flex shrink-0 items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-500 disabled:opacity-40"><Plus className="h-4 w-4" /> Use hook</button>
+                </div>
+            </div>
+
+            <div className="border-t border-neutral-800 pt-4">
+                <h3 className="mb-1 text-sm font-semibold text-neutral-100">Timed text overlays</h3>
+                <p className="mb-2 text-[11px] text-neutral-500">Add text at the playhead ({(playheadMs / 1000).toFixed(1)}s) and adjust its on-screen duration.</p>
                 <div className="flex gap-2">
                     <input
                         value={draft}
                         onChange={(e) => setDraft(e.target.value)}
-                        placeholder="Your text..."
+                        placeholder="Type a callout or label…"
                         className="flex-1 bg-neutral-800 border border-neutral-700 text-sm rounded-lg px-3 py-2 text-neutral-200 focus:outline-none focus:border-indigo-500"
                     />
                     <button

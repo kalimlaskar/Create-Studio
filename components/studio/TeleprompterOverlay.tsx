@@ -57,7 +57,7 @@ export function TeleprompterOverlay({ scriptText }: TeleprompterOverlayProps) {
     return (
         <section
             aria-label="Teleprompter overlay"
-            className="absolute left-1/2 top-4 z-20 flex h-[60%] w-[calc(100%-1rem)] max-w-3xl -translate-x-1/2 flex-col overflow-hidden rounded-2xl border border-white/20 bg-neutral-950/65 text-white shadow-2xl backdrop-blur-md"
+            className="absolute left-1/2 top-14 z-20 flex h-[32%] w-[calc(100%-1rem)] max-w-3xl -translate-x-1/2 flex-col overflow-hidden rounded-2xl border border-white/20 bg-neutral-950/65 text-white shadow-2xl backdrop-blur-md sm:top-16 sm:h-[36%]"
         >
             <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-4 py-2.5">
                 <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/70">Teleprompter</span>

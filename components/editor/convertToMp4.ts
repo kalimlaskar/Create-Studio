@@ -41,8 +41,8 @@ export async function convertWebmToMp4(webm: Blob, onProgress: (progress: number
         const exitCode = await ffmpeg.exec([
             '-i', inputName,
             '-c:v', 'libx264',
-            '-preset', 'ultrafast',
-            '-crf', '23',
+            '-preset', 'veryfast',
+            '-crf', '18',
             '-pix_fmt', 'yuv420p',
             '-c:a', 'aac',
             '-b:a', '192k',

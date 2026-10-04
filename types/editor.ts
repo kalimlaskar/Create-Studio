@@ -1,3 +1,5 @@
+import { AspectRatioType, ScriptLanguage } from './studio';
+
 export type OverlayType = 'text' | 'icon';
 
 export interface BaseClip {
@@ -18,6 +20,16 @@ export interface OverlayClip extends BaseClip {
 
 export interface CaptionCue extends BaseClip {
     text: string;
+    groupId?: string;
+}
+
+export type CaptionStyle = 'classic' | 'bold' | 'minimal';
+export type EditorTabId = 'color' | 'text' | 'captions' | 'zoom' | 'speed' | 'music' | 'style' | 'clip' | 'coach';
+
+export interface VideoEditState {
+    trimStartMs: number;
+    trimEndMs: number;
+    splitPointsMs: number[];
 }
 
 export type BackgroundKind = 'none' | 'color' | 'gradient' | 'image';
@@ -55,8 +67,14 @@ export interface EditorTracks {
 }
 
 export interface EditorProject {
+    title: string;
     sourceVideoUrl: string;
     durationMs: number;
+    aspectRatio: AspectRatioType;
+    teleprompterScript: string;
+    scriptLanguage: ScriptLanguage;
+    captionStyle: CaptionStyle;
+    videoEdit: VideoEditState;
     muteOriginalAudio: boolean;
     tracks: EditorTracks;
     colorGrade: ColorGradeSettings;
@@ -73,10 +91,16 @@ export interface ZoomKeyframe {
     atMs: number;
     scale: number; // 1 = 100% (no zoom), 1.5 = 150%, etc.
 }
-export function createEmptyProject(sourceVideoUrl: string, durationMs: number): EditorProject {
+export function createEmptyProject(sourceVideoUrl: string, durationMs: number, aspectRatio: AspectRatioType = '16:9', teleprompterScript = '', scriptLanguage: ScriptLanguage = 'en'): EditorProject {
     return {
+        title: 'Untitled creator project',
         sourceVideoUrl,
         durationMs,
+        aspectRatio,
+        teleprompterScript,
+        scriptLanguage,
+        captionStyle: 'classic',
+        videoEdit: { trimStartMs: 0, trimEndMs: durationMs, splitPointsMs: [] },
         muteOriginalAudio: false,
         tracks: {
             background: [],

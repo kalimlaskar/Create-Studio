@@ -4,6 +4,8 @@ import React, { RefObject, useEffect, useRef } from 'react';
 import { AspectRatioType, StudioSettings } from '@/types/studio';
 import { FilesetResolver, ImageSegmenter, ImageSegmenterResult } from '@mediapipe/tasks-vision';
 import { TeleprompterOverlay } from './TeleprompterOverlay';
+import { getFrameCrop, getRecordingDimensions, RECORDING_FRAME_RATE } from '@/components/recordingQuality';
+import { drawFreeTierWatermark } from '@/components/freeTier';
 
 interface VideoCanvasProps {
     videoRef: RefObject<HTMLVideoElement | null>;
@@ -34,6 +36,7 @@ export function VideoCanvas({ videoRef, canvasStreamRef, settings, isRecording, 
     const segmenterRef = useRef<ImageSegmenter | null>(null);
     const bgImageRef = useRef<HTMLImageElement | null>(null);
     const settingsRef = useRef(settings);
+    const isRecordingRef = useRef(isRecording);
 
     const prevMaskRef = useRef<Float32Array | null>(null);
     const maskCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -50,17 +53,9 @@ export function VideoCanvas({ videoRef, canvasStreamRef, settings, isRecording, 
         settingsRef.current = settings;
     }, [settings]);
 
-    const getCanvasDimensions = (videoWidth: number, videoHeight: number, ratio: AspectRatioType) => {
-        if (ratio === '9:16') {
-            const targetWidth = (videoHeight * 9) / 16;
-            return { width: targetWidth, height: videoHeight };
-        }
-        if (ratio === '1:1') {
-            const minDimension = Math.min(videoWidth, videoHeight);
-            return { width: minDimension, height: minDimension };
-        }
-        return { width: videoWidth, height: videoHeight };
-    };
+    useEffect(() => {
+        isRecordingRef.current = isRecording;
+    }, [isRecording]);
 
     // Given the crop region used on the video (in video pixel space), compute
     // the equivalent crop region in mask pixel space. The mask is usually a
@@ -204,13 +199,12 @@ export function VideoCanvas({ videoRef, canvasStreamRef, settings, isRecording, 
         const videoFilter = getVideoFilter(currentSettings);
         const vWidth = video.videoWidth || 1280;
         const vHeight = video.videoHeight || 720;
-        const { width: targetWidth, height: targetHeight } = getCanvasDimensions(vWidth, vHeight, currentSettings.aspectRatio);
-
-        canvas.width = targetWidth;
-        canvas.height = targetHeight;
-
-        const sourceX = (vWidth - targetWidth) / 2;
-        const sourceY = (vHeight - targetHeight) / 2;
+        const { width: outputWidth, height: outputHeight } = getRecordingDimensions(currentSettings.aspectRatio);
+        if (canvas.width !== outputWidth || canvas.height !== outputHeight) {
+            canvas.width = outputWidth;
+            canvas.height = outputHeight;
+        }
+        const sourceCrop = getFrameCrop(vWidth, vHeight, currentSettings.aspectRatio);
 
         const maskData = result.confidenceMasks[0]; // MPMask
         const maskFloat = maskData.getAsFloat32Array();
@@ -225,7 +219,7 @@ export function VideoCanvas({ videoRef, canvasStreamRef, settings, isRecording, 
         const maskCrop = getMaskCropRect(
             maskWidth, maskHeight,
             vWidth, vHeight,
-            sourceX, sourceY, targetWidth, targetHeight
+            sourceCrop.x, sourceCrop.y, sourceCrop.width, sourceCrop.height
         );
 
         ctx.save();
@@ -242,7 +236,7 @@ export function VideoCanvas({ videoRef, canvasStreamRef, settings, isRecording, 
                 ctx.save();
                 ctx.translate(canvas.width, 0);
                 ctx.scale(-1, 1);
-                ctx.drawImage(video, sourceX, sourceY, targetWidth, targetHeight, 0, 0, canvas.width, canvas.height);
+                ctx.drawImage(video, sourceCrop.x, sourceCrop.y, sourceCrop.width, sourceCrop.height, 0, 0, canvas.width, canvas.height);
                 ctx.restore();
             } else if (mode === 'image') {
                 if (bgImageRef.current?.complete) {
@@ -264,7 +258,7 @@ export function VideoCanvas({ videoRef, canvasStreamRef, settings, isRecording, 
                 tempCtx.translate(tempCanvas.width, 0);
                 tempCtx.scale(-1, 1);
                 tempCtx.filter = videoFilter;
-                tempCtx.drawImage(video, sourceX, sourceY, targetWidth, targetHeight, 0, 0, tempCanvas.width, tempCanvas.height);
+                tempCtx.drawImage(video, sourceCrop.x, sourceCrop.y, sourceCrop.width, sourceCrop.height, 0, 0, tempCanvas.width, tempCanvas.height);
 
                 tempCtx.filter = 'none';
                 tempCtx.globalCompositeOperation = 'destination-in';
@@ -282,7 +276,7 @@ export function VideoCanvas({ videoRef, canvasStreamRef, settings, isRecording, 
             ctx.translate(canvas.width, 0);
             ctx.scale(-1, 1);
             ctx.filter = videoFilter;
-            ctx.drawImage(video, sourceX, sourceY, targetWidth, targetHeight, 0, 0, canvas.width, canvas.height);
+            ctx.drawImage(video, sourceCrop.x, sourceCrop.y, sourceCrop.width, sourceCrop.height, 0, 0, canvas.width, canvas.height);
 
             ctx.filter = 'none';
             ctx.globalCompositeOperation = 'destination-in';
@@ -297,11 +291,14 @@ export function VideoCanvas({ videoRef, canvasStreamRef, settings, isRecording, 
             ctx.translate(canvas.width, 0);
             ctx.scale(-1, 1);
             ctx.filter = videoFilter;
-            ctx.drawImage(video, sourceX, sourceY, targetWidth, targetHeight, 0, 0, canvas.width, canvas.height);
+            ctx.drawImage(video, sourceCrop.x, sourceCrop.y, sourceCrop.width, sourceCrop.height, 0, 0, canvas.width, canvas.height);
             ctx.restore();
         }
 
         ctx.restore();
+        if (isRecordingRef.current) {
+            drawFreeTierWatermark(ctx, canvas.width, canvas.height);
+        }
     };
 
     useEffect(() => {
@@ -322,7 +319,7 @@ export function VideoCanvas({ videoRef, canvasStreamRef, settings, isRecording, 
         processFrame();
 
         if (canvas.captureStream) {
-            canvasStreamRef.current = canvas.captureStream(30);
+            canvasStreamRef.current = canvas.captureStream(RECORDING_FRAME_RATE);
         }
 
         return () => cancelAnimationFrame(animationFrameId);
@@ -330,14 +327,14 @@ export function VideoCanvas({ videoRef, canvasStreamRef, settings, isRecording, 
 
     const getAspectRatioClass = (ratio: AspectRatioType) => {
         switch (ratio) {
-            case '9:16': return 'aspect-[9/16] max-w-md';
-            case '1:1': return 'aspect-square max-w-lg';
-            case '16:9': default: return 'aspect-video max-w-4xl';
+            case '9:16': return 'aspect-[9/16]';
+            case '1:1': return 'aspect-square';
+            case '16:9': default: return 'aspect-video';
         }
     };
 
     return (
-        <div className="flex-1 flex flex-col items-center justify-center p-4 relative bg-neutral-950">
+        <div className="relative flex min-h-0 flex-1 flex-col items-center justify-center overflow-hidden bg-neutral-950 p-2 sm:p-4">
             {countdown !== null && (
                 <div className="absolute inset-0 bg-black/70 backdrop-blur-sm z-30 flex items-center justify-center">
                     <span className="text-8xl font-black text-indigo-500 animate-pulse">{countdown}</span>
@@ -346,13 +343,13 @@ export function VideoCanvas({ videoRef, canvasStreamRef, settings, isRecording, 
 
             <video ref={videoRef} autoPlay playsInline muted className="hidden" />
 
-            <div className={`relative rounded-2xl overflow-hidden border-2 border-neutral-800 shadow-2xl bg-black flex items-center justify-center w-full transition-all duration-300 ${getAspectRatioClass(settings.aspectRatio)}`}>
+            <div style={{ aspectRatio: settings.aspectRatio.replace(':', ' / ') }} className={`relative h-full max-h-full max-w-full shrink-0 overflow-hidden rounded-2xl border-2 border-neutral-800 bg-black shadow-2xl transition-all duration-300 ${getAspectRatioClass(settings.aspectRatio)}`}>
                 <canvas ref={visibleCanvasRef} className="w-full h-full object-cover" />
                 <TeleprompterOverlay scriptText={settings.scriptText} />
 
                 {isRecording && (
-                    <div className="absolute top-4 left-4 z-30 flex items-center gap-2 bg-red-600/90 text-white px-3 py-1 rounded-full text-xs font-semibold animate-pulse shadow-lg">
-                        <span className="w-2 h-2 rounded-full bg-white"></span> RECORDING
+                    <div className="absolute left-3 top-3 z-30 flex items-center gap-2 rounded-full bg-red-600/90 px-3 py-1.5 text-xs font-semibold text-white shadow-lg sm:left-4 sm:top-4">
+                        <span className="h-2 w-2 rounded-full bg-white"></span> RECORDING · FREE PLAN
                     </div>
                 )}
             </div>

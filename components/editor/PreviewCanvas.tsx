@@ -1,13 +1,16 @@
 'use client';
 
-import React, { RefObject, useEffect, useRef } from 'react';
+import React, { RefObject, useEffect, useRef, useState } from 'react';
+import { Eye, EyeOff } from 'lucide-react';
 import { EditorProject } from '@/types/editor';
 import { buildColorGradeFilter } from './colorGrade';
+import { getFrameCrop, getRecordingDimensions } from '@/components/recordingQuality';
+import { drawActiveCaption } from './captionRendering';
+import { drawFreeTierWatermark } from '@/components/freeTier';
 
 interface PreviewCanvasProps {
     videoRef: RefObject<HTMLVideoElement | null>;
     project: EditorProject;
-    playheadMs: number;
 }
 
 function getZoomScale(zoomKeyframes: EditorProject['tracks']['zoom'], currentMs: number): number {
@@ -27,8 +30,9 @@ function getZoomScale(zoomKeyframes: EditorProject['tracks']['zoom'], currentMs:
     return 1;
 }
 
-export function PreviewCanvas({ videoRef, project, playheadMs }: PreviewCanvasProps) {
+export function PreviewCanvas({ videoRef, project }: PreviewCanvasProps) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
+    const [showOriginal, setShowOriginal] = useState(false);
 
     useEffect(() => {
         const video = videoRef.current;
@@ -40,14 +44,15 @@ export function PreviewCanvas({ videoRef, project, playheadMs }: PreviewCanvasPr
         const drawFrame = () => {
             const ctx = canvas.getContext('2d');
             if (ctx && video.videoWidth > 0) {
-                if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
-                    canvas.width = video.videoWidth;
-                    canvas.height = video.videoHeight;
+                const outputDimensions = getRecordingDimensions(project.aspectRatio);
+                if (canvas.width !== outputDimensions.width || canvas.height !== outputDimensions.height) {
+                    canvas.width = outputDimensions.width;
+                    canvas.height = outputDimensions.height;
                 }
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
 
                 const currentMs = video.currentTime * 1000;
-                const zoomScale = getZoomScale(project.tracks.zoom, currentMs);
+                const zoomScale = showOriginal ? 1 : getZoomScale(project.tracks.zoom, currentMs);
 
                 ctx.save();
                 // Center the zoom so it scales outward from the middle of the frame
@@ -55,13 +60,14 @@ export function PreviewCanvas({ videoRef, project, playheadMs }: PreviewCanvasPr
                 ctx.scale(zoomScale, zoomScale);
                 ctx.translate(-canvas.width / 2, -canvas.height / 2);
 
-                ctx.filter = buildColorGradeFilter(project.colorGrade);
-                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                ctx.filter = showOriginal ? 'none' : buildColorGradeFilter(project.colorGrade);
+                const sourceCrop = getFrameCrop(video.videoWidth, video.videoHeight, project.aspectRatio);
+                ctx.drawImage(video, sourceCrop.x, sourceCrop.y, sourceCrop.width, sourceCrop.height, 0, 0, canvas.width, canvas.height);
                 ctx.filter = 'none';
 
                 ctx.restore(); // overlays drawn AFTER restore, so text stays fixed size/position, not zoomed
 
-                for (const overlay of project.tracks.overlays) {
+                for (const overlay of showOriginal ? [] : project.tracks.overlays) {
                     if (currentMs < overlay.startMs || currentMs > overlay.endMs) continue;
                     if (overlay.type === 'text') {
                         const fontSize = overlay.fontSize ?? 32;
@@ -77,17 +83,24 @@ export function PreviewCanvas({ videoRef, project, playheadMs }: PreviewCanvasPr
                         ctx.fillText(overlay.content, x, y);
                     }
                 }
+                if (!showOriginal) drawActiveCaption(ctx, project.tracks.captions, currentMs, project.captionStyle, canvas.width, canvas.height);
+                if (!showOriginal) drawFreeTierWatermark(ctx, canvas.width, canvas.height);
             }
             animationFrameId = requestAnimationFrame(drawFrame);
         };
 
         drawFrame();
         return () => cancelAnimationFrame(animationFrameId);
-    }, [videoRef, project]);
+    }, [videoRef, project, showOriginal]);
 
     return (
-        <div className="flex-1 flex items-center justify-center bg-black rounded-xl overflow-hidden">
-            <canvas ref={canvasRef} className="max-w-full max-h-full" />
+        <div className="relative flex min-h-0 min-w-0 flex-1 items-center justify-center overflow-hidden rounded-2xl border border-neutral-800 bg-neutral-900 p-3 sm:p-4">
+            <canvas ref={canvasRef} className="h-full w-auto max-h-full max-w-full rounded-lg object-contain shadow-2xl" />
+            <button type="button" onClick={() => setShowOriginal((original) => !original)} aria-pressed={showOriginal}
+                className="absolute right-5 top-5 z-10 flex items-center gap-1.5 rounded-lg border border-white/15 bg-black/75 px-3 py-2 text-xs font-semibold text-white shadow-lg backdrop-blur transition-colors hover:bg-black/90">
+                {showOriginal ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                {showOriginal ? 'Viewing original · show edited' : 'Before / after'}
+            </button>
         </div>
     );
 }

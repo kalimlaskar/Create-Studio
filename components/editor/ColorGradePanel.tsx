@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { ColorGradeSettings } from '@/types/editor';
+import { buildColorGradeFilter } from './colorGrade';
 
 interface Preset {
     name: string;
@@ -9,7 +10,7 @@ interface Preset {
 }
 
 // Instagram-style presets — each is just a named combination of the same sliders
-const PRESETS: Preset[] = [
+export const FILTER_PRESETS: Preset[] = [
     { name: 'Original', values: { brightness: 100, contrast: 100, saturation: 100, temperature: 0 } },
     { name: 'Vivid', values: { brightness: 105, contrast: 115, saturation: 130, temperature: 5 } },
     { name: 'Warm', values: { brightness: 105, contrast: 100, saturation: 110, temperature: 35 } },
@@ -29,12 +30,17 @@ export function ColorGradePanel({ colorGrade, onChange }: ColorGradePanelProps) 
             <div>
                 <label className="text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-2 block">Filters</label>
                 <div className="grid grid-cols-3 gap-2">
-                    {PRESETS.map((preset) => (
+                    {FILTER_PRESETS.map((preset) => (
                         <button
                             key={preset.name}
                             onClick={() => onChange(preset.values)}
-                            className="text-xs py-2 rounded-lg border border-neutral-700 bg-neutral-800/50 text-neutral-300 hover:border-indigo-500 hover:text-white transition-colors">
-                            {preset.name}
+                            className="overflow-hidden rounded-lg border border-neutral-700 bg-neutral-800/50 text-[11px] text-neutral-300 transition-colors hover:border-indigo-500 hover:text-white">
+                            <span className="relative block h-14 overflow-hidden" aria-hidden="true">
+                                <span className="absolute inset-0" style={{ filter: buildColorGradeFilter(preset.values), background: 'linear-gradient(145deg, #38bdf8 0%, #a3e635 35%, #f97316 70%, #7c3aed 100%)' }} />
+                                <span className="absolute -right-1 top-1 h-8 w-8 rounded-full bg-amber-100/80 shadow-lg" />
+                                <span className="absolute bottom-0 left-1/2 h-8 w-6 -translate-x-1/2 rounded-t-full bg-neutral-950/80" />
+                            </span>
+                            <span className="block px-1.5 py-1.5 text-center">{preset.name}</span>
                         </button>
                     ))}
                 </div>

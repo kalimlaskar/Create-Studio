@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { Download, ArrowLeft, Loader2, Volume2, VolumeX, Bookmark } from 'lucide-react';
 import { useEditorProject } from '@/hooks/useEditorProject';
 import { PreviewCanvas } from './PreviewCanvas';
@@ -9,17 +9,50 @@ import { EditorSidebar } from './EditorSidebar';
 import { buildColorGradeFilter } from './colorGrade';
 import { saveEditorDraft } from './drafts';
 import { EditorProject } from '@/types/editor';
+import { createExportRecorder, getExportDimensions, getFrameCrop, getRecordingDimensions, RECORDING_FRAME_RATE, ExportFormat, ExportResolution } from '@/components/recordingQuality';
+import { AspectRatioType } from '@/types/studio';
+import { ScriptLanguage } from '@/types/studio';
+import { drawActiveCaption } from './captionRendering';
+import { captureSourceAudio } from './captureSourceAudio';
+import { TranscriptionLanguage } from './CaptionsPanel';
+import { drawFreeTierWatermark, FREE_VIDEO_LIMIT_MS } from '@/components/freeTier';
 
 interface EditorShellProps {
     sourceVideoUrl: string;
+    aspectRatio: AspectRatioType;
+    initialScript: string;
+    initialScriptLanguage: ScriptLanguage;
+    creatorName: string;
+    sourceDurationMs?: number;
     onBack: () => void;
     initialProject?: EditorProject;
     onDraftSaved?: () => void;
 }
 
-export function EditorShell({ sourceVideoUrl, onBack, initialProject, onDraftSaved }: EditorShellProps) {
+function getZoomScale(zoomKeyframes: EditorProject['tracks']['zoom'], currentMs: number) {
+    if (zoomKeyframes.length === 0) return 1;
+    if (currentMs <= zoomKeyframes[0].atMs) return zoomKeyframes[0].scale;
+    if (currentMs >= zoomKeyframes[zoomKeyframes.length - 1].atMs) return zoomKeyframes[zoomKeyframes.length - 1].scale;
+    for (let index = 0; index < zoomKeyframes.length - 1; index++) {
+        const start = zoomKeyframes[index];
+        const end = zoomKeyframes[index + 1];
+        if (currentMs >= start.atMs && currentMs <= end.atMs) {
+            const progress = (currentMs - start.atMs) / (end.atMs - start.atMs);
+            return start.scale + (end.scale - start.scale) * progress;
+        }
+    }
+    return 1;
+}
+
+export function EditorShell({ sourceVideoUrl, aspectRatio, initialScript, initialScriptLanguage, creatorName, sourceDurationMs, onBack, initialProject, onDraftSaved }: EditorShellProps) {
     const {
         project,
+        projectLoadError,
+        undoCounts,
+        undoTab,
+        resetTab,
+        applyStylePreset,
+        renameProject,
         videoRef,
         playheadMs,
         isPlaying,
@@ -36,13 +69,31 @@ export function EditorShell({ sourceVideoUrl, onBack, initialProject, onDraftSav
         isSourceMuted,
         toggleSourceAudio,
         getMixedAudioStream,
+        getSourceAudioStream,
         addSpeedSegment,
         updateSpeedSegment,
         removeSpeedSegment,
-    } = useEditorProject(sourceVideoUrl, initialProject);
+        updateVideoEdit,
+        beginVideoEdit,
+        splitVideoAt,
+        removeVideoSplit,
+        addCaption,
+        updateCaption,
+        updateCaptionStyle,
+        removeCaption,
+        replaceCaptions,
+    } = useEditorProject(sourceVideoUrl, initialProject, aspectRatio, initialScript, initialScriptLanguage, sourceDurationMs);
 
     const [isExporting, setIsExporting] = useState(false);
     const [exportProgress, setExportProgress] = useState(0);
+    const [exportStage, setExportStage] = useState<'idle' | 'preparing' | 'rendering' | 'converting' | 'saving' | 'complete' | 'error'>('idle');
+    const [exportError, setExportError] = useState<string | null>(null);
+    const [exportResolution, setExportResolution] = useState<ExportResolution>('1080p');
+    const [exportFormat, setExportFormat] = useState<ExportFormat>('mp4');
+    const [isTranscribing, setIsTranscribing] = useState(false);
+    const [transcriptionProgress, setTranscriptionProgress] = useState(0);
+    const [transcriptionError, setTranscriptionError] = useState<string | null>(null);
+    const exportCancelRef = useRef(false);
     const [isSavingDraft, setIsSavingDraft] = useState(false);
     const [draftSaved, setDraftSaved] = useState(false);
 
@@ -50,7 +101,7 @@ export function EditorShell({ sourceVideoUrl, onBack, initialProject, onDraftSav
         if (!project || isSavingDraft) return;
         setIsSavingDraft(true);
         try {
-            await saveEditorDraft(sourceVideoUrl, project);
+            await saveEditorDraft(sourceVideoUrl, project, creatorName);
             setDraftSaved(true);
             onDraftSaved?.();
             window.setTimeout(() => setDraftSaved(false), 2500);
@@ -64,108 +115,126 @@ export function EditorShell({ sourceVideoUrl, onBack, initialProject, onDraftSav
 
     const handleDownload = async () => {
         const video = videoRef.current;
-        if (!video || !project || isExporting) return;
+        if (!video || !project || isExporting || isTranscribing) return;
+        if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+            setExportError('The video is not ready yet. Wait for it to load, then export again.');
+            setExportStage('error');
+            return;
+        }
+        if (typeof MediaRecorder === 'undefined' || !HTMLCanvasElement.prototype.captureStream) {
+            setExportError('This browser does not support canvas video export. Try the latest Chrome or Safari.');
+            setExportStage('error');
+            return;
+        }
 
+        const originalTime = video.currentTime;
+        const wasPlaying = !video.paused;
+        const trimStartMs = project.videoEdit.trimStartMs;
+        const trimEndMs = project.videoEdit.trimEndMs;
+        const trimmedDurationMs = Math.max(1, trimEndMs - trimStartMs);
+        if (trimmedDurationMs > FREE_VIDEO_LIMIT_MS) {
+            setExportError('The free plan supports exports up to 60 seconds. Trim the clip in the timeline or upgrade when billing is configured.');
+            setExportStage('error');
+            return;
+        }
+        const outputDimensions = getExportDimensions(project.aspectRatio, exportResolution);
+        const sourceCrop = getFrameCrop(video.videoWidth, video.videoHeight, project.aspectRatio);
+        const scale = outputDimensions.width / getRecordingDimensions(project.aspectRatio).width;
+        let canvasStream: MediaStream | null = null;
+        let recorder: MediaRecorder | null = null;
+        let animationFrameId = 0;
+        exportCancelRef.current = false;
         setIsExporting(true);
-
-        const exportCanvas = document.createElement('canvas');
-        exportCanvas.width = video.videoWidth || 1280;
-        exportCanvas.height = video.videoHeight || 720;
-        const ctx = exportCanvas.getContext('2d', { willReadFrequently: true });
-
-        if (!ctx) {
-            setIsExporting(false);
-            return;
-        }
-
-        const canvasStream = exportCanvas.captureStream(30);
-        // The Web Audio destination mixes source audio (unless muted) and the
-        // added music track, while canvas capture supplies the edited picture.
-        const mixedAudioStream = getMixedAudioStream();
-        const stream = new MediaStream([
-            ...canvasStream.getVideoTracks(),
-            ...(mixedAudioStream?.getAudioTracks() ?? []),
-        ]);
-        let recorder: MediaRecorder;
         try {
-            recorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp9,opus' });
-        } catch {
-            recorder = new MediaRecorder(stream);
-        }
+            setExportError(null);
+            setExportProgress(0);
+            setExportStage('preparing');
 
-        const chunks: Blob[] = [];
-        recorder.ondataavailable = (e) => {
-            if (e.data.size > 0) chunks.push(e.data);
-        };
+            const exportCanvas = document.createElement('canvas');
+            exportCanvas.width = outputDimensions.width;
+            exportCanvas.height = outputDimensions.height;
+            const ctx = exportCanvas.getContext('2d');
+            if (!ctx) throw new Error('Could not create the export canvas.');
 
-        recorder.onstop = async () => {
-            const webmBlob = new Blob(chunks, { type: 'video/webm' });
-            let outputBlob = webmBlob;
-            let extension = 'webm';
-            try {
-                setExportProgress(0);
-                const { convertWebmToMp4 } = await import('./convertToMp4');
-                outputBlob = await convertWebmToMp4(webmBlob, setExportProgress);
-                extension = 'mp4';
-            } catch (error) {
-                console.error('MP4 conversion failed; downloading the WebM export instead:', error);
-                window.alert('MP4 conversion failed in this browser. Your edited video will be downloaded as WebM instead.');
+            canvasStream = exportCanvas.captureStream(RECORDING_FRAME_RATE);
+            const mixedAudioStream = getMixedAudioStream();
+            const stream = new MediaStream([
+                ...canvasStream.getVideoTracks(),
+                ...(mixedAudioStream?.getAudioTracks() ?? []),
+            ]);
+            recorder = createExportRecorder(stream, exportFormat, exportResolution);
+
+            video.pause();
+            if (Math.abs(video.currentTime * 1000 - trimStartMs) > 50) {
+                video.currentTime = trimStartMs / 1000;
+                await new Promise<void>((resolve, reject) => {
+                    const timeout = window.setTimeout(() => reject(new Error('Could not seek to the start of the video.')), 5000);
+                    video.addEventListener('seeked', () => {
+                        window.clearTimeout(timeout);
+                        resolve();
+                    }, { once: true });
+                });
             }
-
-            const url = URL.createObjectURL(outputBlob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `creator-studio-edited-${Date.now()}.${extension}`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
-            canvasStream.getTracks().forEach((track) => track.stop());
-            setIsExporting(false);
-        };
-
-        if (video.currentTime !== 0) {
-            video.currentTime = 0;
-            await new Promise<void>((resolve) => {
-                const handleSeeked = () => {
-                    video.removeEventListener('seeked', handleSeeked);
-                    resolve();
-                };
-                video.addEventListener('seeked', handleSeeked, { once: true });
-            });
-        }
-        try {
             await video.play();
-            recorder.start();
-        } catch (err) {
-            console.error("Export playback error:", err);
-            setIsExporting(false);
-            return;
-        }
+            const activeRecorder = recorder;
+            let recordingError: Error | null = null;
+            const chunks: Blob[] = [];
+            activeRecorder.ondataavailable = (event) => {
+                if (event.data.size > 0) chunks.push(event.data);
+            };
+            const recording = new Promise<Blob>((resolve, reject) => {
+                activeRecorder.onerror = () => {
+                    recordingError = new Error('The browser stopped encoding the video unexpectedly.');
+                    if (activeRecorder.state === 'recording') activeRecorder.stop();
+                };
+                activeRecorder.onstop = () => {
+                    if (recordingError) {
+                        reject(recordingError);
+                        return;
+                    }
+                    const mimeType = activeRecorder.mimeType || 'video/webm';
+                    const blob = new Blob(chunks, { type: mimeType });
+                    if (blob.size === 0) reject(new Error('The export contained no video data.'));
+                    else resolve(blob);
+                };
+            });
+            activeRecorder.start(1000);
+            setExportStage('rendering');
+            let lastPercent = -1;
 
-        const renderExportFrame = () => {
-            if (video.ended || video.paused) {
-                if (recorder.state === 'recording') {
-                    recorder.stop();
+            const stopWithError = (message: string) => {
+                recordingError = new Error(message);
+                if (activeRecorder.state === 'recording') activeRecorder.stop();
+            };
+            const renderExportFrame = () => {
+                if (exportCancelRef.current) {
+                    stopWithError('Export cancelled.');
+                    return;
                 }
-                video.pause();
-                return;
-            }
+                if (video.ended || video.currentTime * 1000 >= trimEndMs - 20) {
+                    if (activeRecorder.state === 'recording') activeRecorder.stop();
+                    return;
+                }
+                if (video.paused) {
+                    stopWithError('Video playback paused before export finished. Try the export again.');
+                    return;
+                }
 
-            ctx.save();
-            ctx.clearRect(0, 0, exportCanvas.width, exportCanvas.height);
+                ctx.save();
+                ctx.clearRect(0, 0, exportCanvas.width, exportCanvas.height);
+                const currentMs = video.currentTime * 1000;
+                const zoomScale = getZoomScale(project.tracks.zoom, currentMs);
+                ctx.translate(exportCanvas.width / 2, exportCanvas.height / 2);
+                ctx.scale(zoomScale, zoomScale);
+                ctx.translate(-exportCanvas.width / 2, -exportCanvas.height / 2);
+                ctx.filter = buildColorGradeFilter(project.colorGrade);
+                ctx.drawImage(video, sourceCrop.x, sourceCrop.y, sourceCrop.width, sourceCrop.height, 0, 0, exportCanvas.width, exportCanvas.height);
+                ctx.filter = 'none';
+                ctx.restore();
 
-            // Use the same full color-grade filter as the live editor preview.
-            // This preserves Mono (zero saturation), warmth, brightness, and contrast in the download.
-            ctx.filter = buildColorGradeFilter(project.colorGrade);
-            ctx.drawImage(video, 0, 0, exportCanvas.width, exportCanvas.height);
-            ctx.restore();
-
-            const currentMs = video.currentTime * 1000;
-            for (const overlay of project.tracks.overlays) {
-                if (currentMs < overlay.startMs || currentMs > overlay.endMs) continue;
-                if (overlay.type === 'text') {
-                    const fontSize = overlay.fontSize ?? 32;
+                for (const overlay of project.tracks.overlays) {
+                    if (currentMs < overlay.startMs || currentMs > overlay.endMs || overlay.type !== 'text') continue;
+                    const fontSize = (overlay.fontSize ?? 32) * scale;
                     ctx.font = `bold ${fontSize}px sans-serif`;
                     ctx.fillStyle = overlay.color ?? '#ffffff';
                     ctx.textAlign = 'center';
@@ -177,19 +246,129 @@ export function EditorShell({ sourceVideoUrl, onBack, initialProject, onDraftSav
                     ctx.strokeText(overlay.content, x, y);
                     ctx.fillText(overlay.content, x, y);
                 }
+                drawActiveCaption(ctx, project.tracks.captions, currentMs, project.captionStyle, exportCanvas.width, exportCanvas.height);
+                drawFreeTierWatermark(ctx, exportCanvas.width, exportCanvas.height);
+
+                const percent = Math.min(85, Math.floor(((video.currentTime * 1000 - trimStartMs) / trimmedDurationMs) * 85));
+                if (percent !== lastPercent) {
+                    lastPercent = percent;
+                    setExportProgress(percent);
+                }
+                animationFrameId = requestAnimationFrame(renderExportFrame);
+            };
+            renderExportFrame();
+
+            const recordedBlob = await recording;
+            let outputBlob = recordedBlob;
+            let extension: ExportFormat = exportFormat;
+            const capturedMp4 = activeRecorder.mimeType.toLowerCase().startsWith('video/mp4');
+            if (exportFormat === 'mp4' && !capturedMp4) {
+                setExportStage('converting');
+                const { convertWebmToMp4 } = await import('./convertToMp4');
+                outputBlob = await convertWebmToMp4(recordedBlob, (progress) => setExportProgress(85 + Math.floor(progress * 0.14)));
+                extension = 'mp4';
             }
 
-            requestAnimationFrame(renderExportFrame);
-        };
+            setExportStage('saving');
+            const url = URL.createObjectURL(outputBlob);
+            const anchor = document.createElement('a');
+            anchor.href = url;
+            anchor.download = `creator-studio-edited-${Date.now()}.${extension}`;
+            document.body.appendChild(anchor);
+            anchor.click();
+            anchor.remove();
+            window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+            setExportProgress(100);
+            setExportStage('complete');
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'The video could not be exported.';
+            console.error('Video export failed:', error);
+            setExportError(message);
+            setExportStage('error');
+        } finally {
+            cancelAnimationFrame(animationFrameId);
+            if (recorder?.state === 'recording') recorder.stop();
+            canvasStream?.getTracks().forEach((track) => track.stop());
+            video.pause();
+            if (Math.abs(video.currentTime - originalTime) > 0.05) video.currentTime = originalTime;
+            if (wasPlaying) video.play().catch(() => undefined);
+            setIsExporting(false);
+        }
+    };
 
-        renderExportFrame();
+    const handleGenerateCaptions = async (language: TranscriptionLanguage) => {
+        const video = videoRef.current;
+        if (!video || !project || isTranscribing || isExporting) return;
+
+        setIsTranscribing(true);
+        setTranscriptionProgress(0);
+        setTranscriptionError(null);
+        try {
+            const audioStream = getSourceAudioStream();
+            if (!audioStream) throw new Error('Could not access the video audio track.');
+            const audioBlob = await captureSourceAudio(video, audioStream, setTranscriptionProgress, project.durationMs);
+            if (audioBlob.size > 25 * 1024 * 1024) {
+                throw new Error('The extracted audio exceeds the 25 MB transcription limit.');
+            }
+
+            setTranscriptionProgress(0);
+            const body = new FormData();
+            const extension = audioBlob.type.includes('mp4') ? 'm4a' : 'webm';
+            body.append('file', audioBlob, `creator-studio-audio.${extension}`);
+            body.append('language', language);
+            const response = await fetch('/api/transcribe', { method: 'POST', body });
+            const result = await response.json() as {
+                error?: string;
+                words?: Array<{ word: string; start: number; end: number }>;
+            };
+            if (!response.ok) throw new Error(result.error ?? 'Transcription failed. Try again.');
+            if (!result.words?.length) throw new Error('No speech was detected. Try another language setting or add captions manually.');
+
+            let groupIndex = 0;
+            let wordsInGroup = 0;
+            const cues = result.words.map((word) => {
+                if (wordsInGroup === 0) groupIndex += 1;
+                const startMs = Math.max(0, Math.min(project.durationMs - 1, Math.round(word.start * 1000)));
+                const endMs = Math.max(startMs + 80, Math.min(project.durationMs, Math.round(word.end * 1000)));
+                const cue = {
+                    text: word.word,
+                    startMs,
+                    endMs,
+                    groupId: `caption-group-${groupIndex}`,
+                };
+                wordsInGroup += 1;
+                if (wordsInGroup >= 5 || /[.!?।]$/.test(word.word.trim())) wordsInGroup = 0;
+                return cue;
+            }).filter((cue) => cue.endMs > cue.startMs);
+            if (cues.length === 0) throw new Error('No usable word timestamps were returned.');
+            replaceCaptions(cues);
+            seekTo(cues[0].startMs);
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Caption generation failed.';
+            setTranscriptionError(message);
+        } finally {
+            setIsTranscribing(false);
+            setTranscriptionProgress(0);
+        }
+    };
+
+    const tightenToSpeech = (startMs: number, endMs: number) => {
+        if (!project || endMs - startMs < 250) return;
+        beginVideoEdit();
+        updateVideoEdit({ trimStartMs: Math.max(0, startMs), trimEndMs: Math.min(project.durationMs, endMs) });
+        if (videoRef.current) videoRef.current.currentTime = Math.max(0, startMs) / 1000;
     };
 
     return (
-        <div className="flex h-screen bg-neutral-950 text-neutral-100 overflow-hidden font-sans">
+        <div className="flex min-h-dvh flex-col bg-neutral-950 text-neutral-100 font-sans md:h-dvh md:flex-row md:overflow-hidden">
             {project ? (
                 <EditorSidebar
                     project={project}
+                    undoCounts={undoCounts}
+                    onUndoTab={undoTab}
+                    onResetTab={resetTab}
+                    onApplyStylePreset={applyStylePreset}
+                    onTightenToSpeech={tightenToSpeech}
                     playheadMs={playheadMs}
                     onBack={onBack}
                     onColorGradeChange={updateColorGrade}
@@ -203,69 +382,138 @@ export function EditorShell({ sourceVideoUrl, onBack, initialProject, onDraftSav
                     onAddSpeedSegment={addSpeedSegment}
                     onUpdateSpeedSegment={updateSpeedSegment}
                     onRemoveSpeedSegment={removeSpeedSegment}
+                    onAddCaption={addCaption}
+                    onUpdateCaption={updateCaption}
+                    onRemoveCaption={removeCaption}
+                    onCaptionStyleChange={updateCaptionStyle}
+                    onGenerateCaptions={handleGenerateCaptions}
+                    onSeek={seekTo}
+                    isTranscribing={isTranscribing}
+                    transcriptionProgress={transcriptionProgress}
+                    transcriptionError={transcriptionError}
                 />
             ) : (
-                <aside className="w-80 border-r border-neutral-800 bg-neutral-900 p-4 flex flex-col justify-between">
+                <aside className="max-h-[38dvh] w-full shrink-0 border-b border-neutral-800 bg-neutral-900 p-4 flex flex-col justify-between overflow-y-auto md:max-h-full md:w-72 md:border-b-0 md:border-r">
                     <h2 className="text-lg font-bold">Edit Studio</h2>
                 </aside>
             )}
 
-            <div className="flex-1 flex flex-col p-6 relative overflow-hidden">
+            <div className="relative flex min-h-[65dvh] min-w-0 flex-1 flex-col overflow-hidden p-3 sm:p-4 lg:p-5 md:min-h-0">
                 {/* Top Header Actions Bar */}
-                <div className="flex items-center justify-between mb-4 pb-3 border-b border-neutral-800/80">
-                    <button
-                        onClick={onBack}
-                        disabled={isExporting}
-                        className="flex items-center gap-2 text-xs font-semibold text-neutral-400 hover:text-white transition-colors disabled:opacity-50">
-                        <ArrowLeft className="w-4 h-4" /> Back to Studio
-                    </button>
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-3 border-b border-neutral-800/80 pb-3">
+                    <div className="flex items-center gap-4">
+                        <button
+                            onClick={onBack}
+                            disabled={isExporting}
+                            className="flex items-center gap-2 text-xs font-semibold text-neutral-400 transition-colors hover:text-white disabled:opacity-50">
+                            <ArrowLeft className="h-4 w-4" /> Back to Studio
+                        </button>
+                        <div className="min-w-0 border-l border-neutral-800 pl-3 sm:pl-4">
+                            <input value={project?.title ?? 'Video editor'} onChange={(event) => renameProject(event.target.value)} aria-label="Project name" maxLength={80}
+                                className="w-32 max-w-[28vw] truncate border-b border-transparent bg-transparent text-sm font-semibold text-neutral-100 hover:border-neutral-700 focus:border-indigo-500 focus:outline-none sm:w-48" />
+                            <p className="text-[11px] text-neutral-500">{project?.aspectRatio ?? aspectRatio} frame</p>
+                        </div>
+                    </div>
 
-                    <button
-                        onClick={toggleSourceAudio}
-                        disabled={isExporting}
-                        aria-label={isSourceMuted ? 'Unmute original video audio' : 'Mute original video audio'}
-                        className="ml-auto mr-3 flex items-center gap-2 rounded-lg border border-neutral-700 px-3 py-2 text-xs font-semibold text-neutral-200 hover:bg-neutral-800 disabled:opacity-50">
-                        {isSourceMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
-                        {isSourceMuted ? 'Original audio muted' : 'Mute original audio'}
-                    </button>
+                    <div className="flex flex-wrap items-center gap-2">
+                        <button
+                            onClick={toggleSourceAudio}
+                            disabled={isExporting}
+                            aria-label={isSourceMuted ? 'Unmute original video audio' : 'Mute original video audio'}
+                            className="flex items-center gap-2 rounded-lg border border-neutral-700 px-3 py-2 text-xs font-semibold text-neutral-200 transition-colors hover:bg-neutral-800 disabled:opacity-50">
+                            {isSourceMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+                            {isSourceMuted ? 'Unmute audio' : 'Mute audio'}
+                        </button>
 
-                    <button
-                        onClick={handleSaveDraft}
-                        disabled={!project || isSavingDraft || isExporting}
-                        className="mr-3 flex items-center gap-2 rounded-lg border border-neutral-700 px-3 py-2 text-xs font-semibold text-neutral-200 hover:bg-neutral-800 disabled:opacity-50">
-                        {isSavingDraft ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bookmark className="h-4 w-4" />}
-                        {isSavingDraft ? 'Saving…' : draftSaved ? 'Draft Saved' : 'Save Draft'}
-                    </button>
+                        <button
+                            onClick={handleSaveDraft}
+                            disabled={!project || isSavingDraft || isExporting}
+                            className="flex items-center gap-2 rounded-lg border border-neutral-700 px-3 py-2 text-xs font-semibold text-neutral-200 transition-colors hover:bg-neutral-800 disabled:opacity-50">
+                            {isSavingDraft ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bookmark className="h-4 w-4" />}
+                            {isSavingDraft ? 'Saving…' : draftSaved ? 'Draft saved' : 'Save draft'}
+                        </button>
 
-                    <button
-                        onClick={handleDownload}
-                        disabled={isExporting}
-                        className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 disabled:bg-indigo-600/50 text-white px-5 py-2 rounded-lg font-semibold text-xs shadow-lg shadow-indigo-600/20 transition-all transform hover:scale-105">
-                        {isExporting ? (
-                            <>
-                                <Loader2 className="w-4 h-4 animate-spin" />
-                                {exportProgress > 0 ? `Converting MP4… ${exportProgress}%` : 'Rendering edited video…'}
-                            </>
-                        ) : (
-                            <>
-                                <Download className="w-4 h-4" /> Download Video
-                            </>
-                        )}
-                    </button>
+                        <label className="sr-only" htmlFor="export-resolution">Export resolution</label>
+                        <select
+                            id="export-resolution"
+                            value={exportResolution}
+                            onChange={(event) => setExportResolution(event.target.value as ExportResolution)}
+                            disabled={isExporting}
+                            className="rounded-lg border border-neutral-700 bg-neutral-900 px-2.5 py-2 text-xs text-neutral-200 focus:border-indigo-500 focus:outline-none disabled:opacity-50">
+                            <option value="720p">720p</option>
+                            <option value="1080p">1080p</option>
+                        </select>
+
+                        <label className="sr-only" htmlFor="export-format">Export format</label>
+                        <select
+                            id="export-format"
+                            value={exportFormat}
+                            onChange={(event) => setExportFormat(event.target.value as ExportFormat)}
+                            disabled={isExporting}
+                            className="rounded-lg border border-neutral-700 bg-neutral-900 px-2.5 py-2 text-xs text-neutral-200 focus:border-indigo-500 focus:outline-none disabled:opacity-50">
+                            <option value="mp4">MP4</option>
+                            <option value="webm">WebM</option>
+                        </select>
+
+                        <button
+                            onClick={handleDownload}
+                            disabled={isExporting || !project}
+                            className="flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-semibold text-white shadow-lg shadow-indigo-600/20 transition-colors hover:bg-indigo-500 disabled:bg-indigo-600/50">
+                            {isExporting ? (
+                                <>
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                    {exportStage === 'converting' ? 'Encoding MP4…' : exportStage === 'saving' ? 'Saving…' : 'Rendering…'}
+                                </>
+                            ) : (
+                                <>
+                                    <Download className="h-4 w-4" /> Export video
+                                </>
+                            )}
+                        </button>
+                    </div>
                 </div>
+
+                {(isExporting || exportStage === 'complete' || exportError) && (
+                    <div className="mb-3 rounded-lg border border-neutral-800 bg-neutral-900/80 px-3 py-2.5" role="status" aria-live="polite">
+                        <div className="mb-2 flex items-center justify-between gap-3 text-xs">
+                            <span className={exportError ? 'text-red-300' : exportStage === 'complete' ? 'text-emerald-300' : 'text-neutral-300'}>
+                                {exportError ?? (exportStage === 'preparing' ? 'Preparing export…' : exportStage === 'rendering' ? `Rendering video · ${exportProgress}%` : exportStage === 'converting' ? `Encoding MP4 · ${exportProgress}%` : exportStage === 'saving' ? 'Saving file…' : 'Export complete')}
+                            </span>
+                            {isExporting && exportStage === 'rendering' && (
+                                <button type="button" onClick={() => { exportCancelRef.current = true; }} className="text-neutral-400 hover:text-white">Cancel</button>
+                            )}
+                        </div>
+                        <div className="h-1.5 overflow-hidden rounded-full bg-neutral-800" role="progressbar" aria-valuenow={exportProgress} aria-valuemin={0} aria-valuemax={100} aria-label="Video export progress">
+                            <div className={`h-full rounded-full transition-[width] duration-200 ${exportError ? 'bg-red-500' : exportStage === 'complete' ? 'bg-emerald-500' : 'bg-indigo-500'}`} style={{ width: `${exportProgress}%` }} />
+                        </div>
+                    </div>
+                )}
 
                 <video ref={videoRef} src={sourceVideoUrl} className="hidden" playsInline />
 
                 {project ? (
-                    <div className={`flex-1 flex flex-col gap-4 overflow-hidden ${isExporting ? 'pointer-events-none opacity-70' : ''}`}>
-                        <PreviewCanvas videoRef={videoRef} project={project} playheadMs={playheadMs} />
+                    <div className={`flex min-h-0 flex-1 flex-col gap-3 overflow-hidden ${isExporting ? 'pointer-events-none opacity-70' : ''}`}>
+                        <PreviewCanvas videoRef={videoRef} project={project} />
                         <Timeline
                             durationMs={project.durationMs}
                             playheadMs={playheadMs}
                             isPlaying={isPlaying}
                             onSeek={seekTo}
                             onTogglePlay={togglePlay}
+                            videoEdit={project.videoEdit}
+                            onTrimChange={updateVideoEdit}
+                            onTrimStart={beginVideoEdit}
+                            onSplit={() => splitVideoAt(playheadMs)}
+                            onRemoveSplit={removeVideoSplit}
                         />
+                    </div>
+                ) : projectLoadError ? (
+                    <div className="flex flex-1 items-center justify-center p-6">
+                        <div role="alert" className="w-full max-w-lg rounded-2xl border border-red-900/60 bg-neutral-900 p-6 text-center">
+                            <h2 className="text-base font-semibold text-neutral-100">This video could not be opened</h2>
+                            <p className="mt-2 text-sm leading-relaxed text-neutral-400">{projectLoadError}</p>
+                            <button type="button" onClick={onBack} className="mt-5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500">Back to studio</button>
+                        </div>
                     </div>
                 ) : (
                     <div className="flex-1 flex items-center justify-center text-neutral-500 text-sm">

@@ -41,7 +41,7 @@ export function SidebarControls({ settings, onUpdateSettings }: SidebarControlsP
     };
 
     return (
-        <aside className="w-80 border-r border-neutral-800 bg-neutral-900 flex flex-col justify-between p-4 overflow-y-auto">
+        <aside className="flex max-h-[44dvh] w-full shrink-0 flex-col justify-between overflow-y-auto border-b border-neutral-800 bg-neutral-900 p-4 md:max-h-full md:w-80 md:border-b-0 md:border-r">
             <div>
                 <div className="flex items-center gap-2 mb-6">
                     <Sparkles className="w-6 h-6 text-indigo-500" />
@@ -205,7 +205,12 @@ export function SidebarControls({ settings, onUpdateSettings }: SidebarControlsP
                 </div>
 
                 {/* Teleprompter Module */}
-                <Teleprompter scriptText={settings.scriptText} onScriptChange={setScriptText} />
+                <Teleprompter
+                    scriptText={settings.scriptText}
+                    language={settings.scriptLanguage}
+                    onLanguageChange={(scriptLanguage) => onUpdateSettings({ scriptLanguage })}
+                    onScriptChange={setScriptText}
+                />
             </div>
 
             <div className="pt-4 border-t border-neutral-800 text-xs text-neutral-500 text-center">
