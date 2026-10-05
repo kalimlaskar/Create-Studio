@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="4" y1="2" x2="60" y2="64" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#818cf8"/>
+      <stop offset="1" stop-color="#4f46e5"/>
+    </linearGradient>
+    <linearGradient id="shine" x1="18" y1="15" x2="47" y2="50" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#fff"/>
+      <stop offset="1" stop-color="#e0e7ff"/>
+    </linearGradient>
+  </defs>
+  <rect x="2" y="2" width="60" height="60" rx="18" fill="url(#bg)"/>
+  <path d="M27.2 18.2c.52-1.82 3.08-1.82 3.6 0l2.4 8.4a5 5 0 0 0 3.4 3.4l8.4 2.4c1.82.52 1.82 3.08 0 3.6l-8.4 2.4a5 5 0 0 0-3.4 3.4l-2.4 8.4c-.52 1.82-3.08 1.82-3.6 0l-2.4-8.4a5 5 0 0 0-3.4-3.4L13 36c-1.82-.52-1.82-3.08 0-3.6l8.4-2.4a5 5 0 0 0 3.4-3.4l2.4-8.4Z" fill="url(#shine)"/>
+  <path d="M47.1 9.7c.28-.96 1.62-.96 1.9 0l1.08 3.78a2.2 2.2 0 0 0 1.5 1.5l3.78 1.08c.96.28.96 1.62 0 1.9l-3.78 1.08a2.2 2.2 0 0 0-1.5 1.5L49 24.32c-.28.96-1.62.96-1.9 0l-1.08-3.78a2.2 2.2 0 0 0-1.5-1.5l-3.78-1.08c-.96-.28-.96-1.62 0-1.9l3.78-1.08a2.2 2.2 0 0 0 1.5-1.5l1.08-3.78Z" fill="url(#shine)"/>
+</svg>
