@@ -20,7 +20,7 @@ CreatorStudio is a browser-based lesson, presentation, and social-reel creation 
 
 ## Supabase authentication setup
 
-1. For immediate local preview before creating a Supabase project, run `npm run dev` and use the temporary demo login: username `teacher`, password `lesson-demo-2026`. This is a shared local-only admin demo account, not a real user account; it is disabled automatically in production and when Supabase is configured. Set `TEMP_AUTH_ENABLED=false` to disable it locally.
+1. For local preview before creating a Supabase project, run `npm run dev` and use the temporary tester login: username `teacher`, password `lesson-demo-2026`. This is a shared demo credential, not a real user or administrator account. For a deployed test build without Supabase, set `TEMP_AUTH_ENABLED=true`, `TEMP_AUTH_USERNAME`, `TEMP_AUTH_PASSWORD`, and a random `TEMP_AUTH_SECRET` of at least 32 characters in the host's private environment settings. Never use the sample local password in a deployed app. Set `TEMP_AUTH_ENABLED=false` to disable temporary access. Adding Supabase credentials disables it automatically.
 2. Create a free Supabase project when you're ready for real accounts.
 3. Copy its Project URL and **publishable** key from the project's Connect/API settings into `.env.local` as `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`. For production also set `NEXT_PUBLIC_SITE_URL` to the deployed HTTPS origin.
 4. In Supabase Authentication URL Configuration, set the local Site URL to `http://localhost:3000` and add `http://localhost:3000/auth/callback` to the Redirect URLs. For deployment, add the deployed origin and its `/auth/callback` URL too.

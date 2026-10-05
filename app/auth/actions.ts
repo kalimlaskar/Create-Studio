@@ -24,8 +24,8 @@ export async function signInAction(_state: AuthFormState, formData: FormData): P
 
     const supabase = await createSupabaseServerClient();
     if (!supabase) {
-        if (!isDemoAuthEnabled()) return { error: 'Sign-in is unavailable. Configure Supabase or enable local demo authentication for development.' };
-        if (!verifyDemoCredentials(email, password)) return { error: 'That demo username or password is not correct.' };
+        if (!isDemoAuthEnabled()) return { error: 'Sign-in is unavailable. Configure Supabase or explicitly enable a temporary tester account.' };
+        if (!verifyDemoCredentials(email, password)) return { error: 'That tester username or password is not correct.' };
         const token = createDemoSessionToken();
         if (!token) return { error: 'Local demo sign-in is disabled.' };
         const cookieStore = await cookies();
@@ -56,7 +56,7 @@ export async function signUpAction(_state: AuthFormState, formData: FormData): P
 
     const supabase = await createSupabaseServerClient();
     if (!supabase) {
-        if (isDemoAuthEnabled()) return { message: 'Account creation is disabled in temporary demo mode. Use the sample demo login shown above, or connect Supabase to enable real accounts.' };
+        if (isDemoAuthEnabled()) return { message: 'Account creation is disabled for the temporary tester account. Connect Supabase to enable real user sign-up.' };
         return { error: 'Sign-up is unavailable. Configure Supabase to create real accounts.' };
     }
 
