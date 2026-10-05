@@ -1,20 +1,57 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { Video, Pause, Play, Square, FolderOpen, Trash2, Images } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { Video, Pause, Play, Square, FolderOpen, Trash2, Images, MonitorUp, LoaderCircle } from 'lucide-react';
 import { SidebarControls } from '@/components/studio/SidebarControls';
 import { VideoCanvas } from '@/components/studio/VideoCanvas';
 import { ExportModal } from '@/components/studio/ExportModal';
 import { EditorShell } from '@/components/editor/EditorShell';
 import { useStudioSession } from '@/hooks/useStudioSession';
 import { deleteEditorDraft, DraftSummary, LoadedDraft, listEditorDrafts, loadEditorDraft } from '@/components/editor/drafts';
-import { FeedbackWidget } from '@/components/studio/FeedbackWidget';
 import { PhotoReelStudio } from '@/components/studio/PhotoReelStudio';
 import { signOutAction } from '@/app/auth/actions';
 
 export function CreatorStudioDashboard({ userEmail }: { userEmail: string }) {
     const [creationMode, setCreationMode] = useState<'choose' | 'record' | 'photos'>('choose');
     const [view, setView] = useState<'record' | 'edit'>('record');
+    const [screenShareStream, setScreenShareStream] = useState<MediaStream | null>(null);
+    const [screenShareSurface, setScreenShareSurface] = useState<string | null>(null);
+    const [isScreenTrackMuted, setIsScreenTrackMuted] = useState(false);
+    const [screenFramesReceived, setScreenFramesReceived] = useState(0);
+    const [screenShareError, setScreenShareError] = useState<string | null>(null);
+    const [studioWasBackgrounded, setStudioWasBackgrounded] = useState(false);
+    const screenShareStreamRef = React.useRef<MediaStream | null>(null);
+    const lastScreenFrameReportRef = useRef(0);
+    const lastScreenFingerprintRef = useRef<number | null>(null);
+    const screenProbeCanvasRef = useRef<HTMLCanvasElement | null>(null);
+
+    const reportScreenFrame = useCallback((video: HTMLVideoElement) => {
+        const now = Date.now();
+        if (now - lastScreenFrameReportRef.current < 1000) return;
+        lastScreenFrameReportRef.current = now;
+        if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA || video.videoWidth === 0) return;
+        const canvas = screenProbeCanvasRef.current ?? document.createElement('canvas');
+        screenProbeCanvasRef.current = canvas;
+        canvas.width = 16;
+        canvas.height = 9;
+        const context = canvas.getContext('2d', { willReadFrequently: true });
+        if (!context) return;
+        try {
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+            const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+            let fingerprint = 0;
+            for (let index = 0; index < pixels.length; index += 16) fingerprint = (fingerprint * 31 + pixels[index] * 3 + pixels[index + 1] * 5 + pixels[index + 2] * 7) | 0;
+            if (lastScreenFingerprintRef.current === null) {
+                lastScreenFingerprintRef.current = fingerprint;
+                setScreenFramesReceived(1);
+            } else if (lastScreenFingerprintRef.current !== fingerprint) {
+                lastScreenFingerprintRef.current = fingerprint;
+                setScreenFramesReceived((changes) => changes + 1);
+            }
+        } catch (error) {
+            console.warn('Could not inspect the incoming screen-share frame:', error);
+        }
+    }, []);
     const {
         settings,
         updateSettings,
@@ -31,13 +68,86 @@ export function CreatorStudioDashboard({ userEmail }: { userEmail: string }) {
         recordedDurationMs,
         recordingSeconds,
         freeRecordingLimitSeconds,
+        isFinalizingScreenRecording,
         startRecordingSequence,
         stopRecording,
         pauseRecording,
         resumeRecording,
         resetRecording,
         cameraError,
-    } = useStudioSession(creationMode === 'record' && view === 'record');
+    } = useStudioSession(creationMode === 'record' && view === 'record', screenShareStream);
+
+    useEffect(() => { screenShareStreamRef.current = screenShareStream; }, [screenShareStream]);
+
+    useEffect(() => {
+        if (!screenShareStream) return;
+        const noteBackgrounding = () => {
+            if (document.hidden) setStudioWasBackgrounded(true);
+        };
+        document.addEventListener('visibilitychange', noteBackgrounding);
+        return () => document.removeEventListener('visibilitychange', noteBackgrounding);
+    }, [screenShareStream]);
+
+    const stopScreenShare = React.useCallback(() => {
+        screenShareStreamRef.current?.getTracks().forEach((track) => track.stop());
+        screenShareStreamRef.current = null;
+        setScreenShareStream(null);
+        setScreenShareSurface(null);
+        setIsScreenTrackMuted(false);
+    }, []);
+
+    useEffect(() => {
+        if (creationMode !== 'record' || view !== 'record' || recordedVideoUrl) {
+            const cleanupFrame = window.requestAnimationFrame(stopScreenShare);
+            return () => window.cancelAnimationFrame(cleanupFrame);
+        }
+    }, [creationMode, view, recordedVideoUrl, stopScreenShare]);
+
+    useEffect(() => () => {
+        screenShareStreamRef.current?.getTracks().forEach((track) => track.stop());
+    }, []);
+
+    const startScreenShare = async () => {
+        setScreenShareError(null);
+        setStudioWasBackgrounded(false);
+        setScreenShareSurface(null);
+        setIsScreenTrackMuted(false);
+        setScreenFramesReceived(0);
+        lastScreenFrameReportRef.current = 0;
+        lastScreenFingerprintRef.current = null;
+                        <VideoCanvas videoRef={videoRef} canvasStreamRef={canvasStreamRef} settings={settings} onAvatarMouthPositionChange={(cameraAvatarMouthX, cameraAvatarMouthY) => updateSettings({ cameraAvatarMouthX, cameraAvatarMouthY })} microphoneLevelRef={microphoneLevelRef} isRecording={isRecording} isRecordingPaused={isRecordingPaused} countdown={countdown} screenShareStream={screenShareStream} onScreenFrame={reportScreenFrame} />
+                            {screenShareStream ? <div className="max-w-sm space-y-2 rounded-lg border border-white/10 bg-neutral-950/80 px-3 py-2 text-[11px] leading-relaxed text-neutral-300"><p>Chrome source: <strong className="text-emerald-200">{screenShareSurface ?? 'checking…'}</strong>{isScreenTrackMuted && <span className="font-semibold text-amber-200"> · paused</span>} · live frame checks: <strong className="text-white">{screenFramesReceived}</strong></p><p>Switch to the page you want to record for a few seconds. If the frame-check number doesn’t increase, Chrome isn’t delivering frames from that selected source. For tab switching, select <strong className="text-white">Window → Chrome</strong>, not a single Chrome tab. The direct screen capture is saved first; the camera inset is composed afterward.</p>{studioWasBackgrounded && <p role="status" className="rounded-md border border-emerald-300/20 bg-emerald-300/10 px-2 py-1.5 text-emerald-100">Studio is in another tab. The display is being captured directly.</p>}</div> : <p className="max-w-sm rounded-lg border border-white/10 bg-neutral-950/75 px-3 py-2 text-[11px] leading-relaxed text-neutral-400">Choose <strong className="text-neutral-200">Window</strong> in Chrome’s picker, then select the Chrome window you’ll navigate in. Avoid <strong className="text-neutral-200">Chrome tab</strong>, which captures only one tab.</p>}
+        if (!navigator.mediaDevices?.getDisplayMedia) {
+            setScreenShareError('Screen sharing is not supported in this browser. Use a recent desktop version of Chrome, Edge, Firefox, or Safari.');
+            return;
+        }
+        try {
+            // Must be invoked directly from this click so the browser can show its share picker.
+            const stream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: { ideal: 30, max: 30 } }, audio: false });
+            const displayTrack = stream.getVideoTracks()[0];
+            if (!displayTrack) {
+                stream.getTracks().forEach((track) => track.stop());
+                setScreenShareError('The browser did not provide a screen video track. Choose a screen, window, or tab and try again.');
+                return;
+            }
+            const surface = displayTrack.getSettings().displaySurface;
+            setScreenShareSurface(surface === 'browser' ? 'Chrome tab' : surface === 'window' ? 'Browser window' : surface === 'monitor' ? 'Entire screen' : 'Unknown capture source');
+            setIsScreenTrackMuted(displayTrack.muted);
+            displayTrack.addEventListener('mute', () => setIsScreenTrackMuted(true));
+            displayTrack.addEventListener('unmute', () => setIsScreenTrackMuted(false));
+            displayTrack.addEventListener('ended', () => {
+                setScreenShareStream((current) => current === stream ? null : current);
+                if (screenShareStreamRef.current === stream) screenShareStreamRef.current = null;
+                setScreenShareSurface(null);
+                setIsScreenTrackMuted(false);
+            }, { once: true });
+            screenShareStreamRef.current = stream;
+            setScreenShareStream(stream);
+        } catch (error) {
+            if (error instanceof DOMException && (error.name === 'NotAllowedError' || error.name === 'AbortError')) return;
+            setScreenShareError(error instanceof Error ? error.message : 'Could not start screen sharing. Check browser permissions and try again.');
+        }
+    };
 
     const [savedDrafts, setSavedDrafts] = useState<DraftSummary[]>([]);
     const [restoredDraft, setRestoredDraft] = useState<LoadedDraft | null>(null);
@@ -156,6 +266,7 @@ export function CreatorStudioDashboard({ userEmail }: { userEmail: string }) {
                     resetRecording();
                     updateSettings({ inputMode: 'camera', uploadedVideoUrl: undefined });
                     setView('record');
+                    stopScreenShare();
                 }}
             />
         );
@@ -214,14 +325,22 @@ export function CreatorStudioDashboard({ userEmail }: { userEmail: string }) {
                     </div>
                 </details>
                 {cameraError && <div className="absolute left-1/2 top-4 z-40 -translate-x-1/2 rounded-lg bg-red-600/90 px-4 py-2 text-sm text-white shadow-lg">{cameraError}</div>}
-                <VideoCanvas videoRef={videoRef} canvasStreamRef={canvasStreamRef} settings={settings} onAvatarMouthPositionChange={(cameraAvatarMouthX, cameraAvatarMouthY) => updateSettings({ cameraAvatarMouthX, cameraAvatarMouthY })} microphoneLevelRef={microphoneLevelRef} isRecording={isRecording} isRecordingPaused={isRecordingPaused} countdown={countdown} />
+                <VideoCanvas videoRef={videoRef} canvasStreamRef={canvasStreamRef} settings={settings} onAvatarMouthPositionChange={(cameraAvatarMouthX, cameraAvatarMouthY) => updateSettings({ cameraAvatarMouthX, cameraAvatarMouthY })} microphoneLevelRef={microphoneLevelRef} isRecording={isRecording} isRecordingPaused={isRecordingPaused} countdown={countdown} screenShareStream={screenShareStream} onScreenFrame={reportScreenFrame} />
+                {isFinalizingScreenRecording && <div role="status" aria-live="polite" className="absolute left-1/2 top-1/2 z-40 flex -translate-x-1/2 -translate-y-1/2 items-center gap-3 rounded-2xl border border-indigo-300/20 bg-neutral-950/95 px-5 py-4 text-sm font-medium text-white shadow-2xl backdrop-blur"><LoaderCircle className="h-5 w-5 animate-spin text-indigo-300" />Preparing your screen recording and camera card…</div>}
+                <div className="absolute left-4 top-4 z-30 flex max-w-[min(32rem,calc(100%-2rem))] flex-col items-start gap-2 md:left-5 md:top-5">
+                    <button type="button" onClick={() => screenShareStream ? (isRecording ? stopRecording() : stopScreenShare()) : void startScreenShare()} disabled={countdown !== null} aria-pressed={Boolean(screenShareStream)} className={`pointer-events-auto flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold shadow-lg backdrop-blur-md transition disabled:cursor-not-allowed disabled:opacity-50 ${screenShareStream ? 'border-emerald-400/35 bg-emerald-950/80 text-emerald-100 hover:bg-emerald-900/90' : 'border-white/15 bg-neutral-950/85 text-neutral-100 hover:bg-neutral-800/95'}`}>
+                        <MonitorUp className="h-4 w-4" />{screenShareStream ? 'Stop screen share' : 'Share screen'}
+                        {screenShareStream && <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" />}
+                    </button>
+                    {screenShareStream ? <div className="max-w-sm space-y-2 rounded-lg border border-white/10 bg-neutral-950/80 px-3 py-2 text-[11px] leading-relaxed text-neutral-300"><p>Chrome source: <strong className="text-emerald-200">{screenShareSurface ?? 'checking…'}</strong>{isScreenTrackMuted && <span className="font-semibold text-amber-200"> · paused</span>} · screen changes detected: <strong className="text-white">{screenFramesReceived}</strong></p><p>Switch to the page you want to record for a few seconds. This count should increase when the captured picture changes. If it stays at 1, Chrome isn’t sending the new page in the selected source. The final video uses the direct screen recording; the camera card is composed afterward.</p>{studioWasBackgrounded && <p role="status" className="rounded-md border border-emerald-300/20 bg-emerald-300/10 px-2 py-1.5 text-emerald-100">Studio is in another tab. The direct screen recording continues.</p>}</div> : <p className="max-w-sm rounded-lg border border-white/10 bg-neutral-950/75 px-3 py-2 text-[11px] leading-relaxed text-neutral-400">Choose <strong className="text-neutral-200">Window</strong> in Chrome’s picker, then select the Chrome window you’ll navigate in. Avoid <strong className="text-neutral-200">Chrome tab</strong>, which captures only one tab.</p>}
+                    {screenShareError && <p role="alert" className="rounded-lg border border-red-500/30 bg-red-950/90 px-3 py-2 text-xs leading-relaxed text-red-200">{screenShareError}</p>}
+                </div>
                 <div className="pointer-events-none absolute bottom-4 left-1/2 z-30 -translate-x-1/2 md:bottom-6">
-                    {!isRecording ? <button onClick={startRecordingSequence} disabled={countdown !== null} className="pointer-events-auto flex items-center gap-2 whitespace-nowrap rounded-full border border-red-400/50 bg-red-600/95 px-5 py-2.5 text-sm font-semibold text-white shadow-[0_8px_32px_rgba(220,38,38,.35)] backdrop-blur-md transition-all hover:bg-red-500 active:scale-95 disabled:opacity-70 sm:px-6"><Video className="h-4 w-4" />{countdown !== null ? `Starting in ${countdown}…` : 'Record'}</button> : <div className="pointer-events-auto flex items-center gap-1.5 rounded-full border border-white/10 bg-neutral-950/85 p-1.5 text-white shadow-[0_8px_32px_rgba(0,0,0,.42)] backdrop-blur-xl sm:gap-2 sm:p-2"><span className={`ml-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${isRecordingPaused ? 'bg-amber-400' : 'animate-pulse bg-red-500'}`} /><span className="min-w-[4.4rem] px-1 font-mono text-xs tabular-nums sm:min-w-20 sm:text-sm">{Math.floor(recordingSeconds / 60)}:{String(recordingSeconds % 60).padStart(2, '0')}<span className="ml-1 text-[9px] text-neutral-400 sm:text-[10px]"> / {Math.floor(freeRecordingLimitSeconds / 60)}:00</span></span><span className="hidden h-6 w-px bg-white/15 sm:block" /><button type="button" onClick={isRecordingPaused ? resumeRecording : pauseRecording} aria-label={isRecordingPaused ? 'Resume recording' : 'Pause recording'} title={isRecordingPaused ? 'Resume recording' : 'Pause recording'} className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 sm:h-10 sm:w-10">{isRecordingPaused ? <Play className="h-4 w-4 fill-current" /> : <Pause className="h-4 w-4 fill-current" />}</button><button type="button" onClick={stopRecording} aria-label="Stop recording" title="Stop recording" className="flex h-9 w-9 items-center justify-center rounded-full bg-red-600 text-white shadow-md shadow-red-950/40 transition-colors hover:bg-red-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-300 sm:h-10 sm:w-10"><Square className="h-3.5 w-3.5 fill-current" /></button></div>}
+                    {!isRecording ? <button onClick={startRecordingSequence} disabled={countdown !== null || isFinalizingScreenRecording} className="pointer-events-auto flex items-center gap-2 whitespace-nowrap rounded-full border border-red-400/50 bg-red-600/95 px-5 py-2.5 text-sm font-semibold text-white shadow-[0_8px_32px_rgba(220,38,38,.35)] backdrop-blur-md transition-all hover:bg-red-500 active:scale-95 disabled:opacity-70 sm:px-6"><Video className="h-4 w-4" />{isFinalizingScreenRecording ? 'Preparing recording…' : countdown !== null ? `Starting in ${countdown}…` : 'Record'}</button> : <div className="pointer-events-auto flex items-center gap-1.5 rounded-full border border-white/10 bg-neutral-950/85 p-1.5 text-white shadow-[0_8px_32px_rgba(0,0,0,.42)] backdrop-blur-xl sm:gap-2 sm:p-2"><span className={`ml-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${isRecordingPaused ? 'bg-amber-400' : 'animate-pulse bg-red-500'}`} /><span className="min-w-[4.4rem] px-1 font-mono text-xs tabular-nums sm:min-w-20 sm:text-sm">{Math.floor(recordingSeconds / 60)}:{String(recordingSeconds % 60).padStart(2, '0')}<span className="ml-1 text-[9px] text-neutral-400 sm:text-[10px]"> / {Math.floor(freeRecordingLimitSeconds / 60)}:00</span></span><span className="hidden h-6 w-px bg-white/15 sm:block" /><button type="button" onClick={isRecordingPaused ? resumeRecording : pauseRecording} aria-label={isRecordingPaused ? 'Resume recording' : 'Pause recording'} title={isRecordingPaused ? 'Resume recording' : 'Pause recording'} className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 sm:h-10 sm:w-10">{isRecordingPaused ? <Play className="h-4 w-4 fill-current" /> : <Pause className="h-4 w-4 fill-current" />}</button><button type="button" onClick={stopRecording} aria-label="Stop recording" title="Stop recording" className="flex h-9 w-9 items-center justify-center rounded-full bg-red-600 text-white shadow-md shadow-red-950/40 transition-colors hover:bg-red-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-300 sm:h-10 sm:w-10"><Square className="h-3.5 w-3.5 fill-current" /></button></div>}
                 </div>
                 {recordedVideoUrl && <ExportModal videoUrl={recordedVideoUrl} mimeType={recordedVideoMimeType ?? 'video/webm'} scriptText={settings.scriptText} onReset={resetRecording} onEdit={() => setView('edit')} />}
             </div>
             {showWelcome && <div className="fixed inset-0 z-100 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm"><section role="dialog" aria-modal="true" aria-labelledby="welcome-title" className="w-full max-w-lg rounded-3xl border border-neutral-700 bg-neutral-900 p-6 shadow-2xl sm:p-8"><div className="mb-4 inline-flex rounded-2xl bg-indigo-500/15 p-3 text-indigo-300"><FolderOpen className="h-6 w-6" /></div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-indigo-300">Your creator workspace</p><h2 id="welcome-title" className="mt-2 text-2xl font-bold text-white">Let’s make your first video.</h2><p className="mt-3 text-sm leading-relaxed text-neutral-400">Start with a ready-to-read Hinglish reel script, or jump straight into the studio. You can edit the script and language any time.</p><div className="mt-6 flex flex-col gap-2 sm:flex-row"><button onClick={() => dismissWelcome(true)} className="flex-1 rounded-xl bg-indigo-600 px-4 py-3 text-sm font-semibold text-white hover:bg-indigo-500">Try the sample template</button><button onClick={() => dismissWelcome(false)} className="flex-1 rounded-xl border border-neutral-700 px-4 py-3 text-sm font-semibold text-neutral-200 hover:bg-neutral-800">Start with my own script</button></div></section></div>}
-            {!showWelcome && <FeedbackWidget />}
         </div>
     );
 }

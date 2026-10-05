@@ -17,6 +17,8 @@ interface VideoCanvasProps {
     isRecording: boolean;
     isRecordingPaused: boolean;
     countdown: number | null;
+    screenShareStream: MediaStream | null;
+    onScreenFrame?: (video: HTMLVideoElement) => void;
 }
 
 const WASM_FILESET_URL = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm';
@@ -37,8 +39,10 @@ function getVideoFilter(settings: StudioSettings) {
     return `brightness(${settings.brightness}%) contrast(${settings.contrast}%) ${preset}`.trim();
 }
 
-export function VideoCanvas({ videoRef, canvasStreamRef, settings, microphoneLevelRef, onAvatarMouthPositionChange, isRecording, isRecordingPaused, countdown }: VideoCanvasProps) {
+export function VideoCanvas({ videoRef, canvasStreamRef, settings, microphoneLevelRef, onAvatarMouthPositionChange, isRecording, isRecordingPaused, countdown, screenShareStream, onScreenFrame }: VideoCanvasProps) {
     const visibleCanvasRef = useRef<HTMLCanvasElement>(null);
+    const screenVideoRef = useRef<HTMLVideoElement>(null);
+    const screenShareStreamRef = useRef<MediaStream | null>(screenShareStream);
     const segmenterRef = useRef<ImageSegmenter | null>(null);
     const faceLandmarkerRef = useRef<{ detectForVideo: (video: HTMLVideoElement, timestampMs: number) => { faceLandmarks?: FaceLandmarkPoint[][] }; close: () => void } | null>(null);
     const bgImageRef = useRef<HTMLImageElement | null>(null);
@@ -73,6 +77,37 @@ export function VideoCanvas({ videoRef, canvasStreamRef, settings, microphoneLev
     useEffect(() => {
         isRecordingRef.current = isRecording;
     }, [isRecording]);
+
+    useEffect(() => {
+        screenShareStreamRef.current = screenShareStream;
+        const screenVideo = screenVideoRef.current;
+        if (!screenVideo) return;
+        if (!screenShareStream) {
+            screenVideo.pause();
+            screenVideo.srcObject = null;
+            return;
+        }
+        screenVideo.srcObject = screenShareStream;
+        screenVideo.play().catch((error) => console.warn('Screen share preview could not start:', error));
+    }, [screenShareStream]);
+    useEffect(() => {
+        const video = screenVideoRef.current;
+        if (!screenShareStream || !video || !onScreenFrame) return;
+        let frameCallbackId = 0;
+        let cancelled = false;
+        const reportFrame = () => {
+            if (cancelled) return;
+            onScreenFrame(video);
+            frameCallbackId = video.requestVideoFrameCallback(reportFrame);
+        };
+        if (typeof video.requestVideoFrameCallback === 'function') {
+            frameCallbackId = video.requestVideoFrameCallback(reportFrame);
+        }
+        return () => {
+            cancelled = true;
+            if (frameCallbackId && typeof video.cancelVideoFrameCallback === 'function') video.cancelVideoFrameCallback(frameCallbackId);
+        };
+    }, [screenShareStream, onScreenFrame]);
 
     // Given the crop region used on the video (in video pixel space), compute
     // the equivalent crop region in mask pixel space. The mask is usually a
@@ -266,6 +301,66 @@ export function VideoCanvas({ videoRef, canvasStreamRef, settings, microphoneLev
             canvas.width = outputWidth;
             canvas.height = outputHeight;
         }
+
+        const sharedScreen = screenVideoRef.current;
+        if (screenShareStreamRef.current && sharedScreen && sharedScreen.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && sharedScreen.videoWidth > 0) {
+            ctx.save();
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#080a12';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Fit the shared display inside the chosen output frame to keep screen content readable.
+            const screenScale = Math.min(canvas.width / sharedScreen.videoWidth, canvas.height / sharedScreen.videoHeight);
+            const screenWidth = sharedScreen.videoWidth * screenScale;
+            const screenHeight = sharedScreen.videoHeight * screenScale;
+            const screenX = (canvas.width - screenWidth) / 2;
+            const screenY = (canvas.height - screenHeight) / 2;
+            ctx.drawImage(sharedScreen, screenX, screenY, screenWidth, screenHeight);
+
+            // Meet-style floating camera card is part of the captured canvas, not just a DOM overlay.
+            if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && video.videoWidth > 0) {
+                const cardWidth = Math.round(canvas.width * 0.25);
+                const cardHeight = Math.round(cardWidth * 0.66);
+                const inset = Math.max(18, Math.round(canvas.width * 0.018));
+                const cardX = canvas.width - cardWidth - inset;
+                const cardY = canvas.height - cardHeight - inset;
+                const cameraCrop = getFrameCrop(video.videoWidth, video.videoHeight, '16:9');
+                ctx.save();
+                ctx.shadowColor = 'rgba(0,0,0,0.55)';
+                ctx.shadowBlur = Math.max(12, Math.round(canvas.width * 0.012));
+                ctx.shadowOffsetY = Math.max(4, Math.round(canvas.width * 0.004));
+                ctx.beginPath();
+                ctx.roundRect(cardX, cardY, cardWidth, cardHeight, Math.max(14, Math.round(cardWidth * 0.06)));
+                ctx.clip();
+                ctx.translate(cardX + cardWidth, cardY);
+                ctx.scale(-1, 1);
+                ctx.filter = videoFilter;
+                ctx.drawImage(video, cameraCrop.x, cameraCrop.y, cameraCrop.width, cameraCrop.height, 0, 0, cardWidth, cardHeight);
+                ctx.filter = 'none';
+                ctx.restore();
+                ctx.shadowColor = 'transparent';
+                ctx.lineWidth = Math.max(3, canvas.width * 0.002);
+                ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+                ctx.beginPath();
+                ctx.roundRect(cardX, cardY, cardWidth, cardHeight, Math.max(14, Math.round(cardWidth * 0.06)));
+                ctx.stroke();
+                ctx.font = `600 ${Math.max(12, Math.round(canvas.width * 0.012))}px sans-serif`;
+                ctx.textAlign = 'left';
+                ctx.textBaseline = 'middle';
+                const labelPadding = Math.max(8, Math.round(cardWidth * 0.035));
+                const labelHeight = Math.max(22, Math.round(cardHeight * 0.15));
+                ctx.fillStyle = 'rgba(0,0,0,0.58)';
+                ctx.beginPath();
+                ctx.roundRect(cardX + labelPadding, cardY + labelPadding, Math.max(48, cardWidth * 0.2), labelHeight, labelHeight / 2);
+                ctx.fill();
+                ctx.fillStyle = '#fff';
+                ctx.fillText('YOU', cardX + labelPadding * 2, cardY + labelPadding + labelHeight / 2);
+            }
+            if (isRecordingRef.current) drawFreeTierWatermark(ctx, canvas.width, canvas.height);
+            ctx.restore();
+            return;
+        }
+
         const sourceCrop = getFrameCrop(vWidth, vHeight, currentSettings.aspectRatio);
 
         if (!result?.confidenceMasks?.[0]) {
@@ -382,7 +477,20 @@ export function VideoCanvas({ videoRef, canvasStreamRef, settings, microphoneLev
         const canvas = visibleCanvasRef.current;
         if (!video || !canvas) return;
 
-        let animationFrameId: number;
+        let animationFrameId = 0;
+        let backgroundTimerId: number | null = null;
+        let cancelled = false;
+
+        const scheduleNextFrame = () => {
+            if (cancelled) return;
+            if (screenShareStreamRef.current && document.hidden) {
+                // Browsers suspend requestAnimationFrame in background tabs.
+                // A timer keeps the canvas compositor advancing during tab switches.
+                backgroundTimerId = window.setTimeout(processFrame, 100);
+            } else {
+                animationFrameId = requestAnimationFrame(processFrame);
+            }
+        };
 
         const processFrame = () => {
             const currentSettings = settingsRef.current;
@@ -391,7 +499,9 @@ export function VideoCanvas({ videoRef, canvasStreamRef, settings, microphoneLev
                 canvas.width = width;
                 canvas.height = height;
             }
-            if (video.readyState >= video.HAVE_CURRENT_DATA && currentSettings.cameraArtEffect === 'photo-avatar') {
+            if (video.readyState >= video.HAVE_CURRENT_DATA && screenShareStreamRef.current) {
+                renderFrame();
+            } else if (video.readyState >= video.HAVE_CURRENT_DATA && currentSettings.cameraArtEffect === 'photo-avatar') {
                 const context = canvas.getContext('2d');
                 if (context) {
                     drawPhotoAvatar(
@@ -425,7 +535,7 @@ export function VideoCanvas({ videoRef, canvasStreamRef, settings, microphoneLev
                     renderFrame();
                 }
             }
-            animationFrameId = requestAnimationFrame(processFrame);
+            scheduleNextFrame();
         };
 
         processFrame();
@@ -434,7 +544,11 @@ export function VideoCanvas({ videoRef, canvasStreamRef, settings, microphoneLev
             canvasStreamRef.current = canvas.captureStream(RECORDING_FRAME_RATE);
         }
 
-        return () => cancelAnimationFrame(animationFrameId);
+        return () => {
+            cancelled = true;
+            cancelAnimationFrame(animationFrameId);
+            if (backgroundTimerId !== null) window.clearTimeout(backgroundTimerId);
+        };
     }, [videoRef, canvasStreamRef, microphoneLevelRef]);
 
     const getAspectRatioClass = (ratio: AspectRatioType) => {
@@ -454,6 +568,8 @@ export function VideoCanvas({ videoRef, canvasStreamRef, settings, microphoneLev
             )}
 
             <video ref={videoRef} autoPlay playsInline muted className="hidden" />
+            {/* Keep the capture element rendered off-screen: display:none can cause browsers to suspend video-frame decoding. */}
+            <video ref={screenVideoRef} autoPlay playsInline muted aria-hidden="true" className="pointer-events-none fixed left-0 top-0 z-[-1] h-px w-px opacity-[0.01]" />
 
             <div
                 style={{ aspectRatio: settings.aspectRatio.replace(':', ' / ') }}
@@ -477,7 +593,7 @@ export function VideoCanvas({ videoRef, canvasStreamRef, settings, microphoneLev
                         <span className="absolute left-1/2 top-1/2 h-8 w-px -translate-x-1/2 -translate-y-1/2 bg-white/90" />
                     </div>
                 )}
-                <TeleprompterOverlay scriptText={settings.scriptText} />
+                {!screenShareStream && <TeleprompterOverlay scriptText={settings.scriptText} />}
 
                 {isRecording && (
                     <div className={`absolute left-3 top-3 z-30 flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold text-white shadow-lg sm:left-4 sm:top-4 ${isRecordingPaused ? 'bg-amber-500/90' : 'bg-red-600/90'}`}>

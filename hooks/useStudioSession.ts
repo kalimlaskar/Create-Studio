@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { StudioSettings } from '@/types/studio';
-import { createHighQualityRecorder } from '@/components/recordingQuality';
+import { createHighQualityRecorder, getRecordingDimensions } from '@/components/recordingQuality';
 
 const DEFAULT_SETTINGS: StudioSettings = {
     aspectRatio: '9:16',
@@ -23,7 +23,7 @@ const DEFAULT_SETTINGS: StudioSettings = {
 
 export const FREE_RECORDING_LIMIT_SECONDS = 60;
 
-export function useStudioSession(enabled = true) {
+export function useStudioSession(enabled = true, screenShareStream: MediaStream | null = null) {
     const [settings, setSettings] = useState<StudioSettings>(DEFAULT_SETTINGS);
     const [isRecording, setIsRecording] = useState(false);
     const [isRecordingPaused, setIsRecordingPaused] = useState(false);
@@ -33,6 +33,8 @@ export function useStudioSession(enabled = true) {
     const [recordedDurationMs, setRecordedDurationMs] = useState<number | null>(null);
     const [recordingSeconds, setRecordingSeconds] = useState(0);
     const [cameraError, setCameraError] = useState<string | null>(null);
+    const [isFinalizingScreenRecording, setIsFinalizingScreenRecording] = useState(false);
+    const settingsRef = useRef(settings);
 
     const videoRef = useRef<HTMLVideoElement>(null);
     const canvasStreamRef = useRef<MediaStream | null>(null);
@@ -44,11 +46,18 @@ export function useStudioSession(enabled = true) {
     const avatarMeterActiveRef = useRef(false);
     const microphoneLevelRef = useRef(0);
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+    const cameraRecorderRef = useRef<MediaRecorder | null>(null);
+    const screenShareStreamRef = useRef<MediaStream | null>(screenShareStream);
+    const isScreenShareRecordingRef = useRef(false);
+    const cameraRecordingPromiseRef = useRef<Promise<Blob> | null>(null);
     const recordedChunksRef = useRef<Blob[]>([]);
     const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const recordingStartedAtRef = useRef(0);
     const recordingAccumulatedMsRef = useRef(0);
     const recordingSegmentStartedAtRef = useRef<number | null>(null);
+
+    useEffect(() => { settingsRef.current = settings; }, [settings]);
+    useEffect(() => { screenShareStreamRef.current = screenShareStream; }, [screenShareStream]);
 
     // Initialize Camera & Mic with AI Noise Suppression
     useEffect(() => {
@@ -155,17 +164,43 @@ export function useStudioSession(enabled = true) {
     const startActualRecording = useCallback(() => {
         recordedChunksRef.current = [];
         setCameraError(null);
-        if (!canvasStreamRef.current || !mediaStreamRef.current) return;
+        if (!mediaStreamRef.current) return;
 
         const audioTrack = mediaStreamRef.current.getAudioTracks()[0];
-        const combinedStream = new MediaStream([
-            ...canvasStreamRef.current.getVideoTracks(),
-            ...(audioTrack ? [audioTrack] : []),
-        ]);
+        const activeScreenTrack = screenShareStreamRef.current?.getVideoTracks().find((track) => track.readyState === 'live');
+        if (!activeScreenTrack && !canvasStreamRef.current) return;
+        const canvasStream = canvasStreamRef.current;
+        const combinedStream = activeScreenTrack
+            ? new MediaStream([activeScreenTrack, ...(audioTrack ? [audioTrack] : [])])
+            : new MediaStream([...(canvasStream?.getVideoTracks() ?? []), ...(audioTrack ? [audioTrack] : [])]);
 
         try {
+            isScreenShareRecordingRef.current = Boolean(activeScreenTrack);
             const mediaRecorder = createHighQualityRecorder(combinedStream);
             mediaRecorderRef.current = mediaRecorder;
+
+            if (activeScreenTrack) {
+                const cameraTrack = mediaStreamRef.current.getVideoTracks()[0];
+                if (!cameraTrack) throw new Error('The camera is not available for the floating camera card.');
+                const cameraOnlyStream = new MediaStream([cameraTrack]);
+                const cameraRecorder = createHighQualityRecorder(cameraOnlyStream);
+                cameraRecorderRef.current = cameraRecorder;
+                const cameraChunks: Blob[] = [];
+                cameraRecordingPromiseRef.current = new Promise<Blob>((resolve, reject) => {
+                    cameraRecorder.ondataavailable = (event) => { if (event.data.size > 0) cameraChunks.push(event.data); };
+                    cameraRecorder.onerror = () => reject(new Error('The camera inset could not be recorded.'));
+                    cameraRecorder.onstop = () => {
+                        const cameraMime = cameraRecorder.mimeType || 'video/webm';
+                        const cameraBlob = new Blob(cameraChunks, { type: cameraMime });
+                        if (cameraBlob.size === 0) reject(new Error('No camera frames were captured for the floating camera card.'));
+                        else resolve(cameraBlob);
+                        cameraRecorderRef.current = null;
+                    };
+                });
+                cameraRecorder.start(1000);
+            } else {
+                cameraRecordingPromiseRef.current = null;
+            }
 
             mediaRecorder.ondataavailable = (event) => {
                 if (event.data.size > 0) {
@@ -181,19 +216,46 @@ export function useStudioSession(enabled = true) {
                 const finalElapsedMs = recordingAccumulatedMsRef.current + (recordingSegmentStartedAtRef.current === null ? 0 : Date.now() - recordingSegmentStartedAtRef.current);
                 recordingSegmentStartedAtRef.current = null;
                 recordingAccumulatedMsRef.current = 0;
-                setRecordedDurationMs(Math.min(finalElapsedMs, FREE_RECORDING_LIMIT_SECONDS * 1000));
+                setRecordedDurationMs(finalElapsedMs);
                 const mimeType = mediaRecorder.mimeType || 'video/webm';
                 const blob = new Blob(recordedChunksRef.current, { type: mimeType });
                 if (blob.size === 0) {
+                    cameraRecorderRef.current?.stop();
                     setCameraError('The browser did not capture any video frames. Check camera permissions and try recording again.');
                     return;
                 }
-                const url = URL.createObjectURL(blob);
+                if (isScreenShareRecordingRef.current) {
+                    const screenBlob = blob;
+                    const cameraPromise = cameraRecordingPromiseRef.current;
+                    activeScreenTrack?.stop();
+                    cameraRecorderRef.current?.stop();
+                    setIsFinalizingScreenRecording(true);
+                    setCameraError(null);
+                    void (async () => {
+                        try {
+                            if (!cameraPromise) throw new Error('The camera inset recording was not available.');
+                            const cameraBlob = await cameraPromise;
+                            const { composeScreenShareWithCamera } = await import('@/components/editor/convertToMp4');
+                            const composedBlob = await composeScreenShareWithCamera(screenBlob, cameraBlob, getRecordingDimensions(settingsRef.current.aspectRatio), () => undefined);
+                            setRecordedVideoMimeType('video/mp4');
+                            setRecordedVideoUrl(URL.createObjectURL(composedBlob));
+                        } catch (error) {
+                            console.error('Screen-share composition failed:', error);
+                            setCameraError(error instanceof Error ? error.message : 'Could not combine the screen recording and camera inset.');
+                        } finally {
+                            isScreenShareRecordingRef.current = false;
+                            cameraRecordingPromiseRef.current = null;
+                            setIsFinalizingScreenRecording(false);
+                        }
+                    })();
+                    return;
+                }
                 setRecordedVideoMimeType(mimeType);
-                setRecordedVideoUrl(url);
+                setRecordedVideoUrl(URL.createObjectURL(blob));
             };
 
             mediaRecorder.onerror = () => {
+                cameraRecorderRef.current?.stop();
                 setCameraError('Video recording stopped unexpectedly. Check camera permissions and try again.');
                 setIsRecording(false);
                 setIsRecordingPaused(false);
@@ -213,6 +275,7 @@ export function useStudioSession(enabled = true) {
                 const activeRecorder = mediaRecorderRef.current;
                 if (elapsed >= FREE_RECORDING_LIMIT_SECONDS && activeRecorder?.state === 'recording') {
                     activeRecorder.stop();
+                    cameraRecorderRef.current?.stop();
                     setIsRecording(false);
                 }
             }, 250);
@@ -244,6 +307,7 @@ export function useStudioSession(enabled = true) {
                 recordingSegmentStartedAtRef.current = null;
             }
             recorder.stop();
+            if (cameraRecorderRef.current?.state !== 'inactive') cameraRecorderRef.current?.stop();
             setIsRecording(false);
             setIsRecordingPaused(false);
         }
@@ -257,6 +321,7 @@ export function useStudioSession(enabled = true) {
         recordingAccumulatedMsRef.current += Date.now() - recordingSegmentStartedAtRef.current;
         recordingSegmentStartedAtRef.current = null;
         recorder.pause();
+        if (cameraRecorderRef.current?.state === 'recording') cameraRecorderRef.current.pause();
         setIsRecordingPaused(true);
     }, []);
 
@@ -265,10 +330,12 @@ export function useStudioSession(enabled = true) {
         if (!recorder || recorder.state !== 'paused') return;
         recordingSegmentStartedAtRef.current = Date.now();
         recorder.resume();
+        if (cameraRecorderRef.current?.state === 'paused') cameraRecorderRef.current.resume();
         setIsRecordingPaused(false);
     }, []);
 
     const resetRecording = useCallback(() => {
+        if (cameraRecorderRef.current?.state !== 'inactive') cameraRecorderRef.current?.stop();
         if (recordedVideoUrl) {
             URL.revokeObjectURL(recordedVideoUrl);
         }
@@ -299,6 +366,7 @@ export function useStudioSession(enabled = true) {
         recordedDurationMs,
         recordingSeconds,
         freeRecordingLimitSeconds: FREE_RECORDING_LIMIT_SECONDS,
+        isFinalizingScreenRecording,
         startRecordingSequence,
         stopRecording,
         pauseRecording,
