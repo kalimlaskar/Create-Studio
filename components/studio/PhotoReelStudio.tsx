@@ -1047,27 +1047,27 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
                     <div className="flex items-center justify-between"><h2 className="text-sm font-semibold">Reel clips <span className="text-neutral-500">({images.length}/{MAX_IMAGES})</span></h2><span className="text-[11px] text-neutral-500">{durationLabel}</span></div>
                     <input ref={imageInputRef} type="file" accept="image/*,video/*" multiple onChange={addImages} className="hidden" />
 
-                <section className="space-y-2 rounded-xl border border-neutral-800 bg-neutral-950/70 p-3">
-                    <button type="button" onClick={() => void saveDraft()} disabled={isSavingDraft || isExporting} className="flex w-full items-center justify-center gap-2 rounded-lg border border-fuchsia-500/40 bg-fuchsia-500/10 px-3 py-2.5 text-sm font-semibold text-fuchsia-100 hover:bg-fuchsia-500/20 disabled:cursor-not-allowed disabled:opacity-50">
-                        {isSavingDraft ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                        {isSavingDraft ? 'Saving draft…' : currentDraftId ? 'Update saved draft' : 'Save as draft'}
-                    </button>
-                    <details>
-                        <summary className="flex cursor-pointer list-none items-center gap-2 px-1 py-1 text-xs font-medium text-neutral-400 hover:text-neutral-200">
-                            <FolderOpen className="h-3.5 w-3.5" /> Saved reel drafts ({drafts.length})
-                        </summary>
-                        <div className="mt-2 max-h-48 space-y-1 overflow-y-auto">
-                            {drafts.map((draft) => <div key={draft.id} className="flex items-center gap-1 rounded-lg border border-neutral-800 bg-neutral-900 px-2 py-2">
-                                <button type="button" onClick={() => void openDraft(draft.id)} disabled={isLoadingDraft} className="min-w-0 flex-1 text-left text-xs text-neutral-200 disabled:opacity-50">
-                                    <span className="block truncate font-medium">{draft.title}</span>
-                                    <span className="mt-0.5 block text-[10px] text-neutral-500">{draft.clipCount} clips · {Math.round(draft.durationMs / 1000)} sec · {new Date(draft.savedAt).toLocaleDateString()}</span>
-                                </button>
-                                <button type="button" onClick={() => void removeDraft(draft.id)} aria-label={`Delete ${draft.title}`} className="rounded p-1.5 text-neutral-500 hover:bg-red-950 hover:text-red-300"><Trash2 className="h-3.5 w-3.5" /></button>
-                            </div>)}
-                            {drafts.length === 0 && <p className="px-2 py-2 text-[11px] text-neutral-500">Your saved reels will appear here.</p>}
-                        </div>
-                    </details>
-                </section>
+                    <section className="space-y-2 rounded-xl border border-neutral-800 bg-neutral-950/70 p-3">
+                        <button type="button" onClick={() => void saveDraft()} disabled={isSavingDraft || isExporting} className="flex w-full items-center justify-center gap-2 rounded-lg border border-fuchsia-500/40 bg-fuchsia-500/10 px-3 py-2.5 text-sm font-semibold text-fuchsia-100 hover:bg-fuchsia-500/20 disabled:cursor-not-allowed disabled:opacity-50">
+                            {isSavingDraft ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                            {isSavingDraft ? 'Saving draft…' : currentDraftId ? 'Update saved draft' : 'Save as draft'}
+                        </button>
+                        <details>
+                            <summary className="flex cursor-pointer list-none items-center gap-2 px-1 py-1 text-xs font-medium text-neutral-400 hover:text-neutral-200">
+                                <FolderOpen className="h-3.5 w-3.5" /> Saved reel drafts ({drafts.length})
+                            </summary>
+                            <div className="mt-2 max-h-48 space-y-1 overflow-y-auto">
+                                {drafts.map((draft) => <div key={draft.id} className="flex items-center gap-1 rounded-lg border border-neutral-800 bg-neutral-900 px-2 py-2">
+                                    <button type="button" onClick={() => void openDraft(draft.id)} disabled={isLoadingDraft} className="min-w-0 flex-1 text-left text-xs text-neutral-200 disabled:opacity-50">
+                                        <span className="block truncate font-medium">{draft.title}</span>
+                                        <span className="mt-0.5 block text-[10px] text-neutral-500">{draft.clipCount} clips · {Math.round(draft.durationMs / 1000)} sec · {new Date(draft.savedAt).toLocaleDateString()}</span>
+                                    </button>
+                                    <button type="button" onClick={() => void removeDraft(draft.id)} aria-label={`Delete ${draft.title}`} className="rounded p-1.5 text-neutral-500 hover:bg-red-950 hover:text-red-300"><Trash2 className="h-3.5 w-3.5" /></button>
+                                </div>)}
+                                {drafts.length === 0 && <p className="px-2 py-2 text-[11px] text-neutral-500">Your saved reels will appear here.</p>}
+                            </div>
+                        </details>
+                    </section>
                     <button type="button" onClick={() => imageInputRef.current?.click()} disabled={images.length >= MAX_IMAGES} className="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-neutral-700 py-3 text-sm text-neutral-300 hover:border-fuchsia-500 hover:text-fuchsia-200 disabled:opacity-40"><ImagePlus className="h-4 w-4" /> Add photos or videos</button>
                     <p className="text-[10px] text-neutral-500">Mix photos with short MP4 or WebM video clips, then reorder them below.</p>
                     {images.filter((clip) => clip.type === 'image').length > 1 && <button type="button" onClick={() => void autoOrderPhotos()} disabled={isSortingPhotos} className="w-full rounded-lg border border-neutral-700 px-3 py-2 text-xs font-medium text-neutral-300 hover:border-fuchsia-500 disabled:opacity-50">{isSortingPhotos ? 'Scoring photo clarity…' : 'Auto-order photos by quality'}</button>}

@@ -59,12 +59,12 @@ export function EditorSidebar({
     const activeTabIsDirty = tab === 'coach' ? false : tab === 'color'
         ? Object.keys(DEFAULT_COLOR_GRADE).some((key) => project.colorGrade[key as keyof ColorGradeSettings] !== DEFAULT_COLOR_GRADE[key as keyof ColorGradeSettings])
         : tab === 'text' ? project.tracks.overlays.length > 0
-                : tab === 'captions' ? project.tracks.captions.length > 0 || project.captionStyle !== 'classic'
+            : tab === 'captions' ? project.tracks.captions.length > 0 || project.captionStyle !== 'classic'
                 : tab === 'zoom' ? project.tracks.zoom.length > 0
                     : tab === 'speed' ? project.tracks.speed.length > 0
-                            : tab === 'music' ? project.tracks.audio.length > 0
-                                : tab === 'style' ? Object.keys(DEFAULT_COLOR_GRADE).some((key) => project.colorGrade[key as keyof ColorGradeSettings] !== DEFAULT_COLOR_GRADE[key as keyof ColorGradeSettings]) || project.captionStyle !== 'classic' || project.tracks.zoom.length > 0
-                                    : project.videoEdit.trimStartMs > 0 || project.videoEdit.trimEndMs < project.durationMs || project.videoEdit.splitPointsMs.length > 0;
+                        : tab === 'music' ? project.tracks.audio.length > 0
+                            : tab === 'style' ? Object.keys(DEFAULT_COLOR_GRADE).some((key) => project.colorGrade[key as keyof ColorGradeSettings] !== DEFAULT_COLOR_GRADE[key as keyof ColorGradeSettings]) || project.captionStyle !== 'classic' || project.tracks.zoom.length > 0
+                                : project.videoEdit.trimStartMs > 0 || project.videoEdit.trimEndMs < project.durationMs || project.videoEdit.splitPointsMs.length > 0;
 
     return (
         <aside className="max-h-[38dvh] w-full shrink-0 border-b border-neutral-800 bg-neutral-900 p-3 flex flex-col overflow-y-auto md:max-h-full md:w-72 md:border-b-0 md:border-r md:p-4">
