@@ -31,8 +31,11 @@ export async function GET(request: NextRequest) {
 
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (error) {
+        if (process.env.NODE_ENV === 'development') {
+            console.error('Supabase confirmation exchange failed:', { status: error.status, code: error.code, message: error.message });
+        }
         const login = new URL('/login', origin);
-        login.searchParams.set('error', 'That confirmation link could not be verified. Try signing in or request a fresh link.');
+        login.searchParams.set('error', 'This link may have expired or already been used. Open a fresh confirmation link in the same browser you used to sign up. If you already confirmed your email, sign in instead.');
         return NextResponse.redirect(login);
     }
 

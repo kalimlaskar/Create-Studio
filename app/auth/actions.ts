@@ -73,8 +73,11 @@ export async function requestSignInOtpAction(_state: AuthFormState, formData: Fo
         options: { shouldCreateUser: false },
     });
     if (error) {
+        const errorMessage = error.message.toLowerCase().includes('signups not allowed for otp')
+            ? 'We couldn’t send a code. This email may not have a Cliprame account yet. Create an account first, then sign in with email code.'
+            : getAuthErrorMessage(error, 'We could not send a sign-in code. Check the email address and try again.');
         return {
-            error: getAuthErrorMessage(error, 'We could not send a sign-in code. Check the email address and try again.'),
+            error: errorMessage,
             email,
         };
     }
