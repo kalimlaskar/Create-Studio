@@ -123,13 +123,24 @@ export function CreatorStudioDashboard({ userEmail, initialDisplayName = '', pro
         }
         try {
             // Must be invoked directly from this click so the browser can show its share picker.
-            const stream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: { ideal: 30, max: 30 } }, audio: false });
+            const captureOptions = {
+                video: { displaySurface: 'window', frameRate: { ideal: 30, max: 30 } },
+                audio: false,
+                surfaceSwitching: 'include',
+                selfBrowserSurface: 'exclude',
+            } as DisplayMediaStreamOptions & {
+                video: MediaTrackConstraints & { displaySurface: 'window' };
+                surfaceSwitching: 'include';
+                selfBrowserSurface: 'exclude';
+            };
+            const stream = await navigator.mediaDevices.getDisplayMedia(captureOptions);
             const displayTrack = stream.getVideoTracks()[0];
             if (!displayTrack) {
                 stream.getTracks().forEach((track) => track.stop());
                 setScreenShareError('The browser did not provide a screen video track. Choose a screen, window, or tab and try again.');
                 return;
             }
+            displayTrack.contentHint = 'motion';
             const surface = displayTrack.getSettings().displaySurface;
             setScreenShareSurface(surface === 'browser' ? 'Chrome tab' : surface === 'window' ? 'Browser window' : surface === 'monitor' ? 'Entire screen' : 'Unknown capture source');
             setIsScreenTrackMuted(displayTrack.muted);
@@ -346,6 +357,7 @@ export function CreatorStudioDashboard({ userEmail, initialDisplayName = '', pro
                 <VideoCanvas videoRef={videoRef} canvasStreamRef={canvasStreamRef} settings={settings} onAvatarMouthPositionChange={(cameraAvatarMouthX, cameraAvatarMouthY) => updateSettings({ cameraAvatarMouthX, cameraAvatarMouthY })} microphoneLevelRef={microphoneLevelRef} isRecording={isRecording} isRecordingPaused={isRecordingPaused} countdown={countdown} screenShareStream={screenShareStream} onScreenFrame={reportScreenFrame} />
                 {isFinalizingScreenRecording && <div role="status" aria-live="polite" className="absolute left-1/2 top-1/2 z-40 flex -translate-x-1/2 -translate-y-1/2 items-center gap-3 rounded-2xl border border-indigo-300/20 bg-neutral-950/95 px-5 py-4 text-sm font-medium text-white shadow-2xl backdrop-blur"><LoaderCircle className="h-5 w-5 animate-spin text-indigo-300" />Preparing your screen recording and camera card…</div>}
                 <div className="absolute left-4 top-4 z-30 flex max-w-[min(32rem,calc(100%-2rem))] flex-col items-start gap-2 md:left-5 md:top-5">
+                    {screenShareStream && <p className="max-w-sm rounded-lg border border-cyan-300/20 bg-neutral-950/90 px-3 py-2 text-[11px] leading-relaxed text-cyan-100">Keep Cliprame open in this tab. Scroll the page in another tab or window; if sharing a tab, switch it from Chrome’s sharing controls.</p>}
                     <button type="button" onClick={() => screenShareStream ? (isRecording ? stopRecording() : stopScreenShare()) : void startScreenShare()} disabled={countdown !== null} aria-pressed={Boolean(screenShareStream)} className={`pointer-events-auto flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold shadow-lg backdrop-blur-md transition disabled:cursor-not-allowed disabled:opacity-50 ${screenShareStream ? 'border-emerald-400/35 bg-emerald-950/80 text-emerald-100 hover:bg-emerald-900/90' : 'border-white/15 bg-neutral-950/85 text-neutral-100 hover:bg-neutral-800/95'}`}>
                         <MonitorUp className="h-4 w-4" />{screenShareStream ? 'Stop screen share' : 'Share screen'}
                         {screenShareStream && <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" />}
