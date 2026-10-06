@@ -77,11 +77,14 @@ function drawMirrored(
     crop: FrameCrop,
     width: number,
     height: number,
-    filter: string
+    filter: string,
+    mirror = true
 ) {
     ctx.save();
-    ctx.translate(width, 0);
-    ctx.scale(-1, 1);
+    if (mirror) {
+        ctx.translate(width, 0);
+        ctx.scale(-1, 1);
+    }
     ctx.filter = filter;
     ctx.drawImage(source, crop.x, crop.y, crop.width, crop.height, 0, 0, width, height);
     ctx.restore();
@@ -115,7 +118,8 @@ function drawScreenShareFrame(
     canvas: HTMLCanvasElement,
     screen: HTMLVideoElement,
     camera: HTMLVideoElement,
-    cameraFilter: string
+    cameraFilter: string,
+    mirror = true
 ) {
     const { width, height } = canvas;
 
@@ -146,8 +150,12 @@ function drawScreenShareFrame(
         ctx.beginPath();
         ctx.roundRect(cardX, cardY, cardWidth, cardHeight, radius);
         ctx.clip();
-        ctx.translate(cardX + cardWidth, cardY);
-        ctx.scale(-1, 1);
+        if (mirror) {
+            ctx.translate(cardX + cardWidth, cardY);
+            ctx.scale(-1, 1);
+        } else {
+            ctx.translate(cardX, cardY);
+        }
         ctx.filter = cameraFilter;
         ctx.drawImage(camera, crop.x, crop.y, crop.width, crop.height, 0, 0, cardWidth, cardHeight);
         ctx.restore();
@@ -462,6 +470,7 @@ export function VideoCanvas({
 
         const current = settingsRef.current;
         const filter = getVideoFilter(current);
+        const mirror = current.cameraFacing !== 'environment';
         const vWidth = video.videoWidth || 1280;
         const vHeight = video.videoHeight || 720;
         const { width: outW, height: outH } = getRecordingDimensions(current.aspectRatio);
@@ -473,7 +482,7 @@ export function VideoCanvas({
 
         // 1) Screen share layout
         if (isScreenFrameReady()) {
-            drawScreenShareFrame(ctx, canvas, screenVideoRef.current!, video, filter);
+            drawScreenShareFrame(ctx, canvas, screenVideoRef.current!, video, filter, mirror);
             finishFrame(ctx, canvas, false);
             return;
         }
@@ -484,7 +493,7 @@ export function VideoCanvas({
         // 2) Plain camera (no segmentation result)
         if (!mask) {
             ctx.clearRect(0, 0, width, height);
-            drawMirrored(ctx, video, crop, width, height, filter);
+            drawMirrored(ctx, video, crop, width, height, filter, mirror);
             finishFrame(ctx, canvas, true);
             return;
         }
@@ -509,7 +518,7 @@ export function VideoCanvas({
                 ctx.fillStyle = '#00FF00';
                 ctx.fillRect(0, 0, width, height);
             } else if (mode === 'blur') {
-                drawMirrored(ctx, video, crop, width, height, 'blur(16px)');
+                drawMirrored(ctx, video, crop, width, height, 'blur(16px)', mirror);
             } else if (bgImageRef.current?.complete) {
                 drawImageCover(ctx, bgImageRef.current, width, height);
             } else {
@@ -523,8 +532,10 @@ export function VideoCanvas({
             if (personCtx) {
                 personCtx.clearRect(0, 0, width, height);
                 personCtx.save();
-                personCtx.translate(width, 0);
-                personCtx.scale(-1, 1);
+                if (mirror) {
+                    personCtx.translate(width, 0);
+                    personCtx.scale(-1, 1);
+                }
                 personCtx.filter = filter;
                 personCtx.drawImage(video, crop.x, crop.y, crop.width, crop.height, 0, 0, width, height);
                 personCtx.filter = 'none';
@@ -535,8 +546,10 @@ export function VideoCanvas({
             }
         } else if (mode === 'transparent') {
             ctx.save();
-            ctx.translate(width, 0);
-            ctx.scale(-1, 1);
+            if (mirror) {
+                ctx.translate(width, 0);
+                ctx.scale(-1, 1);
+            }
             ctx.filter = filter;
             ctx.drawImage(video, crop.x, crop.y, crop.width, crop.height, 0, 0, width, height);
             ctx.filter = 'none';
@@ -544,7 +557,7 @@ export function VideoCanvas({
             ctx.drawImage(smoothedMask, maskCrop.sx, maskCrop.sy, maskCrop.sw, maskCrop.sh, 0, 0, width, height);
             ctx.restore();
         } else {
-            drawMirrored(ctx, video, crop, width, height, filter);
+            drawMirrored(ctx, video, crop, width, height, filter, mirror);
         }
 
         ctx.restore();

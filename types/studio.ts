@@ -5,7 +5,10 @@ export type StudioInputMode = 'camera' | 'upload';
 export type ScriptLanguage = 'en' | 'hi' | 'hinglish' | 'bn' | 'mr' | 'ta' | 'te';
 export type CameraArtEffect = 'none' | 'comic' | 'sketch' | 'pixel' | 'anime' | 'avatar' | 'photo-avatar';
 
+export type CameraFacing = 'user' | 'environment';
+
 export interface StudioSettings {
+    cameraFacing: CameraFacing;
     aspectRatio: AspectRatioType;
     brightness: number;
     contrast: number;

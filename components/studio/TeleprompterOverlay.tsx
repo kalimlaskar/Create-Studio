@@ -206,7 +206,7 @@ export function TeleprompterOverlay({ scriptText }: TeleprompterOverlayProps) {
                     setIsVisible(!isVisible);
                 }}
                 aria-expanded={isVisible}
-                className="pointer-events-auto absolute right-3 top-3 rounded-full border border-white/20 bg-neutral-950/70 px-3 py-2 text-[11px] font-semibold text-white/90 shadow backdrop-blur hover:bg-neutral-900/90 sm:right-4 sm:top-4"
+                className="pointer-events-auto absolute right-3 top-16 rounded-full border border-white/20 bg-neutral-950/70 px-3 py-2 text-[11px] font-semibold text-white/90 shadow backdrop-blur hover:bg-neutral-900/90 sm:right-4 sm:top-4"
             >
                 {isVisible ? 'Hide prompter' : 'Show prompter'}
             </button>

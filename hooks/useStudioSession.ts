@@ -5,6 +5,7 @@ import { StudioSettings } from '@/types/studio';
 import { createHighQualityRecorder, getRecordingDimensions } from '@/components/recordingQuality';
 
 const DEFAULT_SETTINGS: StudioSettings = {
+    cameraFacing: 'user',
     aspectRatio: '9:16',
     brightness: 100,
     contrast: 100,
@@ -60,6 +61,7 @@ export function useStudioSession(enabled = true, screenShareStream: MediaStream 
     useEffect(() => { screenShareStreamRef.current = screenShareStream; }, [screenShareStream]);
 
     // Initialize Camera & Mic with AI Noise Suppression
+    const cameraFacing = settings.cameraFacing;
     useEffect(() => {
         if (!enabled) return;
         let cancelled = false;
@@ -67,7 +69,7 @@ export function useStudioSession(enabled = true, screenShareStream: MediaStream 
         async function setupCamera() {
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({
-                    video: { width: { ideal: 1920 }, height: { ideal: 1080 } },
+                    video: { facingMode: { ideal: cameraFacing }, width: { ideal: 1920 }, height: { ideal: 1080 } },
                     audio: {
                         noiseSuppression: true,
                         echoCancellation: true,
@@ -99,7 +101,7 @@ export function useStudioSession(enabled = true, screenShareStream: MediaStream 
             mediaStreamRef.current = null;
             if (videoRef.current) videoRef.current.srcObject = null;
         };
-    }, [enabled]);
+    }, [enabled, cameraFacing]);
 
     const updateSettings = useCallback((newSettings: Partial<StudioSettings>) => {
         setSettings((prev) => ({ ...prev, ...newSettings }));

@@ -2,7 +2,7 @@
 
 import React, { useRef } from 'react';
 import Image from 'next/image';
-import { Sun, Smartphone, Monitor, Square, Upload, X } from 'lucide-react';
+import { Sun, Smartphone, Monitor, Square, Upload, X, Camera } from 'lucide-react';
 import { AspectRatioType, CameraArtEffect, FilterPresetType, StudioSettings } from '@/types/studio';
 import { Teleprompter } from './Teleprompter';
 
@@ -10,9 +10,10 @@ interface SidebarControlsProps {
     settings: StudioSettings;
     onUpdateSettings: (newSettings: Partial<StudioSettings>) => void;
     onCameraArtEffectChange: (effect: CameraArtEffect) => void;
+    cameraSwitchDisabled?: boolean;
 }
 
-export function SidebarControls({ settings, onUpdateSettings, onCameraArtEffectChange }: SidebarControlsProps) {
+export function SidebarControls({ settings, onUpdateSettings, onCameraArtEffectChange, cameraSwitchDisabled = false }: SidebarControlsProps) {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const avatarInputRef = useRef<HTMLInputElement>(null);
 
@@ -44,11 +45,31 @@ export function SidebarControls({ settings, onUpdateSettings, onCameraArtEffectC
     };
 
     return (
-        <aside className="flex max-h-[44dvh] w-full shrink-0 flex-col justify-between overflow-y-auto border-b border-neutral-800 bg-neutral-900 p-4 md:max-h-full md:w-80 md:border-b-0 md:border-r">
+        <aside className="flex w-full min-h-0 flex-1 flex-col justify-between overflow-y-auto bg-neutral-900 p-4 md:h-full md:w-80 md:flex-none md:border-r md:border-neutral-800">
             <div>
                 <div className="flex items-center gap-2 mb-6">
                     <Image src="/cliprame-icon.svg" alt="" width={32} height={32} className="h-8 w-8" />
                     <h1 className="text-lg font-bold tracking-tight">Cliprame</h1>
+                </div>
+
+                {/* Camera Selector */}
+                <div className="mb-6">
+                    <label className="text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-2 block">Camera</label>
+                    <div className="grid grid-cols-2 gap-2">
+                        {([['user', 'Selfie (front)'], ['environment', 'Back camera']] as const).map(([facing, label]) => (
+                            <button
+                                key={facing}
+                                type="button"
+                                disabled={cameraSwitchDisabled}
+                                onClick={() => onUpdateSettings({ cameraFacing: facing })}
+                                className={`flex items-center justify-center gap-1 rounded-lg border p-2 text-xs transition-all disabled:cursor-not-allowed disabled:opacity-50 ${settings.cameraFacing === facing
+                                    ? 'bg-indigo-600 border-indigo-500 text-white'
+                                    : 'border-neutral-800 bg-neutral-800/50 text-neutral-400 hover:bg-neutral-800'
+                                    }`}>
+                                <Camera className="w-4 h-4" /> {label}
+                            </button>
+                        ))}
+                    </div>
                 </div>
 
                 {/* Aspect Ratio Selector */}

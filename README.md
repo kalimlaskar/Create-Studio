@@ -18,6 +18,8 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 
 Cliprame is a browser-based lesson, presentation, and social-reel creation workspace built with Next.js.
 
+See [the architecture and creator-flow diagrams](./docs/architecture.md) for the app components, service boundaries, and end-to-end creation paths.
+
 ## Supabase authentication setup
 
 1. Create a Supabase project and copy its Project URL and **publishable** key from Connect/API settings into `.env.local` as `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`. Never put a secret/service-role key in a `NEXT_PUBLIC_` variable.
