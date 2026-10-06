@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { StudioSettings } from '@/types/studio';
+import { annotationTimeline } from '@/components/studio/annotationTimeline';
 import { createHighQualityRecorder, getRecordingDimensions } from '@/components/recordingQuality';
 
 const DEFAULT_SETTINGS: StudioSettings = {
@@ -25,6 +26,11 @@ const DEFAULT_SETTINGS: StudioSettings = {
     airDrawingGlow: 70,
     airDrawingFade: false,
     airDrawingPerformanceMode: false,
+    airDrawingTool: 'pen',
+    airWriteMode: false,
+    airWriteLanguage: 'en',
+    airWriteFont: 'marker',
+    airWriteColor: '#ffffff',
     backgroundMode: 'none',
     backgroundImageUrl: null,
     inputMode: 'camera',
@@ -278,7 +284,8 @@ export function useStudioSession(enabled = true, screenShareStream: MediaStream 
                             if (!cameraPromise) throw new Error('The camera inset recording was not available.');
                             const cameraBlob = await cameraPromise;
                             const { composeScreenShareWithCamera } = await import('@/components/editor/convertToMp4');
-                            const composedBlob = await composeScreenShareWithCamera(screenBlob, cameraBlob, getRecordingDimensions(settingsRef.current.aspectRatio), () => undefined);
+                            const annotations = await annotationTimeline.collect();
+                            const composedBlob = await composeScreenShareWithCamera(screenBlob, cameraBlob, getRecordingDimensions(settingsRef.current.aspectRatio), () => undefined, annotations);
                             setRecordedVideoMimeType('video/mp4');
                             setRecordedVideoUrl(URL.createObjectURL(composedBlob));
                         } catch (error) {

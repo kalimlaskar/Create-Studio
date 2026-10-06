@@ -5,6 +5,10 @@ export type StudioInputMode = 'camera' | 'upload';
 export type ScriptLanguage = 'en' | 'hi' | 'hinglish' | 'bn' | 'mr' | 'ta' | 'te';
 export type CameraArtEffect = 'none' | 'comic' | 'sketch' | 'pixel' | 'anime' | 'avatar' | 'photo-avatar';
 
+export type AirDrawingTool = 'pen' | 'highlighter' | 'arrow' | 'laser';
+export type AirWritingLanguage = 'en' | 'hi';
+export type AirWritingFont = 'sans' | 'serif' | 'mono' | 'marker' | 'rounded';
+
 export type HologramColor = 'cyan' | 'purple' | 'green';
 
 export type CameraFacing = 'user' | 'environment';
@@ -30,6 +34,11 @@ export interface StudioSettings {
     airDrawingGlow: number; // 0-100
     airDrawingFade: boolean; // strokes vanish after 3s
     airDrawingPerformanceMode: boolean; // lower hand-detection frame rate
+    airDrawingTool: AirDrawingTool;
+    airWriteMode: boolean; // "Write to Text"
+    airWriteLanguage: AirWritingLanguage;
+    airWriteFont: AirWritingFont;
+    airWriteColor: string;
     scriptText: string;
     scriptLanguage: ScriptLanguage;
     backgroundMode: BackgroundModeType;

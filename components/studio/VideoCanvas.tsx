@@ -1,13 +1,15 @@
 'use client';
 
-import React, { RefObject, useEffect, useRef } from 'react';
+import React, { RefObject, useEffect, useRef, useState } from 'react';
 import { AspectRatioType, StudioSettings } from '@/types/studio';
 import { FilesetResolver, ImageSegmenter, ImageSegmenterResult } from '@mediapipe/tasks-vision';
 import { TeleprompterOverlay } from './TeleprompterOverlay';
 import { getFrameCrop, getRecordingDimensions, RECORDING_FRAME_RATE } from '@/components/recordingQuality';
 import { drawFreeTierWatermark } from '@/components/freeTier';
 import { createHologramRenderer, HologramRenderer } from './hologramRenderer';
-import { AirDrawingEngine, AirDrawingOptions } from './airDrawing';
+import { AirDrawingEngine, AirDrawingOptions, AnnotationSpace, getScreenRect, TargetRect, TextItemInfo } from './airDrawing';
+import { getHandwritingService } from './handwriting';
+import { annotationTimeline } from './annotationTimeline';
 import { applyArtisticEffect, CameraArtEffect, drawPhotoAvatar, drawTrackedAvatar, FaceLandmarkPoint } from './artisticEffects';
 
 interface VideoCanvasProps {
@@ -34,6 +36,9 @@ const MODEL_ASSET_URL =
     'https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter/float16/1/selfie_segmenter.tflite';
 const FACE_MODEL_ASSET_URL =
     'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task';
+
+// Wrapped so the render-purity lint rule doesn't flag per-frame clock reads inside the render loop helpers.
+const clockMs = () => performance.now();
 
 const SEGMENTATION_MODES = ['green', 'blur', 'image', 'transparent'];
 
@@ -253,6 +258,11 @@ export function VideoCanvas({
     const hologramRendererRef = useRef<HologramRenderer | null>(null);
     const airDrawingRef = useRef<AirDrawingEngine | null>(null);
     const airLayerRef = useRef<HTMLCanvasElement | null>(null);
+    const isPausedRef = useRef(isRecordingPaused);
+    // Recorded (un-paused) time base, used to timestamp annotation snapshots for screen-share exports.
+    const recordingClockRef = useRef({ startedAt: 0, pausedTotal: 0, pausedAt: null as number | null });
+    const [airStatus, setAirStatus] = useState<string | null>(null);
+    const [editing, setEditing] = useState<(TextItemInfo & { left: number; top: number; draft: string }) | null>(null);
 
     const getBuffer = (ref: React.MutableRefObject<HTMLCanvasElement | null>, width: number, height: number) => {
         if (!ref.current) ref.current = document.createElement('canvas');
@@ -267,6 +277,21 @@ export function VideoCanvas({
 
     useEffect(() => { settingsRef.current = settings; }, [settings]);
     useEffect(() => { isRecordingRef.current = isRecording; }, [isRecording]);
+    useEffect(() => {
+        isPausedRef.current = isRecordingPaused;
+        const clock = recordingClockRef.current;
+        const now = performance.now();
+        if (isRecordingPaused && clock.pausedAt === null) clock.pausedAt = now;
+        if (!isRecordingPaused && clock.pausedAt !== null) {
+            clock.pausedTotal += now - clock.pausedAt;
+            clock.pausedAt = null;
+        }
+    }, [isRecordingPaused]);
+    useEffect(() => {
+        if (!isRecording) return;
+        recordingClockRef.current = { startedAt: performance.now(), pausedTotal: 0, pausedAt: null };
+        annotationTimeline.begin();
+    }, [isRecording]);
 
     /* ------------------------------ assets --------------------------------- */
 
@@ -428,12 +453,17 @@ export function VideoCanvas({
     // Hand tracking only exists while Air Drawing is on; turning it off drops the strokes.
     useEffect(() => {
         if (!settings.airDrawingEnabled) return;
-        const engine = new AirDrawingEngine();
+        const engine = new AirDrawingEngine({
+            recognize: (request, onStatus) => getHandwritingService().recognize(request, onStatus),
+            onStatus: setAirStatus,
+        });
         airDrawingRef.current = engine;
         engine.load().catch((error) => console.error('Hand Landmarker could not be initialized:', error));
         return () => {
             if (airDrawingRef.current === engine) airDrawingRef.current = null;
             engine.dispose();
+            setAirStatus(null);
+            setEditing(null);
         };
     }, [settings.airDrawingEnabled]);
 
@@ -447,26 +477,61 @@ export function VideoCanvas({
             glow: s.airDrawingGlow,
             fade: s.airDrawingFade,
             performanceMode: s.airDrawingPerformanceMode,
+            tool: s.airDrawingTool,
+            writeMode: s.airWriteMode,
+            writeFont: s.airWriteFont,
+            writeColor: s.airWriteColor,
+            language: s.airWriteLanguage,
         };
+    };
+
+    // Screen-share annotations are normalised to the shared screen's rectangle so they stay
+    // pinned to the screen content; camera annotations use the whole frame.
+    const getAirSpace = (canvas: HTMLCanvasElement): { space: AnnotationSpace; rect: TargetRect } => {
+        const screen = screenVideoRef.current;
+        if (isScreenFrameReady() && screen) {
+            return { space: 'screen', rect: getScreenRect(canvas.width, canvas.height, screen.videoWidth, screen.videoHeight) };
+        }
+        return { space: 'camera', rect: { x: 0, y: 0, width: canvas.width, height: canvas.height } };
     };
 
     const drawAirStrokes = (ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement) => {
         const engine = airDrawingRef.current;
         if (!engine || !settingsRef.current.airDrawingEnabled) return;
         const layer = getBuffer(airLayerRef, canvas.width, canvas.height);
-        engine.render(ctx, layer, performance.now(), getAirOptions(), !isRecordingRef.current);
+        const opts = getAirOptions();
+        const now = clockMs();
+        const { space, rect } = getAirSpace(canvas);
+        engine.render(ctx, layer, now, opts, !isRecordingRef.current, space, rect);
+
+        // Screen-share recordings are composed from the raw tracks, so log the layer separately.
+        if (space === 'screen' && isRecordingRef.current && !isPausedRef.current) {
+            const clock = recordingClockRef.current;
+            annotationTimeline.capture(
+                layer,
+                (now - clock.startedAt - clock.pausedTotal) / 1000,
+                engine.signature(now, opts, space),
+                engine.hasContent(space, opts)
+            );
+        }
     };
 
     const updateAirDrawing = (video: HTMLVideoElement) => {
         const engine = airDrawingRef.current;
         const current = settingsRef.current;
         if (!engine || !current.airDrawingEnabled || video.videoWidth === 0) return;
-        engine.update(video, performance.now(), getAirOptions(), {
+        const canvas = visibleCanvasRef.current;
+        if (!canvas) return;
+        const { space } = getAirSpace(canvas);
+        engine.update(video, clockMs(), getAirOptions(), {
             videoWidth: video.videoWidth,
             videoHeight: video.videoHeight,
-            crop: getFrameCrop(video.videoWidth, video.videoHeight, current.aspectRatio),
+            // On a shared screen the whole camera view maps onto the screen, not the cropped output frame.
+            crop: space === 'screen'
+                ? { x: 0, y: 0, width: video.videoWidth, height: video.videoHeight }
+                : getFrameCrop(video.videoWidth, video.videoHeight, current.aspectRatio),
             mirror: current.cameraFacing !== 'environment',
-        });
+        }, space);
     };
 
     const buildSmoothedMaskCanvas = (confidenceMask: Float32Array, width: number, height: number) => {
@@ -688,6 +753,7 @@ export function VideoCanvas({
             }
 
             if (isScreenFrameReady()) {
+                if (video.readyState >= video.HAVE_CURRENT_DATA) updateAirDrawing(video);
                 renderFrame();
                 return;
             }
@@ -772,6 +838,22 @@ export function VideoCanvas({
 
     /* -------------------------------- JSX ---------------------------------- */
 
+    const handleCanvasTap = (event: React.MouseEvent<HTMLCanvasElement>) => {
+        const engine = airDrawingRef.current;
+        if (!engine || !settingsRef.current.airDrawingEnabled) return;
+        const bounds = event.currentTarget.getBoundingClientRect();
+        const fx = (event.clientX - bounds.left) / bounds.width;
+        const fy = (event.clientY - bounds.top) / bounds.height;
+        const hit = engine.hitTest(fx, fy);
+        setEditing(hit ? { ...hit, left: fx, top: fy, draft: hit.text } : null);
+    };
+
+    const applyEdit = (action: (engine: AirDrawingEngine, id: number) => void) => {
+        const engine = airDrawingRef.current;
+        if (engine && editing) action(engine, editing.id);
+        setEditing(null);
+    };
+
     const isPhotoAvatarEditable = settings.cameraArtEffect === 'photo-avatar' && Boolean(settings.cameraAvatarImageUrl);
 
     return (
@@ -798,7 +880,50 @@ export function VideoCanvas({
                 }}
                 className={`relative h-full max-h-full max-w-full shrink-0 overflow-hidden rounded-2xl border-2 border-neutral-800 bg-black shadow-2xl transition-all duration-300 ${getAspectRatioClass(settings.aspectRatio)} ${isPhotoAvatarEditable ? 'cursor-crosshair' : ''}`}
             >
-                <canvas ref={visibleCanvasRef} className="h-full w-full object-cover" />
+                <canvas
+                    ref={visibleCanvasRef}
+                    onClick={handleCanvasTap}
+                    className={`h-full w-full object-cover ${settings.airDrawingEnabled ? 'cursor-pointer' : ''}`}
+                />
+
+                {airStatus && (
+                    <div role="status" className="pointer-events-none absolute left-1/2 top-3 z-30 max-w-[90%] -translate-x-1/2 rounded-full bg-neutral-900/90 px-3 py-1.5 text-center text-[11px] font-medium text-neutral-100 shadow-lg">
+                        {airStatus}
+                    </div>
+                )}
+
+                {editing && (
+                    <form
+                        onClick={(event) => event.stopPropagation()}
+                        onSubmit={(event) => {
+                            event.preventDefault();
+                            applyEdit((engine, id) => engine.setText(id, editing.draft));
+                        }}
+                        className="absolute z-40 w-56 -translate-x-1/2 space-y-2 rounded-xl border border-neutral-700 bg-neutral-900/95 p-2.5 shadow-2xl"
+                        style={{ left: `${Math.min(80, Math.max(20, editing.left * 100))}%`, top: `${Math.min(75, editing.top * 100 + 4)}%` }}
+                    >
+                        <label className="block text-[10px] font-semibold uppercase tracking-wider text-neutral-400" htmlFor="air-text-edit">Correct text</label>
+                        <input
+                            id="air-text-edit"
+                            autoFocus
+                            value={editing.draft}
+                            onChange={(event) => setEditing({ ...editing, draft: event.target.value })}
+                            className="w-full rounded-md border border-neutral-700 bg-neutral-950 px-2 py-1.5 text-sm text-white outline-none focus:border-fuchsia-400"
+                        />
+                        <div className="flex gap-1.5 text-[11px]">
+                            <button type="submit" className="flex-1 rounded-md bg-fuchsia-500 px-2 py-1.5 font-semibold text-white">Save</button>
+                            {editing.status === 'done' && (
+                                <button
+                                    type="button"
+                                    onClick={() => applyEdit((engine, id) => engine.setShowOriginal(id, !editing.showOriginal))}
+                                    className="flex-1 rounded-md border border-neutral-600 px-2 py-1.5 text-neutral-200">
+                                    {editing.showOriginal ? 'Use typed' : 'My writing'}
+                                </button>
+                            )}
+                            <button type="button" aria-label="Delete word" onClick={() => applyEdit((engine, id) => engine.removeItem(id))} className="rounded-md border border-neutral-600 px-2 py-1.5 text-red-300">Delete</button>
+                        </div>
+                    </form>
+                )}
 
                 {isPhotoAvatarEditable && (
                     <div

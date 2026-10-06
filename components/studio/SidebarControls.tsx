@@ -3,8 +3,10 @@
 import React, { useRef } from 'react';
 import Image from 'next/image';
 import { Sun, Smartphone, Monitor, Square, Upload, X, Camera } from 'lucide-react';
-import { AspectRatioType, CameraArtEffect, FilterPresetType, StudioSettings } from '@/types/studio';
+import { AirWritingFont, AirWritingLanguage, AspectRatioType, CameraArtEffect, FilterPresetType, StudioSettings } from '@/types/studio';
 import { Teleprompter } from './Teleprompter';
+import { AIR_FONTS } from './airDrawing';
+import { WRITING_LANGUAGES } from './handwriting';
 
 interface SidebarControlsProps {
     settings: StudioSettings;
@@ -366,6 +368,19 @@ export function SidebarControls({ settings, onUpdateSettings, onCameraArtEffectC
                     </div>
                     {settings.airDrawingEnabled && (
                         <>
+                            <div className="grid grid-cols-4 gap-1.5" role="group" aria-label="Drawing tool">
+                                {([['pen', 'Pen'], ['highlighter', 'Marker'], ['arrow', 'Arrow'], ['laser', 'Laser']] as const).map(([tool, label]) => (
+                                    <button
+                                        key={tool}
+                                        type="button"
+                                        aria-pressed={settings.airDrawingTool === tool}
+                                        disabled={settings.airWriteMode}
+                                        onClick={() => onUpdateSettings({ airDrawingTool: tool })}
+                                        className={`rounded-lg border px-1 py-1.5 text-[11px] font-medium transition-colors disabled:opacity-40 ${settings.airDrawingTool === tool ? 'border-fuchsia-400/70 bg-neutral-800 text-white' : 'border-neutral-700 text-neutral-400 hover:text-neutral-200'}`}>
+                                        {label}
+                                    </button>
+                                ))}
+                            </div>
                             <div className="flex items-center justify-between text-[11px] text-neutral-300">
                                 <label htmlFor="air-color">Color</label>
                                 <input id="air-color" type="color" value={settings.airDrawingColor} onChange={(event) => onUpdateSettings({ airDrawingColor: event.target.value })} className="h-7 w-12 cursor-pointer rounded border border-neutral-700 bg-transparent" />
@@ -379,16 +394,45 @@ export function SidebarControls({ settings, onUpdateSettings, onCameraArtEffectC
                                 <input id="air-glow" type="range" min="0" max="100" value={settings.airDrawingGlow} onChange={(event) => onUpdateSettings({ airDrawingGlow: Number(event.target.value) })} className="w-full accent-fuchsia-400" />
                             </div>
                             {([
-                                ['airDrawingFade', 'Fade out after 3s', settings.airDrawingFade],
+                                ['airDrawingFade', 'Fade out after 3s (off = pinned)', settings.airDrawingFade],
                                 ['airDrawingPerformanceMode', 'Performance mode (slower detection)', settings.airDrawingPerformanceMode],
+                                ['airWriteMode', 'Write to Text (pinch to write)', settings.airWriteMode],
                             ] as const).map(([key, label, value]) => (
                                 <label key={key} className="flex items-center justify-between gap-3 text-[11px] text-neutral-300">
                                     {label}
                                     <input type="checkbox" checked={value} onChange={(event) => onUpdateSettings({ [key]: event.target.checked })} className="h-4 w-4 accent-fuchsia-500" />
                                 </label>
                             ))}
+                            {settings.airWriteMode && (
+                                <div className="space-y-2 rounded-lg border border-neutral-800 p-2">
+                                    <div className="flex items-center justify-between gap-2 text-[11px] text-neutral-300">
+                                        <label htmlFor="air-write-language">Language</label>
+                                        <select id="air-write-language" value={settings.airWriteLanguage} onChange={(event) => onUpdateSettings({ airWriteLanguage: event.target.value as AirWritingLanguage })} className="rounded-md border border-neutral-700 bg-neutral-950 px-2 py-1 text-[11px]">
+                                            {WRITING_LANGUAGES.map((language) => (
+                                                <option key={language.value} value={language.value}>{language.label}{language.experimental ? ' — experimental' : ''}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div className="flex items-center justify-between gap-2 text-[11px] text-neutral-300">
+                                        <label htmlFor="air-write-font">Font</label>
+                                        <select id="air-write-font" value={settings.airWriteFont} onChange={(event) => onUpdateSettings({ airWriteFont: event.target.value as AirWritingFont })} className="rounded-md border border-neutral-700 bg-neutral-950 px-2 py-1 text-[11px]">
+                                            {AIR_FONTS.map((font) => <option key={font.value} value={font.value}>{font.label}</option>)}
+                                        </select>
+                                    </div>
+                                    <div className="flex items-center justify-between text-[11px] text-neutral-300">
+                                        <label htmlFor="air-write-color">Text color</label>
+                                        <input id="air-write-color" type="color" value={settings.airWriteColor} onChange={(event) => onUpdateSettings({ airWriteColor: event.target.value })} className="h-7 w-12 cursor-pointer rounded border border-neutral-700 bg-transparent" />
+                                    </div>
+                                    {settings.airWriteLanguage === 'hi' && (
+                                        <p className="text-[10px] leading-relaxed text-amber-300/80">Hindi is experimental and needs a browser with Hindi handwriting recognition; otherwise tap a word to type it.</p>
+                                    )}
+                                </div>
+                            )}
                             <p className="text-[10px] leading-relaxed text-neutral-500">
-                                ☝️ Point to draw · 🤏 Pinch to pause · 🖐 Hold open palm 1s to clear · ✊ Fist to undo. Strokes are included in recordings and exports.
+                                {settings.airWriteMode
+                                    ? '🤏 Pinch and move to write, release to lift · pause 0.8s to finish a word · tap a word on the preview to correct it or restore your writing · 🖐 hold palm 1s to clear · ✊ fist to undo.'
+                                    : '☝️ Point to draw (laser: point to aim) · 🤏 Pinch to pause · 🖐 Hold open palm 1s to clear · ✊ Fist to undo.'}
+                                {' '}Works over a shared screen too, and is included in recordings and exports.
                             </p>
                         </>
                     )}

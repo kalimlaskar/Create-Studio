@@ -62,22 +62,58 @@ export async function convertWebmToMp4(webm: Blob, onProgress: (progress: number
     }
 }
 
-export async function composeScreenShareWithCamera(screenRecording: Blob, cameraRecording: Blob, dimensions: { width: number; height: number }, onProgress: (progress: number) => void) {
+export interface AnnotationOverlayFrame {
+    /** Seconds into the recording at which this transparent frame appears. */
+    t: number;
+    blob: Blob;
+}
+
+export async function composeScreenShareWithCamera(
+    screenRecording: Blob,
+    cameraRecording: Blob,
+    dimensions: { width: number; height: number },
+    onProgress: (progress: number) => void,
+    annotations: AnnotationOverlayFrame[] | null = null
+) {
     const { ffmpeg, handleProgress } = await getFFmpeg(onProgress);
     const screenName = 'creator-studio-screen.webm';
     const cameraName = 'creator-studio-camera.webm';
     const outputName = 'creator-studio-screen-camera.mp4';
     const insetWidth = Math.round(dimensions.width * 0.25);
     const insetHeight = -2;
+    const annotationListName = 'creator-studio-annotations.txt';
+    const annotationFiles: string[] = [];
 
     try {
         await ffmpeg.writeFile(screenName, new Uint8Array(await screenRecording.arrayBuffer()));
         await ffmpeg.writeFile(cameraName, new Uint8Array(await cameraRecording.arrayBuffer()));
+
+        // Annotation snapshots are full-frame transparent PNGs shown for [t, nextT); overlaying them last
+        // keeps them above the camera inset, matching the live preview.
+        if (annotations && annotations.length > 0) {
+            const lines: string[] = [];
+            for (let i = 0; i < annotations.length; i++) {
+                const name = `creator-studio-annotation-${String(i).padStart(4, '0')}.png`;
+                await ffmpeg.writeFile(name, new Uint8Array(await annotations[i].blob.arrayBuffer()));
+                annotationFiles.push(name);
+                const next = annotations[i + 1];
+                lines.push(`file '${name}'`, `duration ${next ? Math.max(next.t - annotations[i].t, 0.02).toFixed(3) : '0.100'}`);
+            }
+            // The concat demuxer ignores the last duration unless the final file is repeated.
+            lines.push(`file '${annotationFiles[annotationFiles.length - 1]}'`);
+            await ffmpeg.writeFile(annotationListName, lines.join('\n'));
+        }
+        const hasAnnotations = annotationFiles.length > 0;
+        const cameraGraph = `[0:v]scale=${dimensions.width}:${dimensions.height}:force_original_aspect_ratio=decrease,pad=${dimensions.width}:${dimensions.height}:(ow-iw)/2:(oh-ih)/2,setsar=1[screen];[1:v]hflip,scale=${insetWidth}:${insetHeight},setsar=1[cam];[screen][cam]overlay=W-w-32:H-h-32:shortest=1${hasAnnotations ? '[withcam]' : '[v]'}`;
+        const annotationGraph = hasAnnotations
+            ? `;[2:v]scale=${dimensions.width}:${dimensions.height},format=rgba[ann];[withcam][ann]overlay=0:0:format=auto[v]`
+            : '';
         const exitCode = await ffmpeg.exec([
             '-i', screenName,
             '-i', cameraName,
+            ...(hasAnnotations ? ['-f', 'concat', '-safe', '0', '-i', annotationListName] : []),
             '-filter_complex',
-            `[0:v]scale=${dimensions.width}:${dimensions.height}:force_original_aspect_ratio=decrease,pad=${dimensions.width}:${dimensions.height}:(ow-iw)/2:(oh-ih)/2,setsar=1[screen];[1:v]hflip,scale=${insetWidth}:${insetHeight},setsar=1[cam];[screen][cam]overlay=W-w-32:H-h-32:shortest=1[v]`,
+            cameraGraph + annotationGraph,
             '-map', '[v]',
             '-map', '0:a?',
             '-c:v', 'libx264',
@@ -100,5 +136,7 @@ export async function composeScreenShareWithCamera(screenRecording: Blob, camera
         await ffmpeg.deleteFile(screenName).catch(() => undefined);
         await ffmpeg.deleteFile(cameraName).catch(() => undefined);
         await ffmpeg.deleteFile(outputName).catch(() => undefined);
+        await ffmpeg.deleteFile(annotationListName).catch(() => undefined);
+        for (const name of annotationFiles) await ffmpeg.deleteFile(name).catch(() => undefined);
     }
 }
