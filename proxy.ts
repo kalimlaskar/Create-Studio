@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { updateSupabaseSession } from '@/lib/supabase/proxy';
-import { DEMO_SESSION_COOKIE, verifyDemoSessionToken } from '@/lib/auth/demo';
+import { DEMO_SESSION_COOKIE, isDemoAuthEnabled, verifyDemoSessionToken } from '@/lib/auth/demo';
 
 const protectedPaths = ['/studio'];
 const authPaths = ['/login', '/signup'];
@@ -17,8 +17,8 @@ function redirectWithSessionCookies(request: NextRequest, sessionResponse: NextR
 }
 
 export async function proxy(request: NextRequest) {
-    if (!supabaseConfigured()) {
-        const isDemoSignedIn = verifyDemoSessionToken(request.cookies.get(DEMO_SESSION_COOKIE)?.value);
+    if (isDemoAuthEnabled() || !supabaseConfigured()) {
+        const isDemoSignedIn = isDemoAuthEnabled() && verifyDemoSessionToken(request.cookies.get(DEMO_SESSION_COOKIE)?.value);
         const isProtectedPath = protectedPaths.some((path) => request.nextUrl.pathname === path || request.nextUrl.pathname.startsWith(`${path}/`));
         if (isProtectedPath && !isDemoSignedIn) {
             return NextResponse.redirect(new URL('/login?setup=1', request.url));

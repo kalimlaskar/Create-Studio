@@ -9,9 +9,9 @@ import { EditorShell } from '@/components/editor/EditorShell';
 import { useStudioSession } from '@/hooks/useStudioSession';
 import { deleteEditorDraft, DraftSummary, LoadedDraft, listEditorDrafts, loadEditorDraft } from '@/components/editor/drafts';
 import { PhotoReelStudio } from '@/components/studio/PhotoReelStudio';
-import { signOutAction } from '@/app/auth/actions';
+import { signOutAction, updateProfileAction } from '@/app/auth/actions';
 
-export function CreatorStudioDashboard({ userEmail }: { userEmail: string }) {
+export function CreatorStudioDashboard({ userEmail, initialDisplayName = '', profilePersistenceEnabled = false }: { userEmail: string; initialDisplayName?: string; profilePersistenceEnabled?: boolean }) {
     const [creationMode, setCreationMode] = useState<'choose' | 'record' | 'photos'>('choose');
     const [view, setView] = useState<'record' | 'edit'>('record');
     const [screenShareStream, setScreenShareStream] = useState<MediaStream | null>(null);
@@ -115,8 +115,8 @@ export function CreatorStudioDashboard({ userEmail }: { userEmail: string }) {
         setScreenFramesReceived(0);
         lastScreenFrameReportRef.current = 0;
         lastScreenFingerprintRef.current = null;
-                        <VideoCanvas videoRef={videoRef} canvasStreamRef={canvasStreamRef} settings={settings} onAvatarMouthPositionChange={(cameraAvatarMouthX, cameraAvatarMouthY) => updateSettings({ cameraAvatarMouthX, cameraAvatarMouthY })} microphoneLevelRef={microphoneLevelRef} isRecording={isRecording} isRecordingPaused={isRecordingPaused} countdown={countdown} screenShareStream={screenShareStream} onScreenFrame={reportScreenFrame} />
-                            {screenShareStream ? <div className="max-w-sm space-y-2 rounded-lg border border-white/10 bg-neutral-950/80 px-3 py-2 text-[11px] leading-relaxed text-neutral-300"><p>Chrome source: <strong className="text-emerald-200">{screenShareSurface ?? 'checking…'}</strong>{isScreenTrackMuted && <span className="font-semibold text-amber-200"> · paused</span>} · live frame checks: <strong className="text-white">{screenFramesReceived}</strong></p><p>Switch to the page you want to record for a few seconds. If the frame-check number doesn’t increase, Chrome isn’t delivering frames from that selected source. For tab switching, select <strong className="text-white">Window → Chrome</strong>, not a single Chrome tab. The direct screen capture is saved first; the camera inset is composed afterward.</p>{studioWasBackgrounded && <p role="status" className="rounded-md border border-emerald-300/20 bg-emerald-300/10 px-2 py-1.5 text-emerald-100">Studio is in another tab. The display is being captured directly.</p>}</div> : <p className="max-w-sm rounded-lg border border-white/10 bg-neutral-950/75 px-3 py-2 text-[11px] leading-relaxed text-neutral-400">Choose <strong className="text-neutral-200">Window</strong> in Chrome’s picker, then select the Chrome window you’ll navigate in. Avoid <strong className="text-neutral-200">Chrome tab</strong>, which captures only one tab.</p>}
+        <VideoCanvas videoRef={videoRef} canvasStreamRef={canvasStreamRef} settings={settings} onAvatarMouthPositionChange={(cameraAvatarMouthX, cameraAvatarMouthY) => updateSettings({ cameraAvatarMouthX, cameraAvatarMouthY })} microphoneLevelRef={microphoneLevelRef} isRecording={isRecording} isRecordingPaused={isRecordingPaused} countdown={countdown} screenShareStream={screenShareStream} onScreenFrame={reportScreenFrame} />
+        { screenShareStream ? <div className="max-w-sm space-y-2 rounded-lg border border-white/10 bg-neutral-950/80 px-3 py-2 text-[11px] leading-relaxed text-neutral-300"><p>Chrome source: <strong className="text-emerald-200">{screenShareSurface ?? 'checking…'}</strong>{isScreenTrackMuted && <span className="font-semibold text-amber-200"> · paused</span>} · live frame checks: <strong className="text-white">{screenFramesReceived}</strong></p><p>Switch to the page you want to record for a few seconds. If the frame-check number doesn’t increase, Chrome isn’t delivering frames from that selected source. For tab switching, select <strong className="text-white">Window → Chrome</strong>, not a single Chrome tab. The direct screen capture is saved first; the camera inset is composed afterward.</p>{studioWasBackgrounded && <p role="status" className="rounded-md border border-emerald-300/20 bg-emerald-300/10 px-2 py-1.5 text-emerald-100">Studio is in another tab. The display is being captured directly.</p>}</div> : <p className="max-w-sm rounded-lg border border-white/10 bg-neutral-950/75 px-3 py-2 text-[11px] leading-relaxed text-neutral-400">Choose <strong className="text-neutral-200">Window</strong> in Chrome’s picker, then select the Chrome window you’ll navigate in. Avoid <strong className="text-neutral-200">Chrome tab</strong>, which captures only one tab.</p> }
         if (!navigator.mediaDevices?.getDisplayMedia) {
             setScreenShareError('Screen sharing is not supported in this browser. Use a recent desktop version of Chrome, Edge, Firefox, or Safari.');
             return;
@@ -153,7 +153,9 @@ export function CreatorStudioDashboard({ userEmail }: { userEmail: string }) {
     const [restoredDraft, setRestoredDraft] = useState<LoadedDraft | null>(null);
     const [isLoadingDraft, setIsLoadingDraft] = useState(false);
     const [showWelcome, setShowWelcome] = useState(false);
-    const [creatorName, setCreatorName] = useState('My creator space');
+    const [creatorName, setCreatorName] = useState(initialDisplayName || 'My creator space');
+    const [profileSaveState, setProfileSaveState] = useState('');
+    const creatorNameInitializedRef = useRef(false);
 
     const refreshDrafts = async () => {
         try {
@@ -174,15 +176,30 @@ export function CreatorStudioDashboard({ userEmail }: { userEmail: string }) {
     useEffect(() => {
         const frame = window.requestAnimationFrame(() => {
             if (creationMode === 'record' && !window.localStorage.getItem('creator-studio-first-run-v1')) setShowWelcome(true);
-            setCreatorName(window.localStorage.getItem('creator-studio-creator-name') || 'My creator space');
+            if (!creatorNameInitializedRef.current) {
+                creatorNameInitializedRef.current = true;
+                const storedName = window.localStorage.getItem('creator-studio-creator-name');
+                const profileName = initialDisplayName.trim();
+                const name = profileName || storedName || 'My creator space';
+                setCreatorName(name);
+                window.localStorage.setItem('creator-studio-creator-name', name);
+            }
         });
         return () => window.cancelAnimationFrame(frame);
-    }, [creationMode]);
+    }, [creationMode, initialDisplayName]);
 
     const updateCreatorName = (name: string) => {
         const safeName = name.slice(0, 48);
         setCreatorName(safeName);
+        setProfileSaveState(profilePersistenceEnabled ? 'Unsaved changes' : '');
         window.localStorage.setItem('creator-studio-creator-name', safeName);
+    };
+
+    const saveCreatorProfile = async () => {
+        if (!profilePersistenceEnabled) return;
+        setProfileSaveState('Saving…');
+        const result = await updateProfileAction(creatorName);
+        setProfileSaveState(result.error ?? 'Profile saved');
     };
 
     const dismissWelcome = (useSample: boolean) => {
@@ -281,7 +298,7 @@ export function CreatorStudioDashboard({ userEmail }: { userEmail: string }) {
                 </div>
                 <div className="w-full max-w-4xl">
                     <div className="mb-9 text-center">
-                        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-indigo-300">CreatorStudio workspace</p>
+                        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-indigo-300">Cliprame workspace</p>
                         <h1 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">What are we creating today?</h1>
                         <p className="mx-auto mt-3 max-w-xl text-sm leading-relaxed text-neutral-400">Record a video with your camera, or turn your photos into a music-backed reel.</p>
                     </div>
@@ -316,8 +333,9 @@ export function CreatorStudioDashboard({ userEmail }: { userEmail: string }) {
                     <summary className="flex cursor-pointer list-none items-center gap-2 rounded-lg border border-neutral-700 bg-neutral-900/95 px-3 py-2 text-xs font-semibold text-neutral-200 shadow-lg hover:bg-neutral-800"><FolderOpen className="h-4 w-4" /> Projects ({savedDrafts.length})</summary>
                     <div className="absolute right-0 mt-2 max-h-[60dvh] w-[min(22rem,calc(100vw-1.5rem))] overflow-y-auto rounded-xl border border-neutral-700 bg-neutral-900 p-2 shadow-2xl">
                         <label htmlFor="creator-name" className="block px-3 pt-2 text-[10px] font-semibold uppercase tracking-wider text-neutral-500">Creator profile</label>
-                        <input id="creator-name" value={creatorName} onChange={(event) => updateCreatorName(event.target.value)} maxLength={48} className="mx-3 mt-1 w-[calc(100%-1.5rem)] rounded-md border border-neutral-800 bg-neutral-950 px-2 py-1.5 text-xs text-neutral-200 focus:border-indigo-500 focus:outline-none" />
-                        <p className="px-3 py-2 text-[10px] leading-relaxed text-neutral-500">Your profile name is stored in this browser. Editing drafts are stored locally on this device.</p>
+                        <input id="creator-name" value={creatorName} onChange={(event) => updateCreatorName(event.target.value)} onBlur={() => void saveCreatorProfile()} maxLength={48} className="mx-3 mt-1 w-[calc(100%-1.5rem)] rounded-md border border-neutral-800 bg-neutral-950 px-2 py-1.5 text-xs text-neutral-200 focus:border-indigo-500 focus:outline-none" />
+                        {profileSaveState && <p role="status" className={`px-3 pt-2 text-[10px] ${profileSaveState === 'Profile saved' ? 'text-emerald-300' : profileSaveState === 'Unsaved changes' || profileSaveState === 'Saving…' ? 'text-neutral-500' : 'text-red-300'}`}>{profileSaveState}</p>}
+                        <p className="px-3 py-2 text-[10px] leading-relaxed text-neutral-500">{profilePersistenceEnabled ? 'Your profile name is saved to your account. Editing drafts stay on this device.' : 'Your profile name and editing drafts are stored on this device.'}</p>
                         {savedDrafts.map((draft) => <div key={draft.id} className="flex items-center gap-1 rounded-lg hover:bg-neutral-800"><button onClick={() => void openDraft(draft.id)} disabled={isLoadingDraft} className="min-w-0 flex-1 rounded-lg px-3 py-2 text-left text-xs text-neutral-200 disabled:opacity-50"><span className="block truncate font-semibold">{draft.title || 'Untitled creator project'}</span><span className="mt-1 block text-neutral-500">{draft.creatorName} · {Math.round(draft.durationMs / 1000)} sec · {new Date(draft.savedAt).toLocaleDateString()}</span></button><button onClick={() => void removeDraft(draft.id)} aria-label={`Delete ${draft.title}`} className="rounded-md p-2 text-neutral-600 hover:text-red-400"><Trash2 className="h-3.5 w-3.5" /></button></div>)}
                         {savedDrafts.length === 0 && <p className="px-3 py-2 text-xs text-neutral-400">Your saved edits will appear here.</p>}
                         {isLoadingDraft && <p className="px-3 py-2 text-xs text-neutral-400">Opening project…</p>}

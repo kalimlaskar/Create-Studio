@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useRef } from 'react';
-import { Sun, Smartphone, Monitor, Square, Sparkles, Upload, X } from 'lucide-react';
+import Image from 'next/image';
+import { Sun, Smartphone, Monitor, Square, Upload, X } from 'lucide-react';
 import { AspectRatioType, CameraArtEffect, FilterPresetType, StudioSettings } from '@/types/studio';
 import { Teleprompter } from './Teleprompter';
 
@@ -46,8 +47,8 @@ export function SidebarControls({ settings, onUpdateSettings, onCameraArtEffectC
         <aside className="flex max-h-[44dvh] w-full shrink-0 flex-col justify-between overflow-y-auto border-b border-neutral-800 bg-neutral-900 p-4 md:max-h-full md:w-80 md:border-b-0 md:border-r">
             <div>
                 <div className="flex items-center gap-2 mb-6">
-                    <Sparkles className="w-6 h-6 text-indigo-500" />
-                    <h1 className="text-lg font-bold tracking-tight">CreatorStudio</h1>
+                    <Image src="/cliprame-icon.svg" alt="" width={32} height={32} className="h-8 w-8" />
+                    <h1 className="text-lg font-bold tracking-tight">Cliprame</h1>
                 </div>
 
                 {/* Aspect Ratio Selector */}

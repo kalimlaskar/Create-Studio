@@ -16,18 +16,19 @@ bun dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the public product page. Create an account or sign in to open `/studio`.
 
-CreatorStudio is a browser-based lesson, presentation, and social-reel creation workspace built with Next.js.
+Cliprame is a browser-based lesson, presentation, and social-reel creation workspace built with Next.js.
 
 ## Supabase authentication setup
 
-1. For local preview before creating a Supabase project, run `npm run dev` and use the temporary tester login: username `teacher`, password `lesson-demo-2026`. This is a shared demo credential, not a real user or administrator account. For a deployed test build without Supabase, set `TEMP_AUTH_ENABLED=true`, `TEMP_AUTH_USERNAME`, `TEMP_AUTH_PASSWORD`, and a random `TEMP_AUTH_SECRET` of at least 32 characters in the host's private environment settings. Never use the sample local password in a deployed app. Set `TEMP_AUTH_ENABLED=false` to disable temporary access. Adding Supabase credentials disables it automatically.
-2. Create a free Supabase project when you're ready for real accounts.
-3. Copy its Project URL and **publishable** key from the project's Connect/API settings into `.env.local` as `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`. For production also set `NEXT_PUBLIC_SITE_URL` to the deployed HTTPS origin.
-4. In Supabase Authentication URL Configuration, set the local Site URL to `http://localhost:3000` and add `http://localhost:3000/auth/callback` to the Redirect URLs. For deployment, add the deployed origin and its `/auth/callback` URL too.
-5. Configure email delivery in Supabase Auth. Until SMTP is configured, confirmation emails may be limited by the provider's default email service.
-6. Restart `npm run dev`, then use **Sign up** and confirm the email if email confirmation is enabled. Adding Supabase credentials automatically switches off the temporary demo account.
+1. Create a Supabase project and copy its Project URL and **publishable** key from Connect/API settings into `.env.local` as `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`. Never put a secret/service-role key in a `NEXT_PUBLIC_` variable.
+2. Set `NEXT_PUBLIC_SITE_URL=http://localhost:3000` locally and your deployed HTTPS origin in production. In Supabase Authentication URL Configuration, set the matching Site URL and add the origin plus `/auth/callback` to Redirect URLs.
+3. Configure Supabase Auth email templates and delivery. For numeric sign-in codes, the **Magic Link** template must include `{{ .Token }}`. Configure SMTP before production use so confirmation and login emails are reliably delivered.
+4. Apply `supabase/migrations/20261006000000_create_profiles.sql` to the project. In Supabase, open **SQL Editor**, create a query, paste the migration contents, and run it. This creates the owner-protected `profiles` table and imports existing signup names.
+5. Restart `npm run dev`, then create an individual account at **Sign up**. Confirm the email if confirmation is enabled. Returning users can sign in with a password or request a one-time email code. Profile names are stored in Supabase; editor and reel drafts remain local to the browser.
 
-Only the Supabase project URL and publishable key belong in `NEXT_PUBLIC_` variables. Never put a Supabase secret/service-role key in browser-visible environment variables. Sign-in and sign-up are handled by server actions; the `/studio` route and paid AI generation routes verify the Supabase session. Editor and reel drafts are still local to the browser and are not synced to Supabase.
+Temporary tester auth is disabled by default and whenever Supabase is configured. To explicitly enable a local tester, set `TEMP_AUTH_ENABLED=true` and provide private `TEMP_AUTH_USERNAME` and `TEMP_AUTH_PASSWORD` values. Production additionally requires a random `TEMP_AUTH_SECRET` of at least 32 characters. Do not use shared tester credentials for real users.
+
+Only the Supabase project URL and publishable key belong in `NEXT_PUBLIC_` variables. Never put a Supabase secret/service-role key in browser-visible environment variables. Sign-in and sign-up are handled by server actions; the `/studio` route and paid AI generation routes verify the Supabase session. Profile reads and updates are restricted to the authenticated owner by row-level security.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 

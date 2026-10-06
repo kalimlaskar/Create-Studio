@@ -35,7 +35,7 @@ export function FeedbackWidget() {
         <div className="fixed bottom-4 right-4 z-50">
             {isOpen && (
                 <section className="mb-2 w-[min(22rem,calc(100vw-2rem))] rounded-2xl border border-neutral-700 bg-neutral-900 p-4 shadow-2xl" aria-label="Creator feedback form">
-                    <h2 className="text-sm font-semibold text-white">Help shape Creator Studio</h2>
+                    <h2 className="text-sm font-semibold text-white">Help shape Cliprame</h2>
                     <p className="mt-1 text-[11px] leading-relaxed text-neutral-500">Tell us what worked, what felt confusing, and what you need next. No video or personal data is attached.</p>
                     <div className="mt-3 flex items-center gap-1" aria-label={`Rating: ${rating} out of 5`}>
                         {[1, 2, 3, 4, 5].map((value) => (

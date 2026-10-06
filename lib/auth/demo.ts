@@ -2,35 +2,23 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 
 export const DEMO_SESSION_COOKIE = 'creator-studio-demo-session';
 const SESSION_LIFETIME_SECONDS = 8 * 60 * 60;
-const LOCAL_DEMO_USERNAME = 'teacher';
-const LOCAL_DEMO_PASSWORD = 'lesson-demo-2026';
 
 function hasSupabaseConfig() {
     return Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY);
 }
 
 export function isDemoAuthEnabled() {
-    const explicitlyEnabled = process.env.TEMP_AUTH_ENABLED;
-    if (hasSupabaseConfig() || explicitlyEnabled === 'false') return false;
+    if (process.env.TEMP_AUTH_ENABLED !== 'true') return false;
+    if (!process.env.TEMP_AUTH_USERNAME || !process.env.TEMP_AUTH_PASSWORD) return false;
     if (process.env.NODE_ENV !== 'production') return true;
-    return explicitlyEnabled === 'true'
-        && Boolean(process.env.TEMP_AUTH_USERNAME)
-        && Boolean(process.env.TEMP_AUTH_PASSWORD)
-        && Boolean(process.env.TEMP_AUTH_SECRET && process.env.TEMP_AUTH_SECRET.length >= 32);
-}
-
-export function shouldShowLocalDemoCredentials() {
-    return process.env.NODE_ENV !== 'production'
-        && isDemoAuthEnabled()
-        && !process.env.TEMP_AUTH_USERNAME
-        && !process.env.TEMP_AUTH_PASSWORD;
+    if (hasSupabaseConfig()) return false;
+    return Boolean(process.env.TEMP_AUTH_SECRET && process.env.TEMP_AUTH_SECRET.length >= 32);
 }
 
 function getCredentials() {
-    const localFallbackAllowed = process.env.NODE_ENV !== 'production';
     return {
-        username: process.env.TEMP_AUTH_USERNAME ?? (localFallbackAllowed ? LOCAL_DEMO_USERNAME : ''),
-        password: process.env.TEMP_AUTH_PASSWORD ?? (localFallbackAllowed ? LOCAL_DEMO_PASSWORD : ''),
+        username: process.env.TEMP_AUTH_USERNAME ?? '',
+        password: process.env.TEMP_AUTH_PASSWORD ?? '',
     };
 }
 

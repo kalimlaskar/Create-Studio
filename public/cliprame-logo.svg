@@ -1,0 +1,92 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="420" viewBox="0 0 1200 420" role="img" aria-labelledby="title desc">
+  <title id="title">Cliprame logo</title>
+  <desc id="desc">Modern Cliprame gradient play-frame logo and wordmark.</desc>
+
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#080B2A"/>
+      <stop offset="1" stop-color="#11153A"/>
+    </linearGradient>
+
+    <linearGradient id="frame" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#35D9FF"/>
+      <stop offset="0.38" stop-color="#245BFF"/>
+      <stop offset="0.72" stop-color="#6331FF"/>
+      <stop offset="1" stop-color="#D946EF"/>
+    </linearGradient>
+
+    <linearGradient id="play" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#3DEBFF"/>
+      <stop offset="0.52" stop-color="#6A63FF"/>
+      <stop offset="1" stop-color="#F05BFF"/>
+    </linearGradient>
+
+    <linearGradient id="dot" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2EEBFF"/>
+      <stop offset="1" stop-color="#2C6CFF"/>
+    </linearGradient>
+
+    <filter id="shadow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="14"/>
+    </filter>
+
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="5" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <clipPath id="iconClip">
+      <rect x="54" y="54" width="312" height="312" rx="82"/>
+    </clipPath>
+  </defs>
+
+  <!-- Transparent by default; remove this rect if you want a transparent SVG -->
+  <rect width="1200" height="420" rx="32" fill="url(#bg)"/>
+
+  <!-- Icon glow -->
+  <rect x="65" y="65" width="290" height="290" rx="78" fill="#345DFF" opacity=".28" filter="url(#shadow)"/>
+
+  <!-- App icon -->
+  <rect x="54" y="54" width="312" height="312" rx="82" fill="url(#frame)"/>
+
+  <!-- Inner dark stage -->
+  <path d="M112 176 L257 86 Q307 77 337 108 L337 292 Q324 334 278 338 L119 338 Q76 315 76 269 Q76 221 112 176Z"
+        fill="#080B2A" opacity=".9"/>
+
+  <!-- Ribbon / frame stroke -->
+  <path d="M113 176 L256 86 Q307 77 337 108"
+        fill="none" stroke="url(#frame)" stroke-width="30" stroke-linecap="round"/>
+  <path d="M77 269 Q77 315 119 338 L278 338 Q324 334 337 292"
+        fill="none" stroke="url(#frame)" stroke-width="30" stroke-linecap="round"/>
+  <path d="M113 176 Q76 221 77 269"
+        fill="none" stroke="#35D9FF" stroke-width="30" stroke-linecap="round"/>
+
+  <!-- Play button -->
+  <path d="M154 181 Q154 164 169 155 L250 204 Q266 214 250 225 L169 274 Q154 265 154 248Z"
+        fill="url(#play)" filter="url(#glow)"/>
+
+  <!-- Sparkle -->
+  <path d="M292 103
+           C295 117 301 123 315 126
+           C301 129 295 135 292 149
+           C289 135 283 129 269 126
+           C283 123 289 117 292 103Z"
+        fill="#C9FBFF"/>
+
+  <!-- Small highlight -->
+  <circle cx="104" cy="111" r="5" fill="#FFFFFF" opacity=".65"/>
+
+  <!-- Wordmark -->
+  <text x="414" y="274"
+        font-family="Inter, SF Pro Display, -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif"
+        font-size="150"
+        font-weight="700"
+        letter-spacing="-6"
+        fill="#F8F9FF">Cliprame</text>
+
+  <!-- Gradient dot over i -->
+  <circle cx="520" cy="157" r="10" fill="url(#dot)"/>
+</svg>

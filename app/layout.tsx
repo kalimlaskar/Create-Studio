@@ -13,8 +13,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "CreatorStudio | Make lessons and reels",
+  title: "Cliprame | Make lessons and reels",
   description: "Create classroom lessons, narrated presentations, and social-ready reels with a simple browser-based video studio.",
+  icons: { icon: "/cliprame-icon.svg" },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
