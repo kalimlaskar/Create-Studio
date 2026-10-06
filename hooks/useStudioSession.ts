@@ -62,6 +62,7 @@ export function useStudioSession(enabled = true, screenShareStream: MediaStream 
 
     // Initialize Camera & Mic with AI Noise Suppression
     const cameraFacing = settings.cameraFacing;
+    const initialCameraFacingRef = useRef(cameraFacing);
     useEffect(() => {
         if (!enabled) return;
         let cancelled = false;
@@ -69,7 +70,7 @@ export function useStudioSession(enabled = true, screenShareStream: MediaStream 
         async function setupCamera() {
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({
-                    video: { facingMode: { ideal: cameraFacing }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+                    video: { facingMode: { ideal: initialCameraFacingRef.current }, width: { ideal: 1920 }, height: { ideal: 1080 } },
                     audio: {
                         noiseSuppression: true,
                         echoCancellation: true,
@@ -101,6 +102,35 @@ export function useStudioSession(enabled = true, screenShareStream: MediaStream 
             mediaStreamRef.current = null;
             if (videoRef.current) videoRef.current.srcObject = null;
         };
+    }, [enabled]);
+
+    // Swap only the video track so the microphone track and any active recording keep going.
+    useEffect(() => {
+        if (!enabled || initialCameraFacingRef.current === cameraFacing) return;
+        initialCameraFacingRef.current = cameraFacing;
+        const stream = mediaStreamRef.current;
+        if (!stream) return;
+        let cancelled = false;
+        navigator.mediaDevices.getUserMedia({
+            video: { facingMode: { ideal: cameraFacing }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+        }).then((newStream) => {
+            const newTrack = newStream.getVideoTracks()[0];
+            if (cancelled || mediaStreamRef.current !== stream || !newTrack) {
+                newStream.getTracks().forEach((track) => track.stop());
+                return;
+            }
+            stream.getVideoTracks().forEach((track) => {
+                stream.removeTrack(track);
+                track.stop();
+            });
+            stream.addTrack(newTrack);
+            if (videoRef.current) videoRef.current.srcObject = stream;
+            setCameraError(null);
+        }).catch((err) => {
+            console.error('Could not switch camera:', err);
+            if (!cancelled) setCameraError('Could not switch to that camera. This device may only have one camera.');
+        });
+        return () => { cancelled = true; };
     }, [enabled, cameraFacing]);
 
     const updateSettings = useCallback((newSettings: Partial<StudioSettings>) => {
