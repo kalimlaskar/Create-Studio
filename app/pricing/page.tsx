@@ -25,7 +25,7 @@ export default function PricingPage() {
                 <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"><div><h1 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">Plans &amp; access</h1><p className="mt-2 text-sm leading-6 text-neutral-400">Start with the free preview. Paid plans are still in development.</p></div><span className="inline-flex w-fit items-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-400/[0.06] px-3 py-1.5 text-xs font-medium text-emerald-200"><span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />Preview available</span></div>
             </section>
 
-            <PricingPlans />
+            <PricingPlans billingEnabled={Boolean(process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET && process.env.RAZORPAY_PLAN_ID && process.env.SUPABASE_SERVICE_ROLE_KEY)} />
 
             <footer className="border-t border-white/[0.07]"><div className="mx-auto flex max-w-7xl flex-col gap-4 px-5 py-8 text-xs text-neutral-500 sm:px-8 md:flex-row md:items-center md:justify-between lg:px-12"><Link href="/" className="inline-flex items-center gap-2 font-semibold text-white"><Image src="/cliprame-icon.svg" alt="" width={24} height={24} className="h-6 w-6" /><span>Cliprame</span></Link><p>Early access · No paid plans are live.</p><div className="flex items-center gap-5"><Link href="/" className="transition hover:text-white">Home</Link><Link href="/login" className="transition hover:text-white">Log in</Link></div></div></footer>
         </main>

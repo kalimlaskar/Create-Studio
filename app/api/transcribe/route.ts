@@ -1,4 +1,5 @@
 import { hasAuthenticatedSupabaseUser } from '@/lib/supabase/authorization';
+import { consumeAiCredit } from '@/lib/supabase/ai-quota';
 
 const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
 const LANGUAGE_CODES = new Set(['auto', 'en', 'hi', 'hinglish']);
@@ -36,6 +37,9 @@ export async function POST(request: Request) {
     if (!LANGUAGE_CODES.has(language)) {
         return Response.json({ error: 'Choose Auto, English, Hindi, or Hinglish.' }, { status: 400 });
     }
+
+    const limited = await consumeAiCredit();
+    if (limited) return limited;
 
     const providerForm = new FormData();
     providerForm.append('file', file, file.name || 'creator-studio-audio.webm');

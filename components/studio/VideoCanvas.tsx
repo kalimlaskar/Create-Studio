@@ -6,6 +6,7 @@ import { FilesetResolver, ImageSegmenter, ImageSegmenterResult } from '@mediapip
 import { TeleprompterOverlay } from './TeleprompterOverlay';
 import { getFrameCrop, getRecordingDimensions, RECORDING_FRAME_RATE } from '@/components/recordingQuality';
 import { drawFreeTierWatermark } from '@/components/freeTier';
+import { createHologramRenderer, HologramRenderer } from './hologramRenderer';
 import { applyArtisticEffect, CameraArtEffect, drawPhotoAvatar, drawTrackedAvatar, FaceLandmarkPoint } from './artisticEffects';
 
 interface VideoCanvasProps {
@@ -247,6 +248,8 @@ export function VideoCanvas({
     const maskCanvasRef = useRef<HTMLCanvasElement | null>(null);
     const softMaskCanvasRef = useRef<HTMLCanvasElement | null>(null);
     const personCanvasRef = useRef<HTMLCanvasElement | null>(null);
+    const hologramPersonRef = useRef<HTMLCanvasElement | null>(null);
+    const hologramRendererRef = useRef<HologramRenderer | null>(null);
 
     const getBuffer = (ref: React.MutableRefObject<HTMLCanvasElement | null>, width: number, height: number) => {
         if (!ref.current) ref.current = document.createElement('canvas');
@@ -325,7 +328,7 @@ export function VideoCanvas({
 
     // ImageSegmenter: GPU -> CPU fallback, pinned model/fileset versions.
     useEffect(() => {
-        if (!SEGMENTATION_MODES.includes(settings.backgroundMode)) {
+        if (!SEGMENTATION_MODES.includes(settings.backgroundMode) && !settings.hologramEnabled) {
             segmenterRef.current?.close();
             segmenterRef.current = null;
             prevMaskRef.current = null;
@@ -368,7 +371,17 @@ export function VideoCanvas({
             segmenterRef.current = null;
             segmenter?.close();
         };
-    }, [settings.backgroundMode]);
+    }, [settings.backgroundMode, settings.hologramEnabled]);
+
+    // The WebGL hologram pass only exists while the effect is on.
+    useEffect(() => {
+        if (!settings.hologramEnabled) return;
+        hologramRendererRef.current = createHologramRenderer();
+        return () => {
+            hologramRendererRef.current?.dispose();
+            hologramRendererRef.current = null;
+        };
+    }, [settings.hologramEnabled]);
 
     useEffect(() => {
         if (settings.cameraArtEffect !== 'avatar') {
@@ -511,8 +524,53 @@ export function VideoCanvas({
         ctx.clearRect(0, 0, width, height);
 
         const mode = current.backgroundMode;
+        const hologramActive = current.hologramEnabled && Boolean(hologramRendererRef.current);
 
-        if (mode === 'green' || mode === 'blur' || mode === 'image') {
+        if (hologramActive) {
+            if (mode === 'green') {
+                ctx.fillStyle = '#00FF00';
+                ctx.fillRect(0, 0, width, height);
+            } else if (mode === 'blur') {
+                drawMirrored(ctx, video, crop, width, height, 'blur(16px) brightness(0.45)', mirror);
+            } else if (mode === 'image' && bgImageRef.current?.complete) {
+                drawImageCover(ctx, bgImageRef.current, width, height);
+            } else if (mode !== 'transparent') {
+                ctx.fillStyle = '#02060d';
+                ctx.fillRect(0, 0, width, height);
+                ctx.globalAlpha = 0.15;
+                drawMirrored(ctx, video, crop, width, height, 'none', mirror);
+                ctx.globalAlpha = 1;
+            }
+
+            // The shader runs at reduced resolution; the glow is soft so it upscales cleanly.
+            const holoScale = Math.min(1, 540 / Math.min(width, height));
+            const pw = Math.max(2, Math.round(width * holoScale));
+            const ph = Math.max(2, Math.round(height * holoScale));
+            const person = getBuffer(hologramPersonRef, pw, ph);
+            const personCtx = person.getContext('2d');
+            if (personCtx) {
+                personCtx.clearRect(0, 0, pw, ph);
+                personCtx.save();
+                if (mirror) {
+                    personCtx.translate(pw, 0);
+                    personCtx.scale(-1, 1);
+                }
+                personCtx.filter = filter;
+                personCtx.drawImage(video, crop.x, crop.y, crop.width, crop.height, 0, 0, pw, ph);
+                personCtx.filter = 'none';
+                personCtx.globalCompositeOperation = 'destination-in';
+                personCtx.drawImage(smoothedMask, maskCrop.sx, maskCrop.sy, maskCrop.sw, maskCrop.sh, 0, 0, pw, ph);
+                personCtx.restore();
+                const layer = hologramRendererRef.current!.render(person, {
+                    color: current.hologramColor,
+                    intensity: current.hologramIntensity / 100,
+                    flicker: current.hologramFlicker / 100,
+                    timeSeconds: performance.now() / 1000,
+                    outputHeight: height,
+                });
+                ctx.drawImage(layer ?? person, 0, 0, width, height);
+            }
+        } else if (mode === 'green' || mode === 'blur' || mode === 'image') {
             // Background layer
             if (mode === 'green') {
                 ctx.fillStyle = '#00FF00';

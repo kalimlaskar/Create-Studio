@@ -1,4 +1,5 @@
 import { hasAuthenticatedSupabaseUser } from '@/lib/supabase/authorization';
+import { consumeAiCredit } from '@/lib/supabase/ai-quota';
 
 const SCRIPT_LANGUAGES: Record<string, string> = {
     en: 'natural conversational English',
@@ -34,6 +35,9 @@ export async function POST(request: Request) {
     if (![15, 30, 60, 90].includes(seconds)) {
         return Response.json({ error: 'Choose a script length of 15, 30, 60, or 90 seconds.' }, { status: 400 });
     }
+
+    const limited = await consumeAiCredit();
+    if (limited) return limited;
 
     try {
         const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent', {

@@ -5,6 +5,8 @@ export type StudioInputMode = 'camera' | 'upload';
 export type ScriptLanguage = 'en' | 'hi' | 'hinglish' | 'bn' | 'mr' | 'ta' | 'te';
 export type CameraArtEffect = 'none' | 'comic' | 'sketch' | 'pixel' | 'anime' | 'avatar' | 'photo-avatar';
 
+export type HologramColor = 'cyan' | 'purple' | 'green';
+
 export type CameraFacing = 'user' | 'environment';
 
 export interface StudioSettings {
@@ -14,6 +16,10 @@ export interface StudioSettings {
     contrast: number;
     filterPreset: FilterPresetType;
     cameraArtEffect: CameraArtEffect;
+    hologramEnabled: boolean;
+    hologramColor: HologramColor;
+    hologramIntensity: number; // 0-100
+    hologramFlicker: number; // 0-100
     cameraAvatarImageUrl: string | null;
     cameraAvatarMouthX: number;
     cameraAvatarMouthY: number;

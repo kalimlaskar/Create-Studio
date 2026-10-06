@@ -254,6 +254,7 @@ export function SidebarControls({ settings, onUpdateSettings, onCameraArtEffectC
                         value={settings.cameraArtEffect}
                         onChange={(event) => {
                             const effect = event.target.value as StudioSettings['cameraArtEffect'];
+                            if (effect !== 'none') onUpdateSettings({ hologramEnabled: false });
                             onCameraArtEffectChange(effect);
                             if (effect === 'photo-avatar' && !settings.cameraAvatarImageUrl) avatarInputRef.current?.click();
                         }}
@@ -298,6 +299,53 @@ export function SidebarControls({ settings, onUpdateSettings, onCameraArtEffectC
                     <p className="text-[10px] leading-relaxed text-neutral-500">
                         Cartoon and sketch effects run locally and are included in recordings.
                     </p>
+                </div>
+
+                <div className="space-y-3 rounded-xl border border-neutral-800 bg-neutral-950/50 p-3">
+                    <div className="flex items-center justify-between gap-3">
+                        <div>
+                            <p className="text-xs font-semibold uppercase tracking-wider text-neutral-400">Hologram</p>
+                            <p className="text-[10px] text-neutral-500">Glowing projection of you</p>
+                        </div>
+                        <button
+                            type="button"
+                            role="switch"
+                            aria-checked={settings.hologramEnabled}
+                            aria-label="Hologram effect"
+                            onClick={() => {
+                                const next = !settings.hologramEnabled;
+                                if (next && settings.cameraArtEffect !== 'none') onCameraArtEffectChange('none');
+                                onUpdateSettings({ hologramEnabled: next });
+                            }}
+                            className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${settings.hologramEnabled ? 'bg-cyan-500' : 'bg-neutral-700'}`}>
+                            <span className={`absolute top-1 h-5 w-5 rounded-full bg-white transition-all ${settings.hologramEnabled ? 'left-6' : 'left-1'}`} />
+                        </button>
+                    </div>
+                    {settings.hologramEnabled && (
+                        <>
+                            <div className="grid grid-cols-3 gap-2" role="group" aria-label="Hologram color">
+                                {([['cyan', 'Cyan', 'bg-cyan-400'], ['purple', 'Purple', 'bg-violet-400'], ['green', 'Green', 'bg-emerald-400']] as const).map(([value, label, swatch]) => (
+                                    <button
+                                        key={value}
+                                        type="button"
+                                        aria-pressed={settings.hologramColor === value}
+                                        onClick={() => onUpdateSettings({ hologramColor: value })}
+                                        className={`flex items-center justify-center gap-1.5 rounded-lg border px-2 py-2 text-[11px] font-medium transition-colors ${settings.hologramColor === value ? 'border-cyan-400/70 bg-neutral-800 text-white' : 'border-neutral-700 text-neutral-400 hover:text-neutral-200'}`}>
+                                        <span className={`h-2.5 w-2.5 rounded-full ${swatch}`} />{label}
+                                    </button>
+                                ))}
+                            </div>
+                            <div>
+                                <div className="flex justify-between text-[10px] text-neutral-400"><label htmlFor="hologram-intensity">Intensity</label><span>{settings.hologramIntensity}%</span></div>
+                                <input id="hologram-intensity" type="range" min="0" max="100" value={settings.hologramIntensity} onChange={(event) => onUpdateSettings({ hologramIntensity: Number(event.target.value) })} className="w-full accent-cyan-400" />
+                            </div>
+                            <div>
+                                <div className="flex justify-between text-[10px] text-neutral-400"><label htmlFor="hologram-flicker">Flicker</label><span>{settings.hologramFlicker}%</span></div>
+                                <input id="hologram-flicker" type="range" min="0" max="100" value={settings.hologramFlicker} onChange={(event) => onUpdateSettings({ hologramFlicker: Number(event.target.value) })} className="w-full accent-cyan-400" />
+                            </div>
+                            <p className="text-[10px] leading-relaxed text-neutral-500">Works with your background choice and is included in recordings and exports.</p>
+                        </>
+                    )}
                 </div>
 
                 {/* Teleprompter Module */}

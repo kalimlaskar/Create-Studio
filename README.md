@@ -67,7 +67,7 @@ Copy `.env.example` to `.env.local` and configure the Supabase URL/publishable k
 
 Saved editor projects and photo/video reel drafts are stored in IndexedDB on the current browser/device; they are not synced to an account or another device. The current free-plan prototype adds a visible watermark and limits recordings/exports to 60 seconds. Payments and paid-plan entitlements are not enabled.
 
-The Creator Profile name remains a local browser label. Supabase Auth identifies users, but account-backed project sync is not implemented. The Upgrade control is deliberately disabled: no Stripe/Razorpay checkout, subscription verification, or paid-limit bypass should be presented as live until billing and verified webhooks are configured.
+The Creator Profile name remains a local browser label. Supabase Auth identifies users, but account-backed project sync is not implemented. Billing uses Razorpay Subscriptions: checkout is created server-side, activation is confirmed by a signed payment check, and the signed `/api/billing/webhook` keeps status in sync. Set the `RAZORPAY_*` and `SUPABASE_SERVICE_ROLE_KEY` variables from `.env.example` and run the Supabase migrations to enable it.
 
 ## Creator feedback
 

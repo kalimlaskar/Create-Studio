@@ -1,4 +1,5 @@
 import { hasAuthenticatedSupabaseUser } from '@/lib/supabase/authorization';
+import { consumeAiCredit } from '@/lib/supabase/ai-quota';
 
 const LANGUAGE_NAMES: Record<string, string> = {
     en: 'English',
@@ -22,6 +23,9 @@ export async function POST(request: Request) {
     if (description.length < 3 || description.length > 500) {
         return Response.json({ error: 'Enter a short description between 3 and 500 characters.' }, { status: 400 });
     }
+
+    const limited = await consumeAiCredit();
+    if (limited) return limited;
 
     try {
         const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent', {

@@ -1,4 +1,5 @@
 import { hasAuthenticatedSupabaseUser } from '@/lib/supabase/authorization';
+import { consumeAiCredit } from '@/lib/supabase/ai-quota';
 
 const SUPPORTED_LANGUAGES = new Set(['en', 'hi', 'bn', 'ta', 'te']);
 const LANGUAGE_LABELS: Record<string, string> = {
@@ -40,6 +41,9 @@ export async function POST(request: Request) {
     if (voiceGender !== 'female' && voiceGender !== 'male') {
         return Response.json({ error: 'Choose a female or male voice.' }, { status: 400 });
     }
+
+    const limited = await consumeAiCredit();
+    if (limited) return limited;
 
     let translatedText = text;
 
