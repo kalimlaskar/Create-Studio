@@ -6,6 +6,8 @@ import { AspectRatioType } from '@/types/studio';
 import { createExportRecorder, getExportDimensions, RECORDING_FRAME_RATE } from '@/components/recordingQuality';
 import { drawFreeTierWatermark, FREE_VIDEO_LIMIT_MS } from '@/components/freeTier';
 import { TextOverlayStyle } from '@/types/editor';
+import { DepthMotion, getDepthMap, getPhotoCacheKey, isDepthMotion } from './depthEstimator';
+import { getDepthRenderer } from './depthRenderer';
 import { deletePhotoReelDraft, listPhotoReelDrafts, loadPhotoReelDraft, PhotoReelDraftSummary, savePhotoReelDraft } from './photoReelDrafts';
 
 interface ReelImage {
@@ -19,7 +21,7 @@ interface ReelImage {
     description: string;
     textStyle: TextOverlayStyle;
     textPosition: 'top' | 'center' | 'bottom';
-    motion: 'none' | 'zoom-in' | 'zoom-out' | 'pan-left' | 'pan-right';
+    motion: 'none' | 'zoom-in' | 'zoom-out' | 'pan-left' | 'pan-right' | DepthMotion;
     transition: 'cut' | 'fade' | 'slide' | 'zoom';
 }
 
@@ -38,6 +40,30 @@ const MAX_IMAGES = 20;
 const MAX_IMAGE_BYTES = 12 * 1024 * 1024;
 const MAX_VIDEO_BYTES = 100 * 1024 * 1024;
 const DEFAULT_VIDEO_CLIP_MS = 5000;
+
+function DepthPreview({ clip, depth, progress, aspectRatio, filter }: { clip: ReelImage; depth: HTMLCanvasElement; progress: number; aspectRatio: AspectRatioType; filter: string }) {
+    const canvasRef = useRef<HTMLCanvasElement>(null);
+    const width = aspectRatio === '16:9' ? 960 : 540;
+    const height = aspectRatio === '9:16' ? 960 : 540;
+    const [image, setImage] = useState<HTMLImageElement | null>(null);
+    useEffect(() => {
+        const element = new Image();
+        element.onload = () => setImage(element);
+        element.src = clip.url;
+    }, [clip.url]);
+    useEffect(() => {
+        const canvas = canvasRef.current;
+        const renderer = getDepthRenderer();
+        if (!canvas || !renderer || !image || !image.naturalWidth || !image.naturalWidth || !isDepthMotion(clip.motion)) return;
+        try {
+            const frame = renderer.render({ key: getPhotoCacheKey(clip.file), photo: image, depth, width, height, motion: clip.motion, progress });
+            canvas.getContext('2d')?.drawImage(frame, 0, 0, width, height);
+        } catch {
+            // The export path falls back to a zoom if the renderer fails.
+        }
+    }, [clip, depth, image, progress, width, height]);
+    return <canvas ref={canvasRef} width={width} height={height} className="h-full w-full object-cover" style={{ filter }} />;
+}
 
 export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
     const [images, setImages] = useState<ReelImage[]>([]);
@@ -84,6 +110,10 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
     const imageCacheRef = useRef(new Map<string, HTMLImageElement>());
     const videoCacheRef = useRef(new Map<string, HTMLVideoElement>());
     const videoPosterFramesRef = useRef(new Map<string, HTMLCanvasElement>());
+    const depthMapsRef = useRef(new Map<string, HTMLCanvasElement>());
+    const depthJobsRef = useRef(new Map<string, string>());
+    const [depthStatus, setDepthStatus] = useState<Record<string, 'ready' | 'failed'>>({});
+    const [depthMaps, setDepthMaps] = useState<Record<string, HTMLCanvasElement>>({});
     const imagesRef = useRef(images);
     const musicRef = useRef(music);
     const voiceoverRef = useRef(voiceover);
@@ -105,6 +135,26 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
         musicRef.current = music;
         voiceoverRef.current = voiceover;
     }, [images, music, voiceover]);
+
+    const ensureDepth = (clip: ReelImage): Promise<void> => {
+        const cacheKey = getPhotoCacheKey(clip.file);
+        if (depthJobsRef.current.get(clip.id) === cacheKey) return Promise.resolve();
+        depthJobsRef.current.set(clip.id, cacheKey);
+        return getDepthMap(clip.file).then((depth) => {
+            depthMapsRef.current.set(clip.id, depth);
+            setDepthMaps((current) => ({ ...current, [clip.id]: depth }));
+            setDepthStatus((current) => ({ ...current, [clip.id]: 'ready' }));
+        }).catch(() => {
+            setDepthStatus((current) => ({ ...current, [clip.id]: 'failed' }));
+        });
+    };
+
+    useEffect(() => {
+        images.forEach((clip) => {
+            if (clip.type === 'image' && isDepthMotion(clip.motion)) void ensureDepth(clip);
+        });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [images]);
 
     useEffect(() => {
         let cancelled = false;
@@ -692,7 +742,7 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
         checkReady();
     });
 
-    const drawSlide = (ctx: CanvasRenderingContext2D, image: ReelImage, width: number, height: number, progress = 0) => {
+    const drawSlide = (ctx: CanvasRenderingContext2D, image: ReelImage, width: number, height: number, progress = 0, motionProgress = progress) => {
         const liveVideo = image.type === 'video' ? getVideo(image) : null;
         const videoHasFrame = Boolean(liveVideo && liveVideo.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && liveVideo.videoWidth > 0);
         const element: CanvasImageSource = image.type === 'image'
@@ -713,15 +763,29 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
             throw new Error(`Could not load a preview frame for video ${image.file.name}. Try a different MP4 or WebM clip.`);
         }
         const progressClamped = Math.max(0, Math.min(1, progress));
-        const motion = image.type === 'image' ? image.motion ?? 'zoom-in' : 'none';
+        const requestedMotion = image.type === 'image' ? image.motion ?? 'zoom-in' : 'none';
+        const motionT = Math.max(0, Math.min(1, motionProgress));
+        let depthFrame: HTMLCanvasElement | null = null;
+        if (isDepthMotion(requestedMotion) && element instanceof HTMLImageElement) {
+            const depthMap = depthMapsRef.current.get(image.id);
+            const renderer = depthMap ? getDepthRenderer() : null;
+            if (depthMap && renderer) {
+                try {
+                    depthFrame = renderer.render({ key: getPhotoCacheKey(image.file), photo: element, depth: depthMap, width, height, motion: requestedMotion, progress: motionT });
+                } catch {
+                    depthFrame = null;
+                }
+            }
+        }
+        const motion = isDepthMotion(requestedMotion) ? 'zoom-in' : requestedMotion;
         const motionScale = motion === 'zoom-in' || motion === 'pan-left' || motion === 'pan-right'
-            ? 1 + 0.12 * progressClamped
-            : motion === 'zoom-out' ? 1.12 - 0.12 * progressClamped : 1;
+            ? 1 + 0.12 * motionT
+            : motion === 'zoom-out' ? 1.12 - 0.12 * motionT : 1;
         const ratio = Math.max(width / sourceWidthNatural, height / sourceHeightNatural);
         const sourceWidth = width / ratio / motionScale;
         const sourceHeight = height / ratio / motionScale;
         const extraSourceX = sourceWidthNatural - sourceWidth;
-        const sourceX = motion === 'pan-left' ? extraSourceX * progressClamped : motion === 'pan-right' ? extraSourceX * (1 - progressClamped) : extraSourceX / 2;
+        const sourceX = motion === 'pan-left' ? extraSourceX * motionT : motion === 'pan-right' ? extraSourceX * (1 - motionT) : extraSourceX / 2;
         const sourceY = (sourceHeightNatural - sourceHeight) / 2;
         ctx.save();
         const transition = image.transition ?? 'fade';
@@ -734,7 +798,8 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
             ctx.translate(-width / 2, -height / 2);
         }
         ctx.filter = `brightness(${brightness}%) saturate(${saturation}%)`;
-        ctx.drawImage(element, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, width, height);
+        if (depthFrame) ctx.drawImage(depthFrame, 0, 0, width, height);
+        else ctx.drawImage(element, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, width, height);
         ctx.filter = 'none';
         if (gradient !== 'none') {
             const colors = GRADIENTS.find((item) => item.id === gradient)?.colors ?? ['0,0,0', '0,0,0'];
@@ -823,6 +888,11 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
             if (!ctx) throw new Error('Could not prepare the reel canvas.');
             const exportCanvas = canvas;
             const exportContext = ctx;
+            const depthClips = images.filter((clip) => clip.type === 'image' && isDepthMotion(clip.motion));
+            for (const [index, clip] of depthClips.entries()) {
+                setExportStatus(`Computing 3D depth map ${index + 1} of ${depthClips.length}…`);
+                await ensureDepth(clip);
+            }
             for (const [index, clip] of images.entries()) {
                 setExportStatus(`Preparing ${clip.type === 'image' ? 'photo' : 'video'} ${index + 1} of ${images.length}…`);
                 if (clip.type === 'image') {
@@ -848,7 +918,7 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
                 }
             }
 
-            drawSlide(ctx, images[0], canvas.width, canvas.height, images[0].transition === 'cut' ? 1 : 0);
+            drawSlide(ctx, images[0], canvas.width, canvas.height, images[0].transition === 'cut' ? 1 : 0, 0);
             drawFreeTierWatermark(ctx, canvas.width, canvas.height);
             canvasStream = canvas.captureStream(RECORDING_FRAME_RATE);
             const tracks = [...canvasStream.getVideoTracks()];
@@ -962,7 +1032,7 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
                     activeVideoId = null;
                 }
                 if (clip.type === 'image') await waitForImageDecode(getImage(clip), clip.file.name);
-                drawSlide(exportContext, clip, exportCanvas.width, exportCanvas.height, clip.transition === 'cut' ? 1 : Math.min(1, localTimeMs / 450));
+                drawSlide(exportContext, clip, exportCanvas.width, exportCanvas.height, clip.transition === 'cut' ? 1 : Math.min(1, localTimeMs / 450), localTimeMs / Math.max(1, getClipDurationMs(clip)));
                 drawFreeTierWatermark(exportContext, exportCanvas.width, exportCanvas.height);
                 setExportProgress(5 + Math.min(80, Math.floor(elapsed / durationMs * 80)));
                 scheduleRender();
@@ -1027,7 +1097,9 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
             ? { transform: `scale(${1.12 - transitionProgress * 0.12})` }
             : { opacity: activeImage?.transition === 'fade' ? transitionProgress : 1 };
     const photoMotion = activeImage?.type === 'image' ? activeImage.motion ?? 'zoom-in' : 'none';
-    const photoScale = photoMotion === 'zoom-in' || photoMotion === 'pan-left' || photoMotion === 'pan-right'
+    const activeDepth = activeImage?.type === 'image' && isDepthMotion(photoMotion) && depthStatus[activeImage.id] === 'ready' ? depthMaps[activeImage.id] ?? null : null;
+    const activeDepthLoading = activeImage?.type === 'image' && isDepthMotion(photoMotion) && !depthStatus[activeImage.id];
+    const photoScale = !isDepthMotion(photoMotion) && (photoMotion === 'zoom-in' || photoMotion === 'pan-left' || photoMotion === 'pan-right')
         ? 1 + 0.12 * activeClipProgress
         : photoMotion === 'zoom-out' ? 1.12 - 0.12 * activeClipProgress : 1;
     const photoPanX = photoMotion === 'pan-left' ? `${(0.5 - activeClipProgress) * 8}%` : photoMotion === 'pan-right' ? `${(activeClipProgress - 0.5) * 8}%` : '0%';
@@ -1108,8 +1180,8 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
                             <select value={selectedImage.transition ?? 'fade'} onChange={(event) => setImages((current) => current.map((clip) => clip.id === selectedImage.id ? { ...clip, transition: event.target.value as ReelImage['transition'] } : clip))} className="mt-1 w-full rounded-lg border border-neutral-700 bg-neutral-800 px-2 py-2 text-xs text-neutral-100"><option value="cut">Cut</option><option value="fade">Fade</option><option value="slide">Slide</option><option value="zoom">Zoom</option></select>
                         </label>
                         {selectedImage.type === 'image' && <label className="text-xs text-neutral-400">Photo motion
-                            <select value={selectedImage.motion ?? 'none'} onChange={(event) => setImages((current) => current.map((clip) => clip.id === selectedImage.id ? { ...clip, motion: event.target.value as ReelImage['motion'] } : clip))} className="mt-1 w-full rounded-lg border border-neutral-700 bg-neutral-800 px-2 py-2 text-xs text-neutral-100"><option value="none">Still</option><option value="zoom-in">Slow zoom in</option><option value="zoom-out">Slow zoom out</option><option value="pan-left">Slow pan left</option><option value="pan-right">Slow pan right</option></select>
-                        </label>}
+                            <select value={selectedImage.motion ?? 'none'} onChange={(event) => setImages((current) => current.map((clip) => clip.id === selectedImage.id ? { ...clip, motion: event.target.value as ReelImage['motion'] } : clip))} className="mt-1 w-full rounded-lg border border-neutral-700 bg-neutral-800 px-2 py-2 text-xs text-neutral-100"><option value="none">Still</option><option value="zoom-in">Slow zoom in</option><option value="zoom-out">Slow zoom out</option><option value="pan-left">Slow pan left</option><option value="pan-right">Slow pan right</option><option value="depth-dolly">3D Depth · dolly in</option><option value="depth-orbit">3D Depth · orbit</option><option value="depth-sway">3D Depth · sway</option></select>
+                        {isDepthMotion(selectedImage.motion) && <span className="mt-1 flex items-center gap-1.5 text-[10px] text-fuchsia-200">{!depthStatus[selectedImage.id] ? <><Loader2 className="h-3 w-3 animate-spin" /> Computing depth map on your device…</> : depthStatus[selectedImage.id] === 'failed' ? 'Depth unavailable on this device — using slow zoom instead.' : 'Depth map ready.'}</span>}</label>}
                     </div>}
                     <label className="block text-xs text-neutral-400">Gradient overlay
                         <select value={gradient} onChange={(event) => setGradient(event.target.value as GradientPreset)} className="mt-1.5 w-full rounded-lg border border-neutral-700 bg-neutral-800 px-3 py-2 text-sm text-neutral-100">{GRADIENTS.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select>
@@ -1195,7 +1267,8 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
                             const localTime = Math.max(0, (previewTimeRef.current - activeClipStartMs) / 1000);
                             video.currentTime = Math.min(localTime, Math.max(0, video.duration - 0.05));
                             if (isPreviewPlaying) video.play().catch(() => setError('This video clip could not play in the preview.'));
-                        }} className="h-full w-full object-cover" style={{ filter: filterStyle, ...photoMotionStyle }} /> : activeImage ? <img src={activeImage.url} alt={`${activeImage.type === 'image' ? 'Photo' : 'Video'} ${safePreviewIndex + 1} preview`} className="h-full w-full object-cover" style={{ filter: filterStyle, ...photoMotionStyle }} /> : <div className="flex h-full items-center justify-center text-center text-sm text-neutral-500"><span><ImagePlus className="mx-auto mb-3 h-8 w-8" />Add photos or videos to preview your reel</span></div>}
+                        }} className="h-full w-full object-cover" style={{ filter: filterStyle, ...photoMotionStyle }} /> : activeImage && activeDepth ? <DepthPreview clip={activeImage} depth={activeDepth} progress={activeClipProgress} aspectRatio={aspectRatio} filter={filterStyle} /> : activeImage ? <img src={activeImage.url} alt={`${activeImage.type === 'image' ? 'Photo' : 'Video'} ${safePreviewIndex + 1} preview`} className="h-full w-full object-cover" style={{ filter: filterStyle, ...photoMotionStyle }} /> : <div className="flex h-full items-center justify-center text-center text-sm text-neutral-500"><span><ImagePlus className="mx-auto mb-3 h-8 w-8" />Add photos or videos to preview your reel</span></div>}
+                        {activeDepthLoading && <div className="pointer-events-none absolute left-1/2 top-3 z-10 flex -translate-x-1/2 items-center gap-2 rounded-full bg-black/70 px-3 py-1.5 text-[11px] text-white"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Building 3D depth…</div>}
                         {activeImage && gradient !== 'none' && <div className="pointer-events-none absolute inset-0" style={{ backgroundImage: `${gradientColor}, ${gradientStyle}` }} />}
                         {activeImage?.overlayText && <div className={`pointer-events-none absolute left-1/2 w-[84%] -translate-x-1/2 px-3 py-2 text-center text-sm font-bold sm:text-xl ${activeImage.textPosition === 'top' ? 'top-[15%]' : activeImage.textPosition === 'center' ? 'top-1/2 -translate-y-1/2' : 'bottom-[15%]'} ${activeImage.textStyle === 'banner' ? 'rounded-lg bg-black/80 text-white' : activeImage.textStyle === 'highlight' ? 'rounded-lg bg-yellow-400/95 text-neutral-950' : activeImage.textStyle === 'outline' ? 'text-white [text-shadow:-1px_-1px_0_#000,1px_-1px_0_#000,-1px_1px_0_#000,1px_1px_0_#000]' : 'text-white [text-shadow:0_2px_7px_#000]'}`}>{activeImage.overlayText}</div>}
                         {activeImage && <div className="absolute bottom-3 right-3 rounded bg-black/60 px-2 py-1 text-[9px] font-semibold text-white/80">CLIPRAME · FREE</div>}

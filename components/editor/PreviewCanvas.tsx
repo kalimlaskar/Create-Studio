@@ -9,32 +9,44 @@ import { drawActiveCaption } from './captionRendering';
 import { drawFreeTierWatermark } from '@/components/freeTier';
 import { applyArtisticEffect } from '@/components/studio/artisticEffects';
 import { drawActiveOverlays } from './overlayRendering';
+import { getZoomScale } from './zoom';
+import { createTransitionRenderer, TransitionRenderer } from './transitionRenderer';
+import { drawTransitionFrame, TransitionSnapshots } from './transitions';
 
 interface PreviewCanvasProps {
     videoRef: RefObject<HTMLVideoElement | null>;
     project: EditorProject;
+    performanceMode: boolean;
 }
 
-function getZoomScale(zoomKeyframes: EditorProject['tracks']['zoom'], currentMs: number): number {
-    if (zoomKeyframes.length === 0) return 1;
-    if (currentMs <= zoomKeyframes[0].atMs) return zoomKeyframes[0].scale;
-    if (currentMs >= zoomKeyframes[zoomKeyframes.length - 1].atMs) {
-        return zoomKeyframes[zoomKeyframes.length - 1].scale;
-    }
-    for (let i = 0; i < zoomKeyframes.length - 1; i++) {
-        const a = zoomKeyframes[i];
-        const b = zoomKeyframes[i + 1];
-        if (currentMs >= a.atMs && currentMs <= b.atMs) {
-            const t = (currentMs - a.atMs) / (b.atMs - a.atMs);
-            return a.scale + (b.scale - a.scale) * t; // linear interpolation
-        }
-    }
-    return 1;
-}
-
-export function PreviewCanvas({ videoRef, project }: PreviewCanvasProps) {
+export function PreviewCanvas({ videoRef, project, performanceMode }: PreviewCanvasProps) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const [showOriginal, setShowOriginal] = useState(false);
+    const snapshotsRef = useRef<TransitionSnapshots | null>(null);
+    const rendererRef = useRef<TransitionRenderer | null>(null);
+    const hasTransitions = (project.videoEdit.transitions?.length ?? 0) > 0;
+
+    useEffect(() => {
+        if (!hasTransitions) return;
+        snapshotsRef.current = snapshotsRef.current ?? new TransitionSnapshots();
+        rendererRef.current = rendererRef.current ?? createTransitionRenderer();
+    }, [hasTransitions]);
+
+    useEffect(() => () => {
+        rendererRef.current?.dispose();
+        rendererRef.current = null;
+        snapshotsRef.current?.dispose();
+        snapshotsRef.current = null;
+    }, []);
+
+    // Capture the outgoing frame of every transition so the preview can play them live.
+    useEffect(() => {
+        const snapshots = snapshotsRef.current;
+        if (!hasTransitions || !snapshots) return;
+        const { width, height } = getRecordingDimensions(project.aspectRatio);
+        const timer = window.setTimeout(() => { snapshots.prepare(project, width, height); }, 250);
+        return () => window.clearTimeout(timer);
+    }, [hasTransitions, project]);
 
     useEffect(() => {
         const video = videoRef.current;
@@ -69,6 +81,10 @@ export function PreviewCanvas({ videoRef, project }: PreviewCanvasProps) {
 
                 ctx.restore(); // overlays drawn AFTER restore, so text stays fixed size/position, not zoomed
 
+                if (!showOriginal && snapshotsRef.current) {
+                    drawTransitionFrame(ctx, canvas, project, currentMs, snapshotsRef.current, rendererRef.current, performanceMode);
+                }
+
                 if (!showOriginal) drawActiveOverlays(ctx, project.tracks.overlays, currentMs, canvas.width, canvas.height);
                 if (!showOriginal) drawActiveCaption(ctx, project.tracks.captions, currentMs, project.captionStyle, canvas.width, canvas.height);
                 if (!showOriginal) applyArtisticEffect(canvas, project.cameraArtEffect);
@@ -79,7 +95,7 @@ export function PreviewCanvas({ videoRef, project }: PreviewCanvasProps) {
 
         drawFrame();
         return () => cancelAnimationFrame(animationFrameId);
-    }, [videoRef, project, showOriginal]);
+    }, [videoRef, project, showOriginal, performanceMode]);
 
     return (
         <div className="relative flex min-h-0 min-w-0 flex-1 items-center justify-center overflow-hidden rounded-2xl border border-neutral-800 bg-neutral-900 p-3 sm:p-4">

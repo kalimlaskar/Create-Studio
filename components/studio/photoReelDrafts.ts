@@ -16,7 +16,7 @@ export interface PhotoReelDraftClip {
     description?: string;
     textStyle: TextOverlayStyle;
     textPosition: 'top' | 'center' | 'bottom';
-    motion?: 'none' | 'zoom-in' | 'zoom-out' | 'pan-left' | 'pan-right';
+    motion?: 'none' | 'zoom-in' | 'zoom-out' | 'pan-left' | 'pan-right' | 'depth-dolly' | 'depth-orbit' | 'depth-sway';
     transition?: 'cut' | 'fade' | 'slide' | 'zoom';
 }
 

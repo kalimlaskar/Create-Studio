@@ -18,6 +18,9 @@ import { TranscriptionLanguage } from './CaptionsPanel';
 import { drawFreeTierWatermark, FREE_VIDEO_LIMIT_MS } from '@/components/freeTier';
 import { applyArtisticEffect } from '@/components/studio/artisticEffects';
 import { drawActiveOverlays } from './overlayRendering';
+import { getZoomScale } from './zoom';
+import { createTransitionRenderer, TransitionRenderer } from './transitionRenderer';
+import { drawTransitionFrame, getInitialPerformanceMode, storePerformanceMode, TransitionSnapshots } from './transitions';
 
 interface EditorShellProps {
     sourceVideoUrl: string;
@@ -30,21 +33,6 @@ interface EditorShellProps {
     onBack: () => void;
     initialProject?: EditorProject;
     onDraftSaved?: () => void;
-}
-
-function getZoomScale(zoomKeyframes: EditorProject['tracks']['zoom'], currentMs: number) {
-    if (zoomKeyframes.length === 0) return 1;
-    if (currentMs <= zoomKeyframes[0].atMs) return zoomKeyframes[0].scale;
-    if (currentMs >= zoomKeyframes[zoomKeyframes.length - 1].atMs) return zoomKeyframes[zoomKeyframes.length - 1].scale;
-    for (let index = 0; index < zoomKeyframes.length - 1; index++) {
-        const start = zoomKeyframes[index];
-        const end = zoomKeyframes[index + 1];
-        if (currentMs >= start.atMs && currentMs <= end.atMs) {
-            const progress = (currentMs - start.atMs) / (end.atMs - start.atMs);
-            return start.scale + (end.scale - start.scale) * progress;
-        }
-    }
-    return 1;
 }
 
 export function EditorShell({ sourceVideoUrl, aspectRatio, initialScript, initialScriptLanguage, creatorName, sourceDurationMs, initialCameraArtEffect, onBack, initialProject, onDraftSaved }: EditorShellProps) {
@@ -81,6 +69,7 @@ export function EditorShell({ sourceVideoUrl, aspectRatio, initialScript, initia
         beginVideoEdit,
         splitVideoAt,
         removeVideoSplit,
+        setTransitionAt,
         addCaption,
         updateCaption,
         updateCaptionStyle,
@@ -101,6 +90,18 @@ export function EditorShell({ sourceVideoUrl, aspectRatio, initialScript, initia
     const [isSavingDraft, setIsSavingDraft] = useState(false);
     const [showMoreOptions, setShowMoreOptions] = useState(false);
     const [draftSaved, setDraftSaved] = useState(false);
+    const [performanceMode, setPerformanceMode] = useState(getInitialPerformanceMode);
+
+    const handlePerformanceModeChange = (enabled: boolean) => {
+        setPerformanceMode(enabled);
+        storePerformanceMode(enabled);
+    };
+
+    const handlePreviewTransition = (atMs: number) => {
+        if (!project) return;
+        seekTo(Math.max(project.videoEdit.trimStartMs, atMs - 1000));
+        if (!isPlaying) togglePlay();
+    };
 
     const handleSaveDraft = async () => {
         if (!project || isSavingDraft) return;
@@ -148,6 +149,8 @@ export function EditorShell({ sourceVideoUrl, aspectRatio, initialScript, initia
         let canvasStream: MediaStream | null = null;
         let recorder: MediaRecorder | null = null;
         let animationFrameId = 0;
+        let transitionSnapshots: TransitionSnapshots | null = null;
+        let transitionRenderer: TransitionRenderer | null = null;
         exportCancelRef.current = false;
         setIsExporting(true);
         try {
@@ -160,6 +163,12 @@ export function EditorShell({ sourceVideoUrl, aspectRatio, initialScript, initia
             exportCanvas.height = outputDimensions.height;
             const ctx = exportCanvas.getContext('2d');
             if (!ctx) throw new Error('Could not create the export canvas.');
+
+            if (project.videoEdit.transitions?.length) {
+                transitionSnapshots = new TransitionSnapshots();
+                transitionRenderer = createTransitionRenderer();
+                await transitionSnapshots.prepare(project, exportCanvas.width, exportCanvas.height);
+            }
 
             canvasStream = exportCanvas.captureStream(RECORDING_FRAME_RATE);
             const mixedAudioStream = getMixedAudioStream();
@@ -237,6 +246,10 @@ export function EditorShell({ sourceVideoUrl, aspectRatio, initialScript, initia
                 ctx.filter = 'none';
                 ctx.restore();
 
+                if (transitionSnapshots) {
+                    drawTransitionFrame(ctx, exportCanvas, project, currentMs, transitionSnapshots, transitionRenderer, performanceMode);
+                }
+
                 drawActiveOverlays(ctx, project.tracks.overlays, currentMs, exportCanvas.width, exportCanvas.height, scale);
                 drawActiveCaption(ctx, project.tracks.captions, currentMs, project.captionStyle, exportCanvas.width, exportCanvas.height);
                 applyArtisticEffect(exportCanvas, project.cameraArtEffect);
@@ -280,6 +293,8 @@ export function EditorShell({ sourceVideoUrl, aspectRatio, initialScript, initia
             setExportStage('error');
         } finally {
             cancelAnimationFrame(animationFrameId);
+            transitionRenderer?.dispose();
+            transitionSnapshots?.dispose();
             if (recorder?.state === 'recording') recorder.stop();
             canvasStream?.getTracks().forEach((track) => track.stop());
             video.pause();
@@ -507,7 +522,7 @@ export function EditorShell({ sourceVideoUrl, aspectRatio, initialScript, initia
 
                 {project ? (
                     <div className={`flex min-h-0 flex-1 flex-col gap-3 overflow-hidden ${isExporting ? 'pointer-events-none opacity-70' : ''}`}>
-                        <PreviewCanvas videoRef={videoRef} project={project} />
+                        <PreviewCanvas videoRef={videoRef} project={project} performanceMode={performanceMode} />
                         <Timeline
                             durationMs={project.durationMs}
                             playheadMs={playheadMs}
@@ -519,6 +534,10 @@ export function EditorShell({ sourceVideoUrl, aspectRatio, initialScript, initia
                             onTrimStart={beginVideoEdit}
                             onSplit={() => splitVideoAt(playheadMs)}
                             onRemoveSplit={removeVideoSplit}
+                            onSetTransition={setTransitionAt}
+                            onPreviewTransition={handlePreviewTransition}
+                            performanceMode={performanceMode}
+                            onPerformanceModeChange={handlePerformanceModeChange}
                         />
                     </div>
                 ) : projectLoadError ? (

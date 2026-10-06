@@ -4,7 +4,8 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { EditorProject, OverlayClip, CaptionCue, CaptionStyle, BackgroundSegment, AudioTrackClip, ColorGradeSettings, createEmptyProject, SpeedSegment, EditorTabId, DEFAULT_COLOR_GRADE } from '@/types/editor';
 import { AspectRatioType, CameraArtEffect } from '@/types/studio';
 import { ScriptLanguage } from '@/types/studio';
-import { ZoomKeyframe } from '@/types/editor';
+import { ZoomKeyframe, ClipTransition, TransitionType } from '@/types/editor';
+import { clampTransitionMs, DEFAULT_TRANSITION_MS } from '@/components/editor/transitions';
 import { COMPOSITE_STYLE_PRESETS, getStyleZoomKeyframe } from '@/components/editor/stylePresets';
 
 function generateId() {
@@ -23,7 +24,7 @@ function getTabSnapshot(project: EditorProject, tab: EditorTabId): unknown {
         case 'speed': return project.tracks.speed.map((segment) => ({ ...segment }));
         case 'music': return project.tracks.audio.map((track) => ({ ...track }));
         case 'style': return { colorGrade: { ...project.colorGrade }, captionStyle: project.captionStyle, zoom: project.tracks.zoom.map((keyframe) => ({ ...keyframe })) };
-        case 'clip': return { ...project.videoEdit, splitPointsMs: [...project.videoEdit.splitPointsMs] };
+        case 'clip': return { ...project.videoEdit, splitPointsMs: [...project.videoEdit.splitPointsMs], transitions: (project.videoEdit.transitions ?? []).map((transition) => ({ ...transition })) };
         case 'coach': return null;
     }
 }
@@ -37,7 +38,7 @@ function isTabDirty(project: EditorProject, tab: EditorTabId): boolean {
         case 'speed': return project.tracks.speed.length > 0;
         case 'music': return project.tracks.audio.length > 0;
         case 'style': return isTabDirty(project, 'color') || isTabDirty(project, 'captions') || isTabDirty(project, 'zoom');
-        case 'clip': return project.videoEdit.trimStartMs > 0 || project.videoEdit.trimEndMs < project.durationMs || project.videoEdit.splitPointsMs.length > 0;
+        case 'clip': return project.videoEdit.trimStartMs > 0 || project.videoEdit.trimEndMs < project.durationMs || project.videoEdit.splitPointsMs.length > 0 || (project.videoEdit.transitions?.length ?? 0) > 0;
         case 'coach': return false;
     }
 }
@@ -111,7 +112,7 @@ export function useEditorProject(sourceVideoUrl: string, initialProject?: Editor
                 case 'speed': return { ...current, tracks: { ...current.tracks, speed: [] } };
                 case 'music': return { ...current, tracks: { ...current.tracks, audio: [] } };
                 case 'style': return { ...current, colorGrade: { ...DEFAULT_COLOR_GRADE }, captionStyle: 'classic', tracks: { ...current.tracks, zoom: [] } };
-                case 'clip': return { ...current, videoEdit: { trimStartMs: 0, trimEndMs: current.durationMs, splitPointsMs: [] } };
+                case 'clip': return { ...current, videoEdit: { trimStartMs: 0, trimEndMs: current.durationMs, splitPointsMs: [], transitions: [] } };
                 case 'coach': return current;
             }
         });
@@ -294,7 +295,10 @@ export function useEditorProject(sourceVideoUrl: string, initialProject?: Editor
                 trimStartMs,
                 trimEndMs,
                 splitPointsMs: (savedVideoEdit?.splitPointsMs ?? []).filter((point) => Number.isFinite(point) && point > trimStartMs && point < trimEndMs),
+                transitions: [] as ClipTransition[],
             };
+            videoEdit.transitions = (savedVideoEdit?.transitions ?? []).filter((transition) => videoEdit.splitPointsMs.includes(transition.atMs) && ['particles', 'portal', 'warp'].includes(transition.type) && Number.isFinite(transition.durationMs))
+                .map((transition) => ({ ...transition, durationMs: clampTransitionMs(transition.durationMs) }));
             const restored = initialProject
                 ? { ...initialProject, title: initialProject.title ?? 'Untitled creator project', teleprompterScript: initialProject.teleprompterScript ?? initialScript, scriptLanguage: initialProject.scriptLanguage ?? initialScriptLanguage, cameraArtEffect: initialProject.cameraArtEffect ?? initialCameraArtEffect, durationMs, aspectRatio: initialProject.aspectRatio ?? aspectRatio, captionStyle: initialProject.captionStyle ?? 'classic', videoEdit, sourceVideoUrl, tracks: { ...initialProject.tracks, captions: initialProject.tracks.captions ?? [], speed: initialProject.tracks.speed ?? [] } }
                 : createEmptyProject(sourceVideoUrl, durationMs, aspectRatio, initialScript, initialScriptLanguage, initialCameraArtEffect);
@@ -459,7 +463,25 @@ export function useEditorProject(sourceVideoUrl: string, initialProject?: Editor
     const removeVideoSplit = useCallback((atMs: number) => {
         if (!project || !project.videoEdit.splitPointsMs.includes(atMs)) return;
         beginVideoEdit();
-        updateVideoEdit({ splitPointsMs: project.videoEdit.splitPointsMs.filter((point) => point !== atMs) });
+        updateVideoEdit({
+            splitPointsMs: project.videoEdit.splitPointsMs.filter((point) => point !== atMs),
+            transitions: (project.videoEdit.transitions ?? []).filter((transition) => transition.atMs !== atMs),
+        });
+    }, [project, beginVideoEdit, updateVideoEdit]);
+
+    /** Sets, changes or (with type null) clears the transition that starts at a split point. */
+    const setTransitionAt = useCallback((atMs: number, type: TransitionType | null, durationMs?: number) => {
+        if (!project || !project.videoEdit.splitPointsMs.includes(atMs)) return;
+        const existing = project.videoEdit.transitions ?? [];
+        const current = existing.find((transition) => transition.atMs === atMs);
+        const others = existing.filter((transition) => transition.atMs !== atMs);
+        beginVideoEdit();
+        if (type === null) {
+            updateVideoEdit({ transitions: others });
+            return;
+        }
+        const next: ClipTransition = { atMs, type, durationMs: clampTransitionMs(durationMs ?? current?.durationMs ?? DEFAULT_TRANSITION_MS) };
+        updateVideoEdit({ transitions: [...others, next].sort((a, b) => a.atMs - b.atMs) });
     }, [project, beginVideoEdit, updateVideoEdit]);
 
     const toggleSourceAudio = useCallback(() => {
@@ -673,6 +695,7 @@ export function useEditorProject(sourceVideoUrl: string, initialProject?: Editor
         beginVideoEdit,
         splitVideoAt,
         removeVideoSplit,
+        setTransitionAt,
         undoCounts,
         undoTab,
         resetTab,

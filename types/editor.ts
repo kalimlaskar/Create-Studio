@@ -29,10 +29,19 @@ export interface CaptionCue extends BaseClip {
 export type CaptionStyle = 'classic' | 'bold' | 'minimal';
 export type EditorTabId = 'color' | 'text' | 'captions' | 'zoom' | 'speed' | 'music' | 'style' | 'clip' | 'coach';
 
+export type TransitionType = 'particles' | 'portal' | 'warp';
+
+export interface ClipTransition {
+    atMs: number;       // the split point the transition starts at
+    type: TransitionType;
+    durationMs: number; // 500-2000
+}
+
 export interface VideoEditState {
     trimStartMs: number;
     trimEndMs: number;
     splitPointsMs: number[];
+    transitions?: ClipTransition[];
 }
 
 export type BackgroundKind = 'none' | 'color' | 'gradient' | 'image';
