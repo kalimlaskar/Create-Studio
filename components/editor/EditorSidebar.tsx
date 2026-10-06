@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { ArrowLeft, RotateCcw, Undo2 } from 'lucide-react';
+import { ArrowLeft, RotateCcw, Undo2, Sparkles, Palette, Type, Captions, Scissors, Mic, ZoomIn, Gauge, Music } from 'lucide-react';
 import { EditorProject, OverlayClip, ColorGradeSettings, AudioTrackClip, ZoomKeyframe, SpeedSegment, CaptionCue, CaptionStyle, EditorTabId, DEFAULT_COLOR_GRADE } from '@/types/editor';
 import { ColorGradePanel } from './ColorGradePanel';
 import { TextOverlayPanel } from './TextOverlayPanel';
@@ -56,6 +56,7 @@ export function EditorSidebar({
     onSeek, isTranscribing, transcriptionProgress, transcriptionError,
 }: EditorSidebarProps) {
     const [tab, setTab] = useState<Tab>('color');
+    const [panelOpen, setPanelOpen] = useState(false);
     const activeTabIsDirty = tab === 'coach' ? false : tab === 'color'
         ? Object.keys(DEFAULT_COLOR_GRADE).some((key) => project.colorGrade[key as keyof ColorGradeSettings] !== DEFAULT_COLOR_GRADE[key as keyof ColorGradeSettings])
         : tab === 'text' ? project.tracks.overlays.length > 0
@@ -67,25 +68,26 @@ export function EditorSidebar({
                                 : project.videoEdit.trimStartMs > 0 || project.videoEdit.trimEndMs < project.durationMs || project.videoEdit.splitPointsMs.length > 0;
 
     return (
-        <aside className="max-h-[38dvh] w-full shrink-0 border-b border-neutral-800 bg-neutral-900 p-3 flex flex-col overflow-y-auto md:max-h-full md:w-72 md:border-b-0 md:border-r md:p-4">
+        <aside className="order-2 flex w-full shrink-0 flex-col border-t border-neutral-800 bg-neutral-900 pb-[env(safe-area-inset-bottom)] md:order-1 md:h-full md:w-72 md:overflow-y-auto md:border-r md:border-t-0 md:p-4 md:pb-4">
             <button
                 onClick={onBack}
-                className="flex items-center gap-2 text-sm text-neutral-400 hover:text-neutral-100 mb-4 transition-colors">
+                className="mb-4 hidden items-center gap-2 text-sm text-neutral-400 transition-colors hover:text-neutral-100 md:flex">
                 <ArrowLeft className="w-4 h-4" /> Back to Recording
             </button>
 
-            <div className="mb-5 grid grid-cols-4 gap-1 rounded-lg bg-neutral-800/50 p-1">
-                {([['style', 'Styles'], ['color', 'Color'], ['text', 'Text + Hook'], ['captions', 'Captions'], ['clip', 'Clip'], ['coach', 'Coach'], ['zoom', 'Zoom'], ['speed', 'Speed'], ['music', 'Music']] as const).map(([key, label]) => (
+            <div className="flex gap-1 overflow-x-auto p-2 [scrollbar-width:none] md:mb-5 md:grid md:grid-cols-3 md:overflow-visible md:rounded-lg md:bg-neutral-800/50 md:p-1">
+                {([['style', 'Styles', Sparkles], ['color', 'Color', Palette], ['text', 'Text', Type], ['captions', 'Captions', Captions], ['clip', 'Trim', Scissors], ['coach', 'Coach', Mic], ['zoom', 'Zoom', ZoomIn], ['speed', 'Speed', Gauge], ['music', 'Music', Music]] as const).map(([key, label, Icon]) => (
                     <button
                         key={key}
-                        onClick={() => setTab(key)}
-                        className={`flex-1 text-xs py-2 rounded-md font-medium transition-colors ${tab === key ? 'bg-indigo-600 text-white' : 'text-neutral-400 hover:text-neutral-200'
+                        onClick={() => { if (tab === key && panelOpen) setPanelOpen(false); else { setTab(key); setPanelOpen(true); } }}
+                        className={`shrink-0 whitespace-nowrap rounded-full px-4 py-2.5 text-xs font-medium transition-colors md:flex-1 md:rounded-md md:px-0 md:py-2.5 ${tab === key && (panelOpen || false) ? 'bg-indigo-600 text-white' : tab === key ? 'bg-neutral-800 text-white md:bg-indigo-600' : 'text-neutral-400 hover:text-neutral-200'
                             }`}>
-                        {label}
+                        <span className="flex items-center justify-center gap-1.5 md:flex-col md:gap-1"><Icon className="h-4 w-4" />{label}</span>
                     </button>
                 ))}
             </div>
 
+            <div className={`${panelOpen ? 'flex' : 'hidden'} max-h-[42dvh] flex-col overflow-y-auto overscroll-contain border-t border-neutral-800 p-3 md:block md:max-h-none md:overflow-visible md:border-0 md:p-0`}>
             <div className="mb-4 flex items-center justify-between gap-2">
                 <span className="text-xs font-semibold capitalize text-neutral-300">{tab === 'text' ? 'Text + Hook builder' : tab === 'style' ? 'One-click style' : tab === 'clip' ? 'Video clip' : tab === 'coach' ? 'Delivery coach' : tab}</span>
                 <div className="flex items-center gap-1.5">
@@ -186,6 +188,7 @@ export function EditorSidebar({
                     onRemove={onRemoveSpeedSegment}
                 />
             )}
+            </div>
         </aside>
     );
 }

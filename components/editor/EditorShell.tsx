@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useRef, useState } from 'react';
-import { Download, ArrowLeft, Loader2, Volume2, VolumeX, Bookmark } from 'lucide-react';
+import { Download, ArrowLeft, Loader2, Volume2, VolumeX, Bookmark, MoreHorizontal } from 'lucide-react';
 import { useEditorProject } from '@/hooks/useEditorProject';
 import { PreviewCanvas } from './PreviewCanvas';
 import { Timeline } from './Timeline';
@@ -99,6 +99,7 @@ export function EditorShell({ sourceVideoUrl, aspectRatio, initialScript, initia
     const [transcriptionError, setTranscriptionError] = useState<string | null>(null);
     const exportCancelRef = useRef(false);
     const [isSavingDraft, setIsSavingDraft] = useState(false);
+    const [showMoreOptions, setShowMoreOptions] = useState(false);
     const [draftSaved, setDraftSaved] = useState(false);
 
     const handleSaveDraft = async () => {
@@ -352,7 +353,7 @@ export function EditorShell({ sourceVideoUrl, aspectRatio, initialScript, initia
     };
 
     return (
-        <div className="flex min-h-dvh flex-col bg-neutral-950 text-neutral-100 font-sans md:h-dvh md:flex-row md:overflow-hidden">
+        <div className="flex h-dvh flex-col overflow-hidden bg-neutral-950 font-sans text-neutral-100 md:flex-row">
             {project ? (
                 <EditorSidebar
                     project={project}
@@ -387,36 +388,41 @@ export function EditorShell({ sourceVideoUrl, aspectRatio, initialScript, initia
                     transcriptionError={transcriptionError}
                 />
             ) : (
-                <aside className="max-h-[38dvh] w-full shrink-0 border-b border-neutral-800 bg-neutral-900 p-4 flex flex-col justify-between overflow-y-auto md:max-h-full md:w-72 md:border-b-0 md:border-r">
+                <aside className="hidden w-full shrink-0 border-neutral-800 bg-neutral-900 p-4 md:flex md:w-72 md:flex-col md:border-r">
                     <h2 className="text-lg font-bold">Edit Studio</h2>
                 </aside>
             )}
 
-            <div className="relative flex min-h-[65dvh] min-w-0 flex-1 flex-col overflow-hidden p-3 sm:p-4 lg:p-5 md:min-h-0">
+            <div className="relative order-1 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden p-2 sm:p-4 md:order-2 lg:p-5">
                 {/* Top Header Actions Bar */}
-                <div className="mb-3 flex flex-wrap items-center justify-between gap-3 border-b border-neutral-800/80 pb-3">
-                    <div className="flex items-center gap-4">
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-2 border-b border-neutral-800/80 pb-2 md:mb-3 md:gap-3 md:pb-3">
+                    <div className="flex min-w-0 items-center gap-2 md:gap-4">
                         <button
                             onClick={onBack}
                             disabled={isExporting}
                             className="flex items-center gap-2 text-xs font-semibold text-neutral-400 transition-colors hover:text-white disabled:opacity-50">
-                            <ArrowLeft className="h-4 w-4" /> Back to Studio
+                            <ArrowLeft className="h-5 w-5 md:h-4 md:w-4" /> <span className="hidden md:inline">Back to Studio</span>
                         </button>
                         <div className="min-w-0 border-l border-neutral-800 pl-3 sm:pl-4">
                             <input value={project?.title ?? 'Video editor'} onChange={(event) => renameProject(event.target.value)} aria-label="Project name" maxLength={80}
-                                className="w-32 max-w-[28vw] truncate border-b border-transparent bg-transparent text-sm font-semibold text-neutral-100 hover:border-neutral-700 focus:border-indigo-500 focus:outline-none sm:w-48" />
+                                className="w-36 max-w-[38vw] truncate border-b border-transparent bg-transparent text-sm font-semibold text-neutral-100 hover:border-neutral-700 focus:border-indigo-500 focus:outline-none sm:w-48" />
                             <p className="text-[11px] text-neutral-500">{project?.aspectRatio ?? aspectRatio} frame</p>
                         </div>
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex items-center gap-2 md:hidden">
+                        <button type="button" onClick={() => setShowMoreOptions((open) => !open)} aria-expanded={showMoreOptions} aria-label="More options" className="flex h-10 w-10 items-center justify-center rounded-lg border border-neutral-700 text-neutral-200"><MoreHorizontal className="h-5 w-5" /></button>
+                        <button onClick={handleDownload} disabled={isExporting || !project} className="flex h-10 items-center gap-1.5 rounded-lg bg-indigo-600 px-4 text-xs font-semibold text-white disabled:bg-indigo-600/50">{isExporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}{isExporting ? 'Exporting…' : 'Export'}</button>
+                    </div>
+
+                    <div className={`${showMoreOptions ? 'grid grid-cols-2' : 'hidden'} w-full gap-2 md:flex md:w-auto md:flex-wrap md:items-center`}>
                         <label className="sr-only" htmlFor="editor-art-effect">Cartoon filter</label>
                         <select
                             id="editor-art-effect"
                             value={project?.cameraArtEffect === 'avatar' ? 'none' : project?.cameraArtEffect ?? 'none'}
                             onChange={(event) => updateCameraArtEffect(event.target.value as CameraArtEffect)}
                             disabled={isExporting || !project}
-                            className="max-w-32 rounded-lg border border-neutral-700 bg-neutral-900 px-2 py-2 text-xs text-neutral-200 focus:border-indigo-500 focus:outline-none disabled:opacity-50"
+                            className="w-full rounded-lg border md:w-auto md:max-w-32 border-neutral-700 bg-neutral-900 px-2 py-2 text-xs text-neutral-200 focus:border-indigo-500 focus:outline-none disabled:opacity-50"
                             title="On-device cartoon and sketch effects">
                             <option value="none">Original</option>
                             <option value="comic">Comic</option>
@@ -466,7 +472,7 @@ export function EditorShell({ sourceVideoUrl, aspectRatio, initialScript, initia
                         <button
                             onClick={handleDownload}
                             disabled={isExporting || !project}
-                            className="flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-semibold text-white shadow-lg shadow-indigo-600/20 transition-colors hover:bg-indigo-500 disabled:bg-indigo-600/50">
+                            className="hidden items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-semibold text-white shadow-lg shadow-indigo-600/20 transition-colors hover:bg-indigo-500 disabled:bg-indigo-600/50 md:flex">
                             {isExporting ? (
                                 <>
                                     <Loader2 className="h-4 w-4 animate-spin" />
