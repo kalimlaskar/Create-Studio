@@ -7,6 +7,7 @@ import { TeleprompterOverlay } from './TeleprompterOverlay';
 import { getFrameCrop, getRecordingDimensions, RECORDING_FRAME_RATE } from '@/components/recordingQuality';
 import { drawFreeTierWatermark } from '@/components/freeTier';
 import { createHologramRenderer, HologramRenderer } from './hologramRenderer';
+import { AirDrawingEngine, AirDrawingOptions } from './airDrawing';
 import { applyArtisticEffect, CameraArtEffect, drawPhotoAvatar, drawTrackedAvatar, FaceLandmarkPoint } from './artisticEffects';
 
 interface VideoCanvasProps {
@@ -250,6 +251,8 @@ export function VideoCanvas({
     const personCanvasRef = useRef<HTMLCanvasElement | null>(null);
     const hologramPersonRef = useRef<HTMLCanvasElement | null>(null);
     const hologramRendererRef = useRef<HologramRenderer | null>(null);
+    const airDrawingRef = useRef<AirDrawingEngine | null>(null);
+    const airLayerRef = useRef<HTMLCanvasElement | null>(null);
 
     const getBuffer = (ref: React.MutableRefObject<HTMLCanvasElement | null>, width: number, height: number) => {
         if (!ref.current) ref.current = document.createElement('canvas');
@@ -422,7 +425,49 @@ export function VideoCanvas({
         };
     }, [settings.cameraArtEffect]);
 
+    // Hand tracking only exists while Air Drawing is on; turning it off drops the strokes.
+    useEffect(() => {
+        if (!settings.airDrawingEnabled) return;
+        const engine = new AirDrawingEngine();
+        airDrawingRef.current = engine;
+        engine.load().catch((error) => console.error('Hand Landmarker could not be initialized:', error));
+        return () => {
+            if (airDrawingRef.current === engine) airDrawingRef.current = null;
+            engine.dispose();
+        };
+    }, [settings.airDrawingEnabled]);
+
     /* ------------------------------ rendering ------------------------------ */
+
+    const getAirOptions = (): AirDrawingOptions => {
+        const s = settingsRef.current;
+        return {
+            color: s.airDrawingColor,
+            size: s.airDrawingSize,
+            glow: s.airDrawingGlow,
+            fade: s.airDrawingFade,
+            performanceMode: s.airDrawingPerformanceMode,
+        };
+    };
+
+    const drawAirStrokes = (ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement) => {
+        const engine = airDrawingRef.current;
+        if (!engine || !settingsRef.current.airDrawingEnabled) return;
+        const layer = getBuffer(airLayerRef, canvas.width, canvas.height);
+        engine.render(ctx, layer, performance.now(), getAirOptions(), !isRecordingRef.current);
+    };
+
+    const updateAirDrawing = (video: HTMLVideoElement) => {
+        const engine = airDrawingRef.current;
+        const current = settingsRef.current;
+        if (!engine || !current.airDrawingEnabled || video.videoWidth === 0) return;
+        engine.update(video, performance.now(), getAirOptions(), {
+            videoWidth: video.videoWidth,
+            videoHeight: video.videoHeight,
+            crop: getFrameCrop(video.videoWidth, video.videoHeight, current.aspectRatio),
+            mirror: current.cameraFacing !== 'environment',
+        });
+    };
 
     const buildSmoothedMaskCanvas = (confidenceMask: Float32Array, width: number, height: number) => {
         const prev = prevMaskRef.current;
@@ -460,6 +505,7 @@ export function VideoCanvas({
         if (withEffect) {
             applyArtisticEffect(canvas, settingsRef.current.cameraArtEffect as CameraArtEffect);
         }
+        drawAirStrokes(ctx, canvas);
         if (isRecordingRef.current) drawFreeTierWatermark(ctx, canvas.width, canvas.height);
     };
 
@@ -647,6 +693,7 @@ export function VideoCanvas({
             }
 
             if (video.readyState < video.HAVE_CURRENT_DATA) return;
+            updateAirDrawing(video);
 
             if (current.cameraArtEffect === 'photo-avatar') {
                 const context = canvas.getContext('2d');
@@ -661,12 +708,14 @@ export function VideoCanvas({
                     current.cameraAvatarMouthY,
                     current.cameraAvatarMouthWidth
                 );
+                drawAirStrokes(context, canvas);
                 if (isRecordingRef.current) drawFreeTierWatermark(context, canvas.width, canvas.height);
             } else if (current.cameraArtEffect === 'avatar') {
                 const landmarks = faceLandmarkerRef.current?.detectForVideo(video, performance.now()).faceLandmarks?.[0];
                 const context = canvas.getContext('2d');
                 if (!context) return;
                 drawTrackedAvatar(context, canvas.width, canvas.height, landmarks);
+                drawAirStrokes(context, canvas);
                 if (isRecordingRef.current) drawFreeTierWatermark(context, canvas.width, canvas.height);
             } else if (segmenterRef.current) {
                 renderFrame(segmenterRef.current.segmentForVideo(video, performance.now()));

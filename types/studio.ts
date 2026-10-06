@@ -24,6 +24,12 @@ export interface StudioSettings {
     cameraAvatarMouthX: number;
     cameraAvatarMouthY: number;
     cameraAvatarMouthWidth: number;
+    airDrawingEnabled: boolean;
+    airDrawingColor: string;
+    airDrawingSize: number; // 2-30
+    airDrawingGlow: number; // 0-100
+    airDrawingFade: boolean; // strokes vanish after 3s
+    airDrawingPerformanceMode: boolean; // lower hand-detection frame rate
     scriptText: string;
     scriptLanguage: ScriptLanguage;
     backgroundMode: BackgroundModeType;

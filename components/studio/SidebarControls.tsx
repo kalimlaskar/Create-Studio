@@ -348,6 +348,52 @@ export function SidebarControls({ settings, onUpdateSettings, onCameraArtEffectC
                     )}
                 </div>
 
+                <div className="mt-6 space-y-3 rounded-xl border border-neutral-800 bg-neutral-950/50 p-3">
+                    <div className="flex items-center justify-between gap-3">
+                        <div>
+                            <p className="text-xs font-semibold uppercase tracking-wider text-neutral-400">Air Drawing</p>
+                            <p className="text-[10px] text-neutral-500">Draw with your index finger</p>
+                        </div>
+                        <button
+                            type="button"
+                            role="switch"
+                            aria-checked={settings.airDrawingEnabled}
+                            aria-label="Air drawing"
+                            onClick={() => onUpdateSettings({ airDrawingEnabled: !settings.airDrawingEnabled })}
+                            className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${settings.airDrawingEnabled ? 'bg-fuchsia-500' : 'bg-neutral-700'}`}>
+                            <span className={`absolute top-1 h-5 w-5 rounded-full bg-white transition-all ${settings.airDrawingEnabled ? 'left-6' : 'left-1'}`} />
+                        </button>
+                    </div>
+                    {settings.airDrawingEnabled && (
+                        <>
+                            <div className="flex items-center justify-between text-[11px] text-neutral-300">
+                                <label htmlFor="air-color">Color</label>
+                                <input id="air-color" type="color" value={settings.airDrawingColor} onChange={(event) => onUpdateSettings({ airDrawingColor: event.target.value })} className="h-7 w-12 cursor-pointer rounded border border-neutral-700 bg-transparent" />
+                            </div>
+                            <div>
+                                <div className="flex justify-between text-[10px] text-neutral-400"><label htmlFor="air-size">Brush size</label><span>{settings.airDrawingSize}</span></div>
+                                <input id="air-size" type="range" min="2" max="30" value={settings.airDrawingSize} onChange={(event) => onUpdateSettings({ airDrawingSize: Number(event.target.value) })} className="w-full accent-fuchsia-400" />
+                            </div>
+                            <div>
+                                <div className="flex justify-between text-[10px] text-neutral-400"><label htmlFor="air-glow">Glow</label><span>{settings.airDrawingGlow}%</span></div>
+                                <input id="air-glow" type="range" min="0" max="100" value={settings.airDrawingGlow} onChange={(event) => onUpdateSettings({ airDrawingGlow: Number(event.target.value) })} className="w-full accent-fuchsia-400" />
+                            </div>
+                            {([
+                                ['airDrawingFade', 'Fade out after 3s', settings.airDrawingFade],
+                                ['airDrawingPerformanceMode', 'Performance mode (slower detection)', settings.airDrawingPerformanceMode],
+                            ] as const).map(([key, label, value]) => (
+                                <label key={key} className="flex items-center justify-between gap-3 text-[11px] text-neutral-300">
+                                    {label}
+                                    <input type="checkbox" checked={value} onChange={(event) => onUpdateSettings({ [key]: event.target.checked })} className="h-4 w-4 accent-fuchsia-500" />
+                                </label>
+                            ))}
+                            <p className="text-[10px] leading-relaxed text-neutral-500">
+                                ☝️ Point to draw · 🤏 Pinch to pause · 🖐 Hold open palm 1s to clear · ✊ Fist to undo. Strokes are included in recordings and exports.
+                            </p>
+                        </>
+                    )}
+                </div>
+
                 {/* Teleprompter Module */}
                 <Teleprompter
                     scriptText={settings.scriptText}
