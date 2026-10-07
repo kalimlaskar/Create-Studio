@@ -96,6 +96,46 @@ export function SidebarControls({ settings, onUpdateSettings, onCameraArtEffectC
                     </div>
                 </div>
 
+                {/* Screen share frame (applies only while a screen is being shared) */}
+                <div className="mb-6 space-y-2">
+                    <label htmlFor="screen-frame-style" className="text-xs font-semibold text-neutral-400 uppercase tracking-wider block">Screen share frame</label>
+                    <select
+                        id="screen-frame-style"
+                        value={settings.screenFrameStyle}
+                        onChange={(e) => onUpdateSettings({ screenFrameStyle: e.target.value as StudioSettings['screenFrameStyle'] })}
+                        className="w-full bg-neutral-800 border border-neutral-700 text-xs rounded-lg p-2 text-neutral-200 focus:outline-none focus:border-indigo-500">
+                        <option value="browser">Browser window</option>
+                        <option value="macos">macOS window</option>
+                        <option value="minimal">Minimal card</option>
+                        <option value="off">No frame</option>
+                    </select>
+                    {settings.screenFrameStyle !== 'off' && (
+                        <>
+                            <select
+                                aria-label="Frame background"
+                                value={settings.screenFrameBackground}
+                                onChange={(e) => onUpdateSettings({ screenFrameBackground: e.target.value as StudioSettings['screenFrameBackground'] })}
+                                className="w-full bg-neutral-800 border border-neutral-700 text-xs rounded-lg p-2 text-neutral-200 focus:outline-none focus:border-indigo-500">
+                                <option value="aurora">Aurora</option>
+                                <option value="sunset">Sunset</option>
+                                <option value="midnight">Midnight</option>
+                                <option value="paper">Paper (light)</option>
+                            </select>
+                            {settings.screenFrameStyle === 'browser' && (
+                                <input
+                                    value={settings.screenFrameLabel}
+                                    maxLength={40}
+                                    aria-label="Address bar text"
+                                    placeholder="Address bar text, e.g. yourproduct.com"
+                                    onChange={(e) => onUpdateSettings({ screenFrameLabel: e.target.value })}
+                                    className="w-full bg-neutral-800 border border-neutral-700 text-xs rounded-lg p-2 text-neutral-200 placeholder:text-neutral-600 focus:outline-none focus:border-indigo-500"
+                                />
+                            )}
+                        </>
+                    )}
+                    <p className="text-[10px] leading-relaxed text-neutral-500">Shows the shared screen inside a styled window. Before you share, the studio looks normal.</p>
+                </div>
+
                 {/* Background Removal / Effects Module */}
                 <div className="mb-6 space-y-2">
                     <label className="text-xs font-semibold text-neutral-400 uppercase tracking-wider block">Background Effect</label>

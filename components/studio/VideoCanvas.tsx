@@ -11,6 +11,7 @@ import { AirDrawingEngine, AirDrawingOptions, AnnotationSpace, getScreenRect, Ta
 import { getHandwritingService } from './handwriting';
 import { annotationTimeline } from './annotationTimeline';
 import { applyArtisticEffect, CameraArtEffect, drawPhotoAvatar, drawTrackedAvatar, FaceLandmarkPoint } from './artisticEffects';
+import { computeScreenFrameLayout, drawScreenFrame, getFrameProgress, ScreenFrameOptions } from './screenFrame';
 
 interface VideoCanvasProps {
     videoRef: RefObject<HTMLVideoElement | null>;
@@ -119,14 +120,19 @@ function getMaskCropRect(
     };
 }
 
-/** Screen share fitted into the frame, with a floating camera card (captured into the canvas, not a DOM overlay). */
+/**
+ * Screen share fitted into the frame, with a floating camera card (captured into the canvas, not a DOM overlay).
+ * When `frame` is provided and its style is not 'off', the screen is drawn inside a styled window
+ * on a gradient background instead of a plain letterboxed rectangle.
+ */
 function drawScreenShareFrame(
     ctx: CanvasRenderingContext2D,
     canvas: HTMLCanvasElement,
     screen: HTMLVideoElement,
     camera: HTMLVideoElement,
     cameraFilter: string,
-    mirror = true
+    mirror = true,
+    frame?: ScreenFrameOptions
 ) {
     const { width, height } = canvas;
 
@@ -135,10 +141,22 @@ function drawScreenShareFrame(
     ctx.fillStyle = '#080a12';
     ctx.fillRect(0, 0, width, height);
 
-    const scale = Math.min(width / screen.videoWidth, height / screen.videoHeight);
-    const sw = screen.videoWidth * scale;
-    const sh = screen.videoHeight * scale;
-    ctx.drawImage(screen, (width - sw) / 2, (height - sh) / 2, sw, sh);
+    let framed: ReturnType<typeof drawScreenFrame> = null;
+    if (frame && frame.style !== 'off') {
+        try {
+            framed = drawScreenFrame(ctx, screen, screen.videoWidth, screen.videoHeight, width, height, frame);
+        } catch (error) {
+            // Never let a styling problem blank the recording: fall back to the plain screen layout.
+            console.error('Screen frame failed, drawing the plain layout instead:', error);
+        }
+    }
+
+    if (!framed) {
+        const scale = Math.min(width / screen.videoWidth, height / screen.videoHeight);
+        const sw = screen.videoWidth * scale;
+        const sh = screen.videoHeight * scale;
+        ctx.drawImage(screen, (width - sw) / 2, (height - sh) / 2, sw, sh);
+    }
 
     if (camera.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && camera.videoWidth > 0) {
         const cardWidth = Math.round(width * 0.25);
@@ -248,6 +266,8 @@ export function VideoCanvas({
     const avatarImageRef = useRef<HTMLImageElement | null>(null);
     const settingsRef = useRef(settings);
     const isRecordingRef = useRef(isRecording);
+    // Time (performance.now) at which the framed screen layout first rendered; drives the entry animation.
+    const screenFrameStartRef = useRef<number | null>(null);
 
     // Reused offscreen buffers (avoid allocating canvases every frame)
     const prevMaskRef = useRef<Float32Array | null>(null);
@@ -320,6 +340,8 @@ export function VideoCanvas({
 
     useEffect(() => {
         screenShareStreamRef.current = screenShareStream;
+        // A new share (or stopping one) restarts the frame's entry animation.
+        screenFrameStartRef.current = null;
         const screenVideo = screenVideoRef.current;
         if (!screenVideo) return;
         if (!screenShareStream) {
@@ -487,9 +509,15 @@ export function VideoCanvas({
 
     // Screen-share annotations are normalised to the shared screen's rectangle so they stay
     // pinned to the screen content; camera annotations use the whole frame.
+    // When the screen is drawn inside a styled window, that rectangle is the window's content area.
     const getAirSpace = (canvas: HTMLCanvasElement): { space: AnnotationSpace; rect: TargetRect } => {
         const screen = screenVideoRef.current;
         if (isScreenFrameReady() && screen) {
+            const frameStyle = settingsRef.current.screenFrameStyle ?? 'browser';
+            if (frameStyle !== 'off') {
+                const content = computeScreenFrameLayout(canvas.width, canvas.height, screen.videoWidth, screen.videoHeight, frameStyle).content;
+                return { space: 'screen', rect: { x: content.x, y: content.y, width: content.w, height: content.h } };
+            }
             return { space: 'screen', rect: getScreenRect(canvas.width, canvas.height, screen.videoWidth, screen.videoHeight) };
         }
         return { space: 'camera', rect: { x: 0, y: 0, width: canvas.width, height: canvas.height } };
@@ -604,9 +632,15 @@ export function VideoCanvas({
         }
         const { width, height } = canvas;
 
-        // 1) Screen share layout
+        // 1) Screen share layout (screen inside a styled window frame, camera card on top)
         if (isScreenFrameReady()) {
-            drawScreenShareFrame(ctx, canvas, screenVideoRef.current!, video, filter, mirror);
+            if (screenFrameStartRef.current === null) screenFrameStartRef.current = clockMs();
+            drawScreenShareFrame(ctx, canvas, screenVideoRef.current!, video, filter, mirror, {
+                style: current.screenFrameStyle ?? 'browser',
+                background: current.screenFrameBackground ?? 'aurora',
+                label: current.screenFrameLabel || 'Screen share',
+                progress: getFrameProgress(clockMs(), screenFrameStartRef.current),
+            });
             finishFrame(ctx, canvas, false);
             return;
         }

@@ -13,6 +13,9 @@ export type HologramColor = 'cyan' | 'purple' | 'green';
 
 export type CameraFacing = 'user' | 'environment';
 
+export type ScreenFrameStyle = 'browser' | 'macos' | 'minimal' | 'off';
+export type ScreenFrameBackground = 'aurora' | 'sunset' | 'midnight' | 'paper';
+
 export interface StudioSettings {
     cameraFacing: CameraFacing;
     aspectRatio: AspectRatioType;
@@ -39,6 +42,9 @@ export interface StudioSettings {
     airWriteLanguage: AirWritingLanguage;
     airWriteFont: AirWritingFont;
     airWriteColor: string;
+    screenFrameStyle: ScreenFrameStyle; // styled window around a shared screen
+    screenFrameBackground: ScreenFrameBackground;
+    screenFrameLabel: string; // text in the browser-style address pill
     scriptText: string;
     scriptLanguage: ScriptLanguage;
     backgroundMode: BackgroundModeType;
