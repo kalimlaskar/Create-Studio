@@ -131,10 +131,30 @@ export async function signUpAction(_state: AuthFormState, formData: FormData): P
     return { message: 'Check your inbox for a confirmation link. After confirming your email, you can sign in.' };
 }
 
-export async function updateProfileAction(displayName: string): Promise<{ error?: string }> {
+export async function checkUsernameAvailabilityAction(username: string): Promise<{ available?: boolean; error?: string }> {
+    const safeUsername = username.trim().toLowerCase();
+    if (!/^[a-z0-9_]{3,20}$/.test(safeUsername)) {
+        return { error: 'Usernames must be 3–20 characters using lowercase letters, numbers, or underscores.' };
+    }
+
+    const supabase = await createSupabaseServerClient();
+    if (!supabase) return { error: 'Supabase Auth is not configured.' };
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) return { error: 'Sign in again to check username availability.' };
+
+    const { data, error } = await supabase.rpc('is_profile_username_available', { requested_username: safeUsername });
+    if (error) return { error: 'Could not check username availability. Apply the latest profile migration and try again.' };
+    return { available: data === true };
+}
+
+export async function updateProfileAction(displayName: string, username: string): Promise<{ error?: string }> {
     const safeDisplayName = displayName.trim();
+    const safeUsername = username.trim().toLowerCase();
     if (safeDisplayName.length < 2 || safeDisplayName.length > 80) {
         return { error: 'Profile name must be between 2 and 80 characters.' };
+    }
+    if (safeUsername && !/^[a-z0-9_]{3,20}$/.test(safeUsername)) {
+        return { error: 'Usernames must be 3–20 characters using lowercase letters, numbers, or underscores.' };
     }
 
     const supabase = await createSupabaseServerClient();
@@ -145,12 +165,49 @@ export async function updateProfileAction(displayName: string): Promise<{ error?
 
     const { data, error } = await supabase
         .from('profiles')
-        .update({ display_name: safeDisplayName, updated_at: new Date().toISOString() })
+        .update({ display_name: safeDisplayName, username: safeUsername || null, updated_at: new Date().toISOString() })
         .eq('id', user.id)
         .select('id')
         .maybeSingle();
 
+    if (error?.code === '23505') return { error: 'That username is already taken. Choose another one.' };
     if (error || !data) return { error: 'Could not save your profile. Check that the profiles migration has been applied.' };
+    return {};
+}
+
+export async function updateProfileAvatarAction(path: string): Promise<{ error?: string }> {
+    const supabase = await createSupabaseServerClient();
+    if (!supabase) return { error: 'Supabase Auth is not configured.' };
+
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) return { error: 'Sign in again to update your profile picture.' };
+
+    if (!new RegExp(`^${user.id}/avatar-[a-f0-9-]+\\.(?:jpg|png|webp)$`).test(path)) {
+        return { error: 'That profile picture path is not valid.' };
+    }
+
+    const { data, error } = await supabase
+        .from('profiles')
+        .update({ avatar_path: path, updated_at: new Date().toISOString() })
+        .eq('id', user.id)
+        .select('id')
+        .maybeSingle();
+    if (error || !data) return { error: 'Could not save your profile picture. Check that the latest profile migration has been applied.' };
+    return {};
+}
+
+export async function changePasswordAction(password: string, confirmPassword: string): Promise<{ error?: string }> {
+    if (password.length < 8) return { error: 'Use a password with at least 8 characters.' };
+    if (password.length > 128) return { error: 'Password must be 128 characters or fewer.' };
+    if (password !== confirmPassword) return { error: 'Passwords do not match.' };
+
+    const supabase = await createSupabaseServerClient();
+    if (!supabase) return { error: 'Supabase Auth is not configured.' };
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) return { error: 'Sign in again to change your password.' };
+
+    const { error } = await supabase.auth.updateUser({ password });
+    if (error) return { error: 'Could not update your password. Please try again.' };
     return {};
 }
 

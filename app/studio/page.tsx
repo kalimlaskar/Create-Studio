@@ -25,7 +25,7 @@ export default async function StudioPage() {
     const userEmail = typeof data.claims.email === 'string' ? data.claims.email : '';
     const { data: profile } = await supabase
         .from('profiles')
-        .select('display_name')
+        .select('display_name,username,avatar_path')
         .eq('id', data.claims.sub)
         .maybeSingle();
     const { data: subscription } = await supabase
@@ -39,5 +39,8 @@ export default async function StudioPage() {
     const initialDisplayName = typeof profile?.display_name === 'string' && profile.display_name.trim()
         ? profile.display_name
         : metadataDisplayName;
-    return <CreatorStudioDashboard userEmail={userEmail} initialDisplayName={initialDisplayName} profilePersistenceEnabled isPro={isPro} />;
+    const initialAvatarUrl = typeof profile?.avatar_path === 'string'
+        ? supabase.storage.from('profile-avatars').getPublicUrl(profile.avatar_path).data.publicUrl
+        : '';
+    return <CreatorStudioDashboard userEmail={userEmail} initialDisplayName={initialDisplayName} initialUsername={profile?.username ?? ''} initialAvatarUrl={initialAvatarUrl} profilePersistenceEnabled isPro={isPro} />;
 }

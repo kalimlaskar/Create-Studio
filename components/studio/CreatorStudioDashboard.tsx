@@ -9,9 +9,182 @@ import { EditorShell } from '@/components/editor/EditorShell';
 import { useStudioSession } from '@/hooks/useStudioSession';
 import { deleteEditorDraft, DraftSummary, LoadedDraft, listEditorDrafts, loadEditorDraft } from '@/components/editor/drafts';
 import { PhotoReelStudio } from '@/components/studio/PhotoReelStudio';
-import { signOutAction, updateProfileAction } from '@/app/auth/actions';
+import { changePasswordAction, checkUsernameAvailabilityAction, signOutAction, updateProfileAction, updateProfileAvatarAction } from '@/app/auth/actions';
+import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 
-export function CreatorStudioDashboard({ userEmail, initialDisplayName = '', profilePersistenceEnabled = false, isPro = false }: { userEmail: string; initialDisplayName?: string; profilePersistenceEnabled?: boolean; isPro?: boolean }) {
+function getFallbackDisplayName(userEmail: string) {
+    const accountName = userEmail.split(' · ')[0]?.split('@')[0] ?? '';
+    const words = accountName.replace(/[._-]+/g, ' ').trim();
+    return words ? words.replace(/\b\w/g, (letter) => letter.toUpperCase()) : 'My creator space';
+}
+
+function ProfileMenu({ creatorName, username, avatarUrl, userEmail, profilePersistenceEnabled, onNameChange, onUsernameChange, onSave, onAvatarChange, saveState }: {
+    creatorName: string;
+    username: string;
+    avatarUrl: string;
+    userEmail: string;
+    profilePersistenceEnabled: boolean;
+    onNameChange: (name: string) => void;
+    onUsernameChange: (username: string) => void;
+    onSave: () => void;
+    onAvatarChange: (url: string) => void;
+    saveState: string;
+}) {
+    const [usernameCheck, setUsernameCheck] = useState('');
+    const [usernameCheckState, setUsernameCheckState] = useState<'available' | 'taken' | 'error' | ''>('');
+    const [avatarState, setAvatarState] = useState('');
+    const [password, setPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
+    const [passwordState, setPasswordState] = useState('');
+    const [isChangingPassword, setIsChangingPassword] = useState(false);
+
+    const checkUsername = async () => {
+        setUsernameCheck('Checking username…');
+        setUsernameCheckState('');
+        try {
+            const result = await checkUsernameAvailabilityAction(username);
+            if (result.error) {
+                setUsernameCheck(result.error);
+                setUsernameCheckState('error');
+            } else if (result.available) {
+                setUsernameCheck('Username is available');
+                setUsernameCheckState('available');
+            } else {
+                setUsernameCheck('That username is already taken');
+                setUsernameCheckState('taken');
+            }
+        } catch (error) {
+            console.error('Could not check username availability:', error);
+            setUsernameCheck('Could not check username availability. Please try again.');
+            setUsernameCheckState('error');
+        }
+    };
+
+    const uploadAvatar = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        event.target.value = '';
+        if (!file) return;
+        if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+            setAvatarState('Choose a JPG, PNG, or WebP image.');
+            return;
+        }
+        if (file.size > 5 * 1024 * 1024) {
+            setAvatarState('Profile pictures must be 5 MB or smaller.');
+            return;
+        }
+
+        const supabase = createSupabaseBrowserClient();
+        if (!supabase) {
+            setAvatarState('Profile picture upload is not configured.');
+            return;
+        }
+
+        setAvatarState('Uploading picture…');
+        try {
+            const { data: { user }, error: userError } = await supabase.auth.getUser();
+            if (userError || !user) {
+                setAvatarState('Sign in again to update your profile picture.');
+                return;
+            }
+
+            const extension = file.type === 'image/jpeg' ? 'jpg' : file.type === 'image/png' ? 'png' : 'webp';
+            const path = `${user.id}/avatar-${crypto.randomUUID()}.${extension}`;
+            const { error: uploadError } = await supabase.storage.from('profile-avatars').upload(path, file, {
+                contentType: file.type,
+                cacheControl: '3600',
+                upsert: false,
+            });
+            if (uploadError) {
+                console.error('Could not upload profile picture:', uploadError);
+                setAvatarState('Could not upload your picture. Check that the latest profile migration has been applied.');
+                return;
+            }
+
+            const result = await updateProfileAvatarAction(path);
+            if (result.error) {
+                await supabase.storage.from('profile-avatars').remove([path]);
+                setAvatarState(result.error);
+                return;
+            }
+
+            const { data } = supabase.storage.from('profile-avatars').getPublicUrl(path);
+            onAvatarChange(data.publicUrl);
+            setAvatarState('Profile picture updated');
+        } catch (error) {
+            console.error('Could not update profile picture:', error);
+            setAvatarState('Could not update your picture. Please try again.');
+        }
+    };
+
+    const changePassword = async (event: React.FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+        setIsChangingPassword(true);
+        setPasswordState('Updating password…');
+        try {
+            const result = await changePasswordAction(password, confirmPassword);
+            setPasswordState(result.error ?? 'Password updated');
+            if (!result.error) {
+                setPassword('');
+                setConfirmPassword('');
+            }
+        } catch (error) {
+            console.error('Could not update password:', error);
+            setPasswordState('Could not update your password. Please try again.');
+        } finally {
+            setIsChangingPassword(false);
+        }
+    };
+
+    return (
+        <details className="relative">
+            <summary className="flex max-w-[min(15rem,52vw)] cursor-pointer list-none items-center gap-2 rounded-xl border border-neutral-700 bg-neutral-900 px-2.5 py-2 text-xs text-neutral-200 shadow-lg hover:border-neutral-500 hover:bg-neutral-800">
+                <span aria-hidden="true" className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-indigo-500/20 bg-cover bg-center text-[10px] font-bold text-indigo-200" style={avatarUrl ? { backgroundImage: `url("${avatarUrl}")` } : undefined}>{!avatarUrl && (creatorName.trim().charAt(0).toUpperCase() || 'C')}</span>
+                <span className="truncate">Signed in as {creatorName}</span>
+            </summary>
+            <div className="absolute right-0 mt-2 max-h-[75dvh] w-[min(22rem,calc(100vw-1.5rem))] overflow-y-auto rounded-xl border border-neutral-700 bg-neutral-900 p-4 shadow-2xl">
+                <div className="flex items-center gap-3">
+                    <span aria-hidden="true" className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-indigo-500/20 bg-cover bg-center text-lg font-bold text-indigo-200" style={avatarUrl ? { backgroundImage: `url("${avatarUrl}")` } : undefined}>{!avatarUrl && (creatorName.trim().charAt(0).toUpperCase() || 'C')}</span>
+                    <div className="min-w-0"><p className="truncate text-sm font-semibold text-neutral-100">{creatorName}</p>{userEmail && <p className="mt-0.5 truncate text-xs text-neutral-500">{userEmail}</p>}</div>
+                </div>
+                <div className="my-4 border-t border-neutral-800" />
+                <label htmlFor="profile-picture" className={`inline-flex cursor-pointer items-center rounded-lg border border-neutral-700 px-3 py-2 text-xs font-semibold text-neutral-200 transition hover:border-neutral-500 hover:bg-neutral-800 ${!profilePersistenceEnabled ? 'pointer-events-none opacity-50' : ''}`}>Update profile picture</label>
+                <input id="profile-picture" type="file" accept="image/jpeg,image/png,image/webp" disabled={!profilePersistenceEnabled} onChange={(event) => void uploadAvatar(event)} className="sr-only" />
+                <p className="mt-1 text-[10px] text-neutral-500">JPG, PNG, or WebP · up to 5 MB</p>
+                {avatarState && <p role="status" className={`mt-1 text-[11px] ${avatarState === 'Profile picture updated' ? 'text-emerald-300' : avatarState.includes('…') ? 'text-neutral-400' : 'text-red-300'}`}>{avatarState}</p>}
+
+                <div className="my-4 border-t border-neutral-800" />
+                <label htmlFor="profile-display-name" className="block text-[10px] font-semibold uppercase tracking-wider text-neutral-500">Profile name</label>
+                <input id="profile-display-name" value={creatorName} onChange={(event) => onNameChange(event.target.value)} maxLength={80} autoComplete="name" className="mt-1.5 w-full rounded-md border border-neutral-800 bg-neutral-950 px-2.5 py-2 text-sm text-neutral-200 focus:border-indigo-500 focus:outline-none" />
+                <label htmlFor="profile-username" className="mt-3 block text-[10px] font-semibold uppercase tracking-wider text-neutral-500">Username</label>
+                <div className="mt-1.5 flex gap-2">
+                    <div className="flex min-w-0 flex-1 items-center rounded-md border border-neutral-800 bg-neutral-950 px-2.5 focus-within:border-indigo-500"><span className="text-sm text-neutral-500">@</span><input id="profile-username" value={username} onChange={(event) => { onUsernameChange(event.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 20)); setUsernameCheck(''); setUsernameCheckState(''); }} maxLength={20} autoComplete="username" disabled={!profilePersistenceEnabled} className="min-w-0 flex-1 bg-transparent py-2 text-sm text-neutral-200 outline-none disabled:opacity-50" /></div>
+                    <button type="button" onClick={() => void checkUsername()} disabled={!profilePersistenceEnabled || !username} className="rounded-lg border border-neutral-700 px-2.5 text-[11px] font-semibold text-neutral-200 hover:bg-neutral-800 disabled:opacity-50">Check</button>
+                </div>
+                <p className="mt-1 text-[10px] text-neutral-500">3–20 lowercase letters, numbers, or underscores.</p>
+                {usernameCheck && <p role="status" className={`mt-1 text-[11px] ${usernameCheckState === 'available' ? 'text-emerald-300' : usernameCheckState === 'taken' || usernameCheckState === 'error' ? 'text-red-300' : 'text-neutral-400'}`}>{usernameCheck}</p>}
+                <button type="button" onClick={onSave} disabled={saveState === 'Saving…'} className="mt-3 w-full rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-indigo-500 disabled:cursor-wait disabled:opacity-60">Save profile</button>
+                {saveState && <p role="status" className={`mt-2 text-[11px] ${saveState === 'Profile saved' || saveState === 'Saved on this device' ? 'text-emerald-300' : saveState === 'Saving…' || saveState === 'Unsaved changes' ? 'text-neutral-400' : 'text-red-300'}`}>{saveState}</p>}
+
+                {profilePersistenceEnabled && <>
+                    <div className="my-4 border-t border-neutral-800" />
+                    <form onSubmit={(event) => void changePassword(event)} className="space-y-2">
+                        <label htmlFor="profile-password" className="block text-[10px] font-semibold uppercase tracking-wider text-neutral-500">Change password</label>
+                        <input id="profile-password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} minLength={8} maxLength={128} autoComplete="new-password" placeholder="New password" required className="w-full rounded-md border border-neutral-800 bg-neutral-950 px-2.5 py-2 text-sm text-neutral-200 placeholder:text-neutral-600 focus:border-indigo-500 focus:outline-none" />
+                        <input type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} minLength={8} maxLength={128} autoComplete="new-password" placeholder="Confirm new password" aria-label="Confirm new password" required className="w-full rounded-md border border-neutral-800 bg-neutral-950 px-2.5 py-2 text-sm text-neutral-200 placeholder:text-neutral-600 focus:border-indigo-500 focus:outline-none" />
+                        <button type="submit" disabled={isChangingPassword} className="w-full rounded-lg border border-neutral-700 px-3 py-2 text-xs font-semibold text-neutral-200 transition hover:border-neutral-500 hover:bg-neutral-800 disabled:opacity-50">{isChangingPassword ? 'Updating…' : 'Update password'}</button>
+                        {passwordState && <p role="status" className={`text-[11px] ${passwordState === 'Password updated' ? 'text-emerald-300' : passwordState.includes('…') ? 'text-neutral-400' : 'text-red-300'}`}>{passwordState}</p>}
+                    </form>
+                </>}
+                {!profilePersistenceEnabled && <p className="mt-3 text-[10px] text-neutral-500">Account settings are unavailable in tester mode.</p>}
+                <form action={signOutAction} className="mt-4 border-t border-neutral-800 pt-3">
+                    <button className="w-full rounded-lg border border-neutral-700 px-3 py-2 text-left text-xs font-semibold text-neutral-300 transition hover:border-neutral-500 hover:bg-neutral-800">Sign out</button>
+                </form>
+            </div>
+        </details>
+    );
+}
+
+export function CreatorStudioDashboard({ userEmail, initialDisplayName = '', initialUsername = '', initialAvatarUrl = '', profilePersistenceEnabled = false, isPro = false }: { userEmail: string; initialDisplayName?: string; initialUsername?: string; initialAvatarUrl?: string; profilePersistenceEnabled?: boolean; isPro?: boolean }) {
     const [creationMode, setCreationMode] = useState<'choose' | 'record' | 'photos'>('choose');
     const [view, setView] = useState<'record' | 'edit'>('record');
     const [showSettings, setShowSettings] = useState(false);
@@ -165,7 +338,9 @@ export function CreatorStudioDashboard({ userEmail, initialDisplayName = '', pro
     const [restoredDraft, setRestoredDraft] = useState<LoadedDraft | null>(null);
     const [isLoadingDraft, setIsLoadingDraft] = useState(false);
     const [showWelcome, setShowWelcome] = useState(false);
-    const [creatorName, setCreatorName] = useState(initialDisplayName || 'My creator space');
+    const [creatorName, setCreatorName] = useState(initialDisplayName || getFallbackDisplayName(userEmail));
+    const [profileUsername, setProfileUsername] = useState(initialUsername);
+    const [profileAvatarUrl, setProfileAvatarUrl] = useState(initialAvatarUrl);
     const [profileSaveState, setProfileSaveState] = useState('');
     const creatorNameInitializedRef = useRef(false);
 
@@ -192,26 +367,47 @@ export function CreatorStudioDashboard({ userEmail, initialDisplayName = '', pro
                 creatorNameInitializedRef.current = true;
                 const storedName = window.localStorage.getItem('creator-studio-creator-name');
                 const profileName = initialDisplayName.trim();
-                const name = profileName || storedName || 'My creator space';
+                const name = profileName || storedName || getFallbackDisplayName(userEmail);
                 setCreatorName(name);
                 window.localStorage.setItem('creator-studio-creator-name', name);
             }
         });
         return () => window.cancelAnimationFrame(frame);
-    }, [creationMode, initialDisplayName]);
+    }, [creationMode, initialDisplayName, userEmail]);
 
     const updateCreatorName = (name: string) => {
-        const safeName = name.slice(0, 48);
+        const safeName = name.slice(0, 80);
         setCreatorName(safeName);
         setProfileSaveState(profilePersistenceEnabled ? 'Unsaved changes' : '');
         window.localStorage.setItem('creator-studio-creator-name', safeName);
     };
 
     const saveCreatorProfile = async () => {
-        if (!profilePersistenceEnabled) return;
+        const safeName = creatorName.trim();
+        if (safeName.length < 2 || safeName.length > 80) {
+            setProfileSaveState('Profile name must be between 2 and 80 characters.');
+            return;
+        }
+        setCreatorName(safeName);
+        window.localStorage.setItem('creator-studio-creator-name', safeName);
+        if (!profilePersistenceEnabled) {
+            setProfileSaveState('Saved on this device');
+            return;
+        }
+        const safeUsername = profileUsername.trim().toLowerCase();
+        if (safeUsername && !/^[a-z0-9_]{3,20}$/.test(safeUsername)) {
+            setProfileSaveState('Usernames must be 3–20 characters using lowercase letters, numbers, or underscores.');
+            return;
+        }
         setProfileSaveState('Saving…');
-        const result = await updateProfileAction(creatorName);
-        setProfileSaveState(result.error ?? 'Profile saved');
+        try {
+            const result = await updateProfileAction(safeName, safeUsername);
+            setProfileSaveState(result.error ?? 'Profile saved');
+            if (!result.error) setProfileUsername(safeUsername);
+        } catch (error) {
+            console.error('Could not save profile:', error);
+            setProfileSaveState('Could not save your profile. Please try again.');
+        }
     };
 
     const dismissWelcome = (useSample: boolean) => {
@@ -308,8 +504,7 @@ export function CreatorStudioDashboard({ userEmail, initialDisplayName = '', pro
                     {isPro
                         ? <span className="rounded-lg bg-indigo-500/15 px-2.5 py-1.5 text-[11px] font-semibold text-indigo-200">Pro</span>
                         : profilePersistenceEnabled && <a href="/pricing" className="rounded-lg bg-linear-to-r from-cyan-500 via-indigo-500 to-fuchsia-500 px-3 py-2 text-xs font-semibold text-white hover:brightness-110">Upgrade</a>}
-                    <span className="hidden text-xs text-neutral-500 sm:inline">{userEmail ? `Signed in as ${userEmail}` : 'Signed in'}</span>
-                    <form action={signOutAction}><button className="rounded-xl border border-neutral-700 bg-neutral-900 px-4 py-2 text-xs font-semibold text-neutral-200 transition hover:border-neutral-500 hover:bg-neutral-800">Sign out</button></form>
+                    <ProfileMenu creatorName={creatorName} username={profileUsername} avatarUrl={profileAvatarUrl} userEmail={userEmail} profilePersistenceEnabled={profilePersistenceEnabled} onNameChange={updateCreatorName} onUsernameChange={(username) => { setProfileUsername(username); setProfileSaveState('Unsaved changes'); }} onSave={() => void saveCreatorProfile()} onAvatarChange={setProfileAvatarUrl} saveState={profileSaveState} />
                 </div>
                 <div className="w-full max-w-4xl">
                     <div className="mb-9 text-center">
@@ -351,13 +546,10 @@ export function CreatorStudioDashboard({ userEmail, initialDisplayName = '', pro
                 <button type="button" onClick={() => { setShowWelcome(false); setCreationMode('choose'); }} aria-label="Back to creation options" className="absolute left-3 top-3 z-30 flex h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-neutral-950/80 text-neutral-100 backdrop-blur-md md:hidden"><ArrowLeft className="h-5 w-5" /></button>
                 <div className="absolute right-3 top-3 z-40 flex items-start gap-2 md:right-4">
                 <button type="button" onClick={() => { setShowWelcome(false); setCreationMode('choose'); }} className="hidden items-center rounded-lg border border-neutral-700 bg-neutral-900/95 px-3 py-2 text-xs font-semibold text-neutral-200 shadow-lg hover:bg-neutral-800 md:flex">Creation options</button>
+                <ProfileMenu creatorName={creatorName} username={profileUsername} avatarUrl={profileAvatarUrl} userEmail={userEmail} profilePersistenceEnabled={profilePersistenceEnabled} onNameChange={updateCreatorName} onUsernameChange={(username) => { setProfileUsername(username); setProfileSaveState('Unsaved changes'); }} onSave={() => void saveCreatorProfile()} onAvatarChange={setProfileAvatarUrl} saveState={profileSaveState} />
                 <details className="relative">
                     <summary className="flex cursor-pointer list-none items-center gap-2 rounded-lg border border-neutral-700 bg-neutral-900/95 px-3 py-2 text-xs font-semibold text-neutral-200 shadow-lg hover:bg-neutral-800"><FolderOpen className="h-4 w-4" /> Projects ({savedDrafts.length})</summary>
                     <div className="absolute right-0 mt-2 max-h-[60dvh] w-[min(22rem,calc(100vw-1.5rem))] overflow-y-auto rounded-xl border border-neutral-700 bg-neutral-900 p-2 shadow-2xl">
-                        <label htmlFor="creator-name" className="block px-3 pt-2 text-[10px] font-semibold uppercase tracking-wider text-neutral-500">Creator profile</label>
-                        <input id="creator-name" value={creatorName} onChange={(event) => updateCreatorName(event.target.value)} onBlur={() => void saveCreatorProfile()} maxLength={48} className="mx-3 mt-1 w-[calc(100%-1.5rem)] rounded-md border border-neutral-800 bg-neutral-950 px-2 py-1.5 text-xs text-neutral-200 focus:border-indigo-500 focus:outline-none" />
-                        {profileSaveState && <p role="status" className={`px-3 pt-2 text-[10px] ${profileSaveState === 'Profile saved' ? 'text-emerald-300' : profileSaveState === 'Unsaved changes' || profileSaveState === 'Saving…' ? 'text-neutral-500' : 'text-red-300'}`}>{profileSaveState}</p>}
-                        <p className="px-3 py-2 text-[10px] leading-relaxed text-neutral-500">{profilePersistenceEnabled ? 'Your profile name is saved to your account. Editing drafts stay on this device.' : 'Your profile name and editing drafts are stored on this device.'}</p>
                         {savedDrafts.map((draft) => <div key={draft.id} className="flex items-center gap-1 rounded-lg hover:bg-neutral-800"><button onClick={() => void openDraft(draft.id)} disabled={isLoadingDraft} className="min-w-0 flex-1 rounded-lg px-3 py-2 text-left text-xs text-neutral-200 disabled:opacity-50"><span className="block truncate font-semibold">{draft.title || 'Untitled creator project'}</span><span className="mt-1 block text-neutral-500">{draft.creatorName} · {Math.round(draft.durationMs / 1000)} sec · {new Date(draft.savedAt).toLocaleDateString()}</span></button><button onClick={() => void removeDraft(draft.id)} aria-label={`Delete ${draft.title}`} className="rounded-md p-2 text-neutral-600 hover:text-red-400"><Trash2 className="h-3.5 w-3.5" /></button></div>)}
                         {savedDrafts.length === 0 && <p className="px-3 py-2 text-xs text-neutral-400">Your saved edits will appear here.</p>}
                         {isLoadingDraft && <p className="px-3 py-2 text-xs text-neutral-400">Opening project…</p>}

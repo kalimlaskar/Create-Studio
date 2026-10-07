@@ -25,8 +25,8 @@ See [the architecture and creator-flow diagrams](./docs/architecture.md) for the
 1. Create a Supabase project and copy its Project URL and **publishable** key from Connect/API settings into `.env.local` as `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`. Never put a secret/service-role key in a `NEXT_PUBLIC_` variable.
 2. Set `NEXT_PUBLIC_SITE_URL=http://localhost:3000` locally and your deployed HTTPS origin in production. In Supabase Authentication URL Configuration, set the matching Site URL and add the origin plus `/auth/callback` to Redirect URLs.
 3. Configure Supabase Auth email templates and delivery. For numeric sign-in codes, the **Magic Link** template must include `{{ .Token }}`. Configure SMTP before production use so confirmation and login emails are reliably delivered.
-4. Apply `supabase/migrations/20261006000000_create_profiles.sql` to the project. In Supabase, open **SQL Editor**, create a query, paste the migration contents, and run it. This creates the owner-protected `profiles` table and imports existing signup names.
-5. Restart `npm run dev`, then create an individual account at **Sign up**. Confirm the email if confirmation is enabled. Returning users can sign in with a password or request a one-time email code. Profile names are stored in Supabase; editor and reel drafts remain local to the browser.
+4. Apply `supabase/migrations/20261006000000_create_profiles.sql` and `supabase/migrations/20261007000200_account_profile_settings.sql` to the project. In Supabase, open **SQL Editor**, create a query for each migration, paste its contents, and run it. The account settings migration adds unique usernames and a profile-picture storage bucket.
+5. Restart `npm run dev`, then create an individual account at **Sign up**. Confirm the email if confirmation is enabled. Returning users can sign in with a password or request a one-time email code. Profile names, usernames, and profile pictures are stored in Supabase; editor and reel drafts remain local to the browser.
 
 Temporary tester auth is disabled by default and whenever Supabase is configured. To explicitly enable a local tester, set `TEMP_AUTH_ENABLED=true` and provide private `TEMP_AUTH_USERNAME` and `TEMP_AUTH_PASSWORD` values. Production additionally requires a random `TEMP_AUTH_SECRET` of at least 32 characters. Do not use shared tester credentials for real users.
 
@@ -67,7 +67,7 @@ Copy `.env.example` to `.env.local` and configure the Supabase URL/publishable k
 
 Saved editor projects and photo/video reel drafts are stored in IndexedDB on the current browser/device; they are not synced to an account or another device. The current free-plan prototype adds a visible watermark and limits recordings/exports to 60 seconds. Payments and paid-plan entitlements are not enabled.
 
-The Creator Profile name remains a local browser label. Supabase Auth identifies users, but account-backed project sync is not implemented. Billing uses Razorpay Subscriptions: checkout is created server-side, activation is confirmed by a signed payment check, and the signed `/api/billing/webhook` keeps status in sync. Set the `RAZORPAY_*` and `SUPABASE_SERVICE_ROLE_KEY` variables from `.env.example` and run the Supabase migrations to enable it.
+Profile names, unique usernames, profile pictures, and passwords can be managed from the account menu. Supabase Auth identifies users, but account-backed project sync is not implemented. Billing uses Razorpay Subscriptions: checkout is created server-side, activation is confirmed by a signed payment check, and the signed `/api/billing/webhook` keeps status in sync. Set the `RAZORPAY_*` and `SUPABASE_SERVICE_ROLE_KEY` variables from `.env.example` and run the Supabase migrations to enable it.
 
 ## Creator feedback
 
