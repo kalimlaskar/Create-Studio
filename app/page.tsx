@@ -106,55 +106,55 @@ export default function HomePage() {
         </nav>
       </header>
 
-      {/* Hero */}
-      <section className="relative mx-auto grid max-w-7xl items-center gap-12 px-5 pb-20 pt-10 sm:px-8 lg:grid-cols-[1.05fr_.95fr] lg:gap-6 lg:px-12 lg:pb-28 lg:pt-16">
+      {/* Hero: Compact height so it fits entirely in the first viewport */}
+      <section className="relative mx-auto grid max-w-7xl items-center gap-8 px-5 py-6 sm:px-8 lg:grid-cols-[1.05fr_.95fr] lg:gap-6 lg:px-12 lg:py-10">
         <div>
-          <h1 className={`rise ${D} text-[2.9rem] font-extrabold leading-[0.95] tracking-[-0.04em] sm:text-7xl lg:text-[5.4rem]`} style={{ '--d': 0 } as CSSProperties}>
+          <h1 className={`rise ${D} text-[2.4rem] font-extrabold leading-[0.96] tracking-[-0.04em] sm:text-5xl lg:text-[4.2rem]`} style={{ '--d': 0 } as CSSProperties}>
             Record, caption and post from one browser tab.
           </h1>
-          <p className="rise mt-6 max-w-xl text-base leading-7 text-[#14121F]/65 sm:text-lg sm:leading-8" style={{ '--d': 1 } as CSSProperties}>
+          <p className="rise mt-4 max-w-xl text-sm leading-relaxed text-[#14121F]/65 sm:text-base sm:leading-7" style={{ '--d': 1 } as CSSProperties}>
             A teleprompter, word-by-word captions and photo reels in one studio. Write scripts in seven Indian and global languages. No install, and no timeline to learn.
           </p>
-          <div className="rise mt-8 flex flex-wrap items-center gap-3" style={{ '--d': 2 } as CSSProperties}>
-            <Link href="/login?setup=1" className={`group inline-flex items-center gap-2 rounded-full bg-[#14121F] px-6 py-3.5 text-sm font-semibold text-white shadow-[0_12px_30px_-10px_rgba(20,18,31,0.55)] transition hover:-translate-y-0.5 hover:bg-[#2c2742] ${focus}`}>
+          <div className="rise mt-6 flex flex-wrap items-center gap-3" style={{ '--d': 2 } as CSSProperties}>
+            <Link href="/login?setup=1" className={`group inline-flex items-center gap-2 rounded-full bg-[#14121F] px-5 py-3 text-sm font-semibold text-white shadow-[0_12px_30px_-10px_rgba(20,18,31,0.55)] transition hover:-translate-y-0.5 hover:bg-[#2c2742] ${focus}`}>
               Try the studio <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
             </Link>
-            <a href="#how-it-works" className={`inline-flex items-center rounded-full border border-[#14121F]/15 bg-white/60 px-6 py-3.5 text-sm font-semibold text-[#14121F] transition hover:bg-white ${focus}`}>
+            <a href="#how-it-works" className={`inline-flex items-center rounded-full border border-[#14121F]/15 bg-white/60 px-5 py-3 text-sm font-semibold text-[#14121F] transition hover:bg-white ${focus}`}>
               See how it works
             </a>
           </div>
-          <p className="rise mt-4 text-sm text-[#14121F]/55" style={{ '--d': 3 } as CSSProperties}>Free to start. Drafts stay on your device.</p>
-          <div className="rise mt-9" style={{ '--d': 4 } as CSSProperties}>
-            <p className="text-sm font-medium text-[#14121F]/70">AI script writing in</p>
-            <ul className="mt-3 flex flex-wrap gap-2">
+          <p className="rise mt-3 text-xs text-[#14121F]/55" style={{ '--d': 3 } as CSSProperties}>Free to start. Drafts stay on your device.</p>
+          <div className="rise mt-6" style={{ '--d': 4 } as CSSProperties}>
+            <p className="text-xs font-medium text-[#14121F]/70">AI script writing in</p>
+            <ul className="mt-2 flex flex-wrap gap-1.5">
               {languages.map((l) => (
-                <li key={l} className="rounded-full border border-[#14121F]/10 bg-white px-3.5 py-1.5 text-sm font-medium text-[#14121F]/80">{l}</li>
+                <li key={l} className="rounded-full border border-[#14121F]/10 bg-white px-3 py-1 text-xs font-medium text-[#14121F]/80">{l}</li>
               ))}
             </ul>
           </div>
         </div>
 
         {/* Product moment: a reel being captioned */}
-        <div className="rise relative mx-auto w-full max-w-[440px] py-6" style={{ '--d': 3 } as CSSProperties}>
-          <div className="absolute -left-10 top-10 h-64 w-64 rounded-full bg-[#6A4CFF]/25 blur-3xl" />
-          <div className="absolute -right-6 bottom-8 h-64 w-64 rounded-full bg-[#FF3D81]/20 blur-3xl" />
+        <div className="rise relative mx-auto w-full max-w-[380px] py-2" style={{ '--d': 3 } as CSSProperties}>
+          <div className="absolute -left-8 top-8 h-48 w-48 rounded-full bg-[#6A4CFF]/25 blur-3xl" />
+          <div className="absolute -right-4 bottom-6 h-48 w-48 rounded-full bg-[#FF3D81]/20 blur-3xl" />
 
-          <div className="relative mx-auto w-[270px] rotate-[2.5deg] rounded-[2.7rem] bg-[#14121F] p-2.5 shadow-[0_40px_80px_-20px_rgba(20,18,31,0.45)] sm:w-[300px]">
-            <div className="relative aspect-[9/18.5] overflow-hidden rounded-[2.2rem] bg-[linear-gradient(180deg,#ffb86b_0%,#ff6a8b_46%,#5b3df5_100%)]">
-              <div className="absolute left-1/2 top-[28%] h-24 w-24 -translate-x-1/2 rounded-full bg-[#FFE9A8]" />
-              <div className="absolute -bottom-10 -left-10 h-48 w-72 rounded-[50%] bg-[#2a1a5e]" />
-              <div className="absolute -bottom-14 -right-12 h-52 w-72 rounded-[50%] bg-[#1b1040]" />
+          <div className="relative mx-auto w-[240px] rotate-[2.5deg] rounded-[2.5rem] bg-[#14121F] p-2 shadow-[0_30px_60px_-15px_rgba(20,18,31,0.45)] sm:w-[260px]">
+            <div className="relative aspect-[9/18.5] overflow-hidden rounded-[2.1rem] bg-[linear-gradient(180deg,#ffb86b_0%,#ff6a8b_46%,#5b3df5_100%)]">
+              <div className="absolute left-1/2 top-[28%] h-20 w-20 -translate-x-1/2 rounded-full bg-[#FFE9A8]" />
+              <div className="absolute -bottom-10 -left-10 h-40 w-64 rounded-[50%] bg-[#2a1a5e]" />
+              <div className="absolute -bottom-14 -right-12 h-44 w-64 rounded-[50%] bg-[#1b1040]" />
               <div className="absolute inset-x-0 bottom-0 h-1/2 bg-[linear-gradient(transparent,rgba(20,18,31,0.55))]" />
 
-              <div className="absolute inset-x-4 top-10 flex items-center justify-between text-[11px] font-semibold text-white">
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-black/35 px-2.5 py-1 backdrop-blur">
+              <div className="absolute inset-x-4 top-8 flex items-center justify-between text-[10px] font-semibold text-white">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-black/35 px-2 py-0.5 backdrop-blur">
                   <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#FF3D81]" />REC 00:24
                 </span>
-                <span className="rounded-full bg-black/35 px-2.5 py-1 backdrop-blur">9:16</span>
+                <span className="rounded-full bg-black/35 px-2 py-0.5 backdrop-blur">9:16</span>
               </div>
 
-              <div className="absolute inset-x-3 bottom-10 text-center">
-                <p className={`${D} text-[1.7rem] font-extrabold leading-snug text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.35)]`}>
+              <div className="absolute inset-x-3 bottom-8 text-center">
+                <p className={`${D} text-[1.4rem] font-extrabold leading-snug text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.35)]`}>
                   {captionWords.map((w, i) => (
                     <span key={w}>
                       <span className="cap" style={{ '--i': i } as CSSProperties}>{w}</span>{' '}
@@ -163,34 +163,34 @@ export default function HomePage() {
                 </p>
               </div>
             </div>
-            <div className="absolute left-1/2 top-[18px] h-5 w-20 -translate-x-1/2 rounded-full bg-[#14121F]" />
+            <div className="absolute left-1/2 top-[16px] h-4 w-16 -translate-x-1/2 rounded-full bg-[#14121F]" />
           </div>
 
           {/* Floating teleprompter */}
-          <div className="absolute -left-4 top-24 hidden w-52 rounded-2xl border border-white/70 bg-white/80 p-3 shadow-[0_20px_40px_-12px_rgba(20,18,31,0.25)] backdrop-blur-xl sm:block lg:-left-12">
-            <div className="mb-2 flex items-center justify-between text-[11px] font-semibold text-[#14121F]/55">
+          <div className="absolute -left-6 top-20 hidden w-48 rounded-2xl border border-white/70 bg-white/80 p-2.5 shadow-[0_20px_40px_-12px_rgba(20,18,31,0.25)] backdrop-blur-xl sm:block lg:-left-10">
+            <div className="mb-1.5 flex items-center justify-between text-[10px] font-semibold text-[#14121F]/55">
               <span>Teleprompter</span>
-              <span className="inline-flex items-center gap-1 text-[#6A4CFF]"><Sparkles className="h-3 w-3" />AI script</span>
+              <span className="inline-flex items-center gap-1 text-[#6A4CFF]"><Sparkles className="h-2.5 w-2.5" />AI script</span>
             </div>
-            <div className="prompter-mask h-[84px] overflow-hidden">
-              <div className="prompter text-[13px] font-medium leading-5 text-[#14121F]">
+            <div className="prompter-mask h-[72px] overflow-hidden">
+              <div className="prompter text-[12px] font-medium leading-4 text-[#14121F]">
                 {[...prompterLines, ...prompterLines].map((line, i) => (
-                  <p key={i} className="pb-1.5">{line}</p>
+                  <p key={i} className="pb-1">{line}</p>
                 ))}
               </div>
             </div>
           </div>
 
           {/* Floating captions chip */}
-          <div className="absolute -right-2 bottom-28 hidden items-center gap-3 rounded-2xl border border-white/70 bg-white/85 px-4 py-3 shadow-[0_20px_40px_-12px_rgba(20,18,31,0.25)] backdrop-blur-xl sm:flex lg:-right-8">
-            <span className="flex h-8 items-center gap-[3px]" aria-hidden="true">
+          <div className="absolute -right-4 bottom-20 hidden items-center gap-2.5 rounded-2xl border border-white/70 bg-white/85 px-3 py-2.5 shadow-[0_20px_40px_-12px_rgba(20,18,31,0.25)] backdrop-blur-xl sm:flex lg:-right-6">
+            <span className="flex h-7 items-center gap-[3px]" aria-hidden="true">
               {[0, 1, 2, 3, 4].map((i) => (
-                <span key={i} className="bar block h-6 w-1 rounded-full bg-[#6A4CFF]" style={{ '--i': i } as CSSProperties} />
+                <span key={i} className="bar block h-5 w-1 rounded-full bg-[#6A4CFF]" style={{ '--i': i } as CSSProperties} />
               ))}
             </span>
             <span>
-              <span className="block text-xs font-semibold">Captions ready</span>
-              <span className="block text-[11px] text-[#14121F]/55">Hinglish, in sync</span>
+              <span className="block text-[11px] font-semibold">Captions ready</span>
+              <span className="block text-[10px] text-[#14121F]/55">Hinglish, in sync</span>
             </span>
           </div>
         </div>
