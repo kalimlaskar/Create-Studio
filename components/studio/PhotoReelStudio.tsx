@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, ArrowDown, ArrowUp, Download, FolderOpen, ImagePlus, Loader2, Music2, Play, Save, Sparkles, Trash2 } from 'lucide-react';
+import { ArrowLeft, ArrowDown, ArrowUp, Download, FolderOpen, ImagePlus, Loader2, Music2, Play, Save, Sparkles, Trash2, ChevronDown } from 'lucide-react';
 import { AspectRatioType } from '@/types/studio';
 import { createExportRecorder, getExportDimensions, RECORDING_FRAME_RATE } from '@/components/recordingQuality';
 import { drawFreeTierWatermark, FREE_VIDEO_LIMIT_MS } from '@/components/freeTier';
@@ -1106,201 +1106,247 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
     const photoMotionStyle: React.CSSProperties = { transform: `translateX(${photoPanX}) scale(${photoScale})` };
 
     return (
-        <main className="flex min-h-dvh flex-col bg-neutral-950 text-neutral-100 lg:h-dvh lg:flex-row lg:overflow-hidden">
-            <aside className="flex w-full shrink-0 flex-col gap-5 overflow-y-auto border-b border-neutral-800 bg-neutral-900 p-4 lg:max-h-full lg:w-92 lg:border-b-0 lg:border-r lg:p-5">
-                <button type="button" onClick={onBack} className="flex w-fit items-center gap-2 text-sm text-neutral-400 hover:text-white"><ArrowLeft className="h-4 w-4" /> All creation options</button>
+        <main className="flex min-h-dvh flex-col bg-[#14121F] font-[family-name:var(--font-body)] text-[#14121F] lg:h-dvh lg:flex-row lg:overflow-hidden grain">
+            <aside className="flex w-full shrink-0 flex-col gap-5 overflow-y-auto border-b border-[#14121F]/10 bg-[#F7F6FB] p-4 lg:max-h-full lg:w-92 lg:border-b-0 lg:border-r lg:p-5">
+                <button type="button" onClick={onBack} className="flex w-fit items-center gap-2 rounded-xl border border-[#14121F]/10 bg-white px-3 py-1.5 text-xs font-semibold text-[#14121F]/80 transition hover:bg-white hover:border-[#6A4CFF]/40 shadow-xs"><ArrowLeft className="h-3.5 w-3.5 text-[#14121F]/60" /> All creation options</button>
                 <header>
-                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-fuchsia-300">Photo + video reel studio</p>
-                    <h1 className="mt-1 text-2xl font-bold">Mix photos and video clips</h1>
-                    <p className="mt-2 text-xs leading-relaxed text-neutral-400">Arrange photos and short clips, style them with text and gradients, add music, then export your reel.</p>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-[#6A4CFF]">Photo + video reel studio</p>
+                    <h1 className="mt-1 text-xl font-extrabold text-[#14121F]">Mix photos and video clips</h1>
+                    <p className="mt-1 text-xs leading-relaxed text-[#14121F]/60">Arrange photos and short clips, style them with text and gradients, add music, then export your reel.</p>
                 </header>
 
-                <section className="space-y-3 rounded-xl border border-neutral-800 bg-neutral-950/70 p-3">
-                    <div className="flex items-center justify-between"><h2 className="text-sm font-semibold">Reel clips <span className="text-neutral-500">({images.length}/{MAX_IMAGES})</span></h2><span className="text-[11px] text-neutral-500">{durationLabel}</span></div>
+                <section className="space-y-3 rounded-2xl border border-[#14121F]/10 bg-white p-4 shadow-xs">
+                    <div className="flex items-center justify-between"><h2 className="text-xs font-bold uppercase tracking-wider text-[#14121F]/70">Reel clips <span className="text-[#14121F]/40">({images.length}/{MAX_IMAGES})</span></h2><span className="text-xs font-mono font-semibold text-[#14121F]/60">{durationLabel}</span></div>
                     <input ref={imageInputRef} type="file" accept="image/*,video/*" multiple onChange={addImages} className="hidden" />
 
-                    <section className="space-y-2 rounded-xl border border-neutral-800 bg-neutral-950/70 p-3">
-                        <button type="button" onClick={() => void saveDraft()} disabled={isSavingDraft || isExporting} className="flex w-full items-center justify-center gap-2 rounded-lg border border-fuchsia-500/40 bg-fuchsia-500/10 px-3 py-2.5 text-sm font-semibold text-fuchsia-100 hover:bg-fuchsia-500/20 disabled:cursor-not-allowed disabled:opacity-50">
+                    <section className="space-y-2.5 rounded-xl border border-[#14121F]/10 bg-[#F7F6FB] p-3.5">
+                        <button type="button" onClick={() => void saveDraft()} disabled={isSavingDraft || isExporting} className="flex w-full items-center justify-center gap-2 rounded-xl border border-[#6A4CFF]/30 bg-[#6A4CFF]/10 px-3.5 py-2.5 text-xs font-semibold text-[#6A4CFF] hover:bg-[#6A4CFF]/20 disabled:cursor-not-allowed disabled:opacity-50 transition shadow-xs">
                             {isSavingDraft ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                             {isSavingDraft ? 'Saving draft…' : currentDraftId ? 'Update saved draft' : 'Save as draft'}
                         </button>
                         <details>
-                            <summary className="flex cursor-pointer list-none items-center gap-2 px-1 py-1 text-xs font-medium text-neutral-400 hover:text-neutral-200">
-                                <FolderOpen className="h-3.5 w-3.5" /> Saved reel drafts ({drafts.length})
+                            <summary className="flex cursor-pointer list-none items-center gap-2 px-1 py-1 text-xs font-semibold text-[#14121F]/80 hover:text-[#14121F]">
+                                <FolderOpen className="h-3.5 w-3.5 text-[#6A4CFF]" /> Saved reel drafts ({drafts.length})
                             </summary>
-                            <div className="mt-2 max-h-48 space-y-1 overflow-y-auto">
-                                {drafts.map((draft) => <div key={draft.id} className="flex items-center gap-1 rounded-lg border border-neutral-800 bg-neutral-900 px-2 py-2">
-                                    <button type="button" onClick={() => void openDraft(draft.id)} disabled={isLoadingDraft} className="min-w-0 flex-1 text-left text-xs text-neutral-200 disabled:opacity-50">
-                                        <span className="block truncate font-medium">{draft.title}</span>
-                                        <span className="mt-0.5 block text-[10px] text-neutral-500">{draft.clipCount} clips · {Math.round(draft.durationMs / 1000)} sec · {new Date(draft.savedAt).toLocaleDateString()}</span>
+                            <div className="mt-2 max-h-48 space-y-1.5 overflow-y-auto">
+                                {drafts.map((draft) => <div key={draft.id} className="flex items-center gap-2 rounded-xl border border-[#14121F]/10 bg-white px-3 py-2 shadow-xs">
+                                    <button type="button" onClick={() => void openDraft(draft.id)} disabled={isLoadingDraft} className="min-w-0 flex-1 text-left text-xs text-[#14121F] disabled:opacity-50">
+                                        <span className="block truncate font-semibold">{draft.title}</span>
+                                        <span className="mt-0.5 block text-[10px] font-medium text-[#14121F]/50">{draft.clipCount} clips · {Math.round(draft.durationMs / 1000)} sec · {new Date(draft.savedAt).toLocaleDateString()}</span>
                                     </button>
-                                    <button type="button" onClick={() => void removeDraft(draft.id)} aria-label={`Delete ${draft.title}`} className="rounded p-1.5 text-neutral-500 hover:bg-red-950 hover:text-red-300"><Trash2 className="h-3.5 w-3.5" /></button>
+                                    <button type="button" onClick={() => void removeDraft(draft.id)} aria-label={`Delete ${draft.title}`} className="rounded-lg p-1.5 text-[#14121F]/40 hover:bg-red-50 hover:text-red-600 transition"><Trash2 className="h-3.5 w-3.5" /></button>
                                 </div>)}
-                                {drafts.length === 0 && <p className="px-2 py-2 text-[11px] text-neutral-500">Your saved reels will appear here.</p>}
+                                {drafts.length === 0 && <p className="px-2 py-2 text-[11px] font-medium text-[#14121F]/50">Your saved reels will appear here.</p>}
                             </div>
                         </details>
                     </section>
-                    <button type="button" onClick={() => imageInputRef.current?.click()} disabled={images.length >= MAX_IMAGES} className="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-neutral-700 py-3 text-sm text-neutral-300 hover:border-fuchsia-500 hover:text-fuchsia-200 disabled:opacity-40"><ImagePlus className="h-4 w-4" /> Add photos or videos</button>
-                    <p className="text-[10px] text-neutral-500">Mix photos with short MP4 or WebM video clips, then reorder them below.</p>
-                    {images.filter((clip) => clip.type === 'image').length > 1 && <button type="button" onClick={() => void autoOrderPhotos()} disabled={isSortingPhotos} className="w-full rounded-lg border border-neutral-700 px-3 py-2 text-xs font-medium text-neutral-300 hover:border-fuchsia-500 disabled:opacity-50">{isSortingPhotos ? 'Scoring photo clarity…' : 'Auto-order photos by quality'}</button>}
+                    <button type="button" onClick={() => imageInputRef.current?.click()} disabled={images.length >= MAX_IMAGES} className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-[#14121F]/20 py-3.5 text-xs font-semibold text-[#14121F]/70 hover:border-[#6A4CFF] hover:text-[#6A4CFF] hover:bg-[#6A4CFF]/5 transition-colors disabled:opacity-40"><ImagePlus className="h-4 w-4" /> Add photos or videos</button>
+                    <p className="text-[11px] leading-relaxed text-[#14121F]/50">Mix photos with short MP4 or WebM video clips, then reorder them below.</p>
+                    {images.filter((clip) => clip.type === 'image').length > 1 && <button type="button" onClick={() => void autoOrderPhotos()} disabled={isSortingPhotos} className="w-full rounded-xl border border-[#14121F]/15 bg-white px-3.5 py-2.5 text-xs font-semibold text-[#14121F] hover:bg-[#14121F]/5 transition shadow-xs disabled:opacity-50">{isSortingPhotos ? 'Scoring photo clarity…' : 'Auto-order photos by quality'}</button>}
                     <div className="space-y-2">
                         {images.map((image, index) => (
-                            <div key={image.id} className={`flex items-center gap-2 rounded-lg border p-2 ${selectedImageId === image.id ? 'border-fuchsia-500/70 bg-fuchsia-500/10' : 'border-neutral-800 bg-neutral-900'}`}>
-                                <button type="button" onClick={() => { setSelectedImageId(image.id); setIsPreviewPlaying(false); seekPreview(images.slice(0, index).reduce((total, clip) => total + getClipDurationMs(clip), 0)); }} className="flex min-w-0 flex-1 items-center gap-2 text-left">
-                                    {image.type === 'video' ? <video src={image.url} muted playsInline className="h-11 w-11 rounded-md object-cover" /> : <img src={image.url} alt="" className="h-11 w-11 rounded-md object-cover" />}
-                                    <span className="min-w-0"><span className="block text-xs font-medium">{image.type === 'video' ? 'Video' : 'Photo'} {index + 1}</span><span className="block truncate text-[10px] text-neutral-500">{image.file.name}</span></span>
+                            <div key={image.id} className={`flex items-center gap-2 rounded-xl border p-2.5 shadow-xs ${selectedImageId === image.id ? 'border-[#6A4CFF]/60 bg-[#6A4CFF]/5' : 'border-[#14121F]/10 bg-white'}`}>
+                                <button type="button" onClick={() => { setSelectedImageId(image.id); setIsPreviewPlaying(false); seekPreview(images.slice(0, index).reduce((total, clip) => total + getClipDurationMs(clip), 0)); }} className="flex min-w-0 flex-1 items-center gap-2.5 text-left">
+                                    {image.type === 'video' ? <video src={image.url} muted playsInline className="h-10 w-10 shrink-0 rounded-lg object-cover shadow-xs" /> : <img src={image.url} alt="" className="h-10 w-10 shrink-0 rounded-lg object-cover shadow-xs" />}
+                                    <span className="min-w-0"><span className="block text-xs font-semibold text-[#14121F]">{image.type === 'video' ? 'Video' : 'Photo'} {index + 1}</span><span className="block truncate text-[10px] font-medium text-[#14121F]/50">{image.file.name}</span></span>
                                 </button>
-                                <button type="button" onClick={() => moveImage(image.id, -1)} disabled={index === 0} aria-label={`Move clip ${index + 1} up`} className="rounded p-1 text-neutral-400 hover:bg-neutral-800 disabled:opacity-30"><ArrowUp className="h-3.5 w-3.5" /></button>
-                                <button type="button" onClick={() => moveImage(image.id, 1)} disabled={index === images.length - 1} aria-label={`Move clip ${index + 1} down`} className="rounded p-1 text-neutral-400 hover:bg-neutral-800 disabled:opacity-30"><ArrowDown className="h-3.5 w-3.5" /></button>
-                                <button type="button" onClick={() => removeImage(image.id)} aria-label={`Remove clip ${index + 1}`} className="rounded p-1 text-neutral-500 hover:bg-red-950 hover:text-red-300"><Trash2 className="h-3.5 w-3.5" /></button>
+                                <button type="button" onClick={() => moveImage(image.id, -1)} disabled={index === 0} aria-label={`Move clip ${index + 1} up`} className="rounded-lg p-1.5 text-[#14121F]/50 hover:bg-[#14121F]/10 disabled:opacity-30"><ArrowUp className="h-3.5 w-3.5" /></button>
+                                <button type="button" onClick={() => moveImage(image.id, 1)} disabled={index === images.length - 1} aria-label={`Move clip ${index + 1} down`} className="rounded-lg p-1.5 text-[#14121F]/50 hover:bg-[#14121F]/10 disabled:opacity-30"><ArrowDown className="h-3.5 w-3.5" /></button>
+                                <button type="button" onClick={() => removeImage(image.id)} aria-label={`Remove clip ${index + 1}`} className="rounded-lg p-1.5 text-[#14121F]/40 hover:bg-red-50 hover:text-red-600 transition"><Trash2 className="h-3.5 w-3.5" /></button>
                             </div>
                         ))}
-                        {!images.length && <p className="py-3 text-center text-xs text-neutral-500">Add a few photos to start building your reel.</p>}
+                        {!images.length && <p className="py-4 text-center text-xs font-medium text-[#14121F]/50">Add a few photos to start building your reel.</p>}
                     </div>
                 </section>
 
-                <section className="space-y-3 rounded-xl border border-neutral-800 bg-neutral-950/70 p-3">
-                    <h2 className="text-sm font-semibold">Image look</h2>
-                    <label className="block text-xs text-neutral-400">Reel template
-                        <select value={template} onChange={(event) => applyTemplate(event.target.value as ReelTemplate)} className="mt-1.5 w-full rounded-lg border border-neutral-700 bg-neutral-800 px-3 py-2 text-sm text-neutral-100">
-                            <option value="custom">Custom look</option><option value="travel">Travel diary</option><option value="birthday">Birthday</option><option value="product">Product launch</option><option value="festival">Festival wishes</option>
-                        </select>
+                <section className="space-y-3 rounded-2xl border border-[#14121F]/10 bg-white p-4 shadow-xs">
+                    <h2 className="text-xs font-bold uppercase tracking-wider text-[#14121F]/70">Image look</h2>
+                    <label className="block text-xs font-semibold text-[#14121F]">Reel template
+                        <div className="relative mt-1.5">
+                            <select value={template} onChange={(event) => applyTemplate(event.target.value as ReelTemplate)} className="w-full appearance-none rounded-xl border border-[#14121F]/15 bg-[#F7F6FB] px-3 py-2 pr-8 text-xs font-medium text-[#14121F] focus:border-[#6A4CFF] focus:outline-none cursor-pointer shadow-xs">
+                                <option value="custom">Custom look</option><option value="travel">Travel diary</option><option value="birthday">Birthday</option><option value="product">Product launch</option><option value="festival">Festival wishes</option>
+                            </select>
+                            <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#14121F]/50" />
+                        </div>
                     </label>
-                    <label className="block text-xs text-neutral-400">Frame format
-                        <select value={aspectRatio} onChange={(event) => setAspectRatio(event.target.value as AspectRatioType)} className="mt-1.5 w-full rounded-lg border border-neutral-700 bg-neutral-800 px-3 py-2 text-sm text-neutral-100"><option value="9:16">Reel · 9:16</option><option value="1:1">Square · 1:1</option><option value="16:9">Landscape · 16:9</option></select>
+                    <label className="block text-xs font-semibold text-[#14121F]">Frame format
+                        <div className="relative mt-1.5">
+                            <select value={aspectRatio} onChange={(event) => setAspectRatio(event.target.value as AspectRatioType)} className="w-full appearance-none rounded-xl border border-[#14121F]/15 bg-[#F7F6FB] px-3 py-2 pr-8 text-xs font-medium text-[#14121F] focus:border-[#6A4CFF] focus:outline-none cursor-pointer shadow-xs"><option value="9:16">Reel · 9:16</option><option value="1:1">Square · 1:1</option><option value="16:9">Landscape · 16:9</option></select>
+                            <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#14121F]/50" />
+                        </div>
                     </label>
-                    <label className="block text-xs text-neutral-400">Seconds per photo · {secondsPerImage}s
-                        <input type="range" min={1} max={8} value={secondsPerImage} onChange={(event) => setSecondsPerImage(Number(event.target.value))} className="mt-2 w-full accent-fuchsia-500" />
+                    <label className="block text-xs font-semibold text-[#14121F]">Seconds per photo · {secondsPerImage}s
+                        <input type="range" min={1} max={8} value={secondsPerImage} onChange={(event) => setSecondsPerImage(Number(event.target.value))} className="mt-2 w-full accent-[#6A4CFF] bg-[#14121F]/10 h-1.5 rounded-full" />
                     </label>
-                    {selectedImage?.type === 'video' && <label className="block text-xs text-neutral-400">Selected video length · {(selectedImage.durationMs / 1000).toFixed(1)}s
-                        <input type="range" min={Math.min(1000, selectedImage.sourceDurationMs ?? 1000)} max={Math.max(Math.min(1000, selectedImage.sourceDurationMs ?? 1000), Math.min(15000, selectedImage.sourceDurationMs ?? 15000))} step={100} value={selectedImage.durationMs} onChange={(event) => setImages((current) => current.map((clip) => clip.id === selectedImage.id ? { ...clip, durationMs: Number(event.target.value) } : clip))} className="mt-2 w-full accent-fuchsia-500" />
+                    {selectedImage?.type === 'video' && <label className="block text-xs font-semibold text-[#14121F]">Selected video length · {(selectedImage.durationMs / 1000).toFixed(1)}s
+                        <input type="range" min={Math.min(1000, selectedImage.sourceDurationMs ?? 1000)} max={Math.max(Math.min(1000, selectedImage.sourceDurationMs ?? 1000), Math.min(15000, selectedImage.sourceDurationMs ?? 15000))} step={100} value={selectedImage.durationMs} onChange={(event) => setImages((current) => current.map((clip) => clip.id === selectedImage.id ? { ...clip, durationMs: Number(event.target.value) } : clip))} className="mt-2 w-full accent-[#6A4CFF] bg-[#14121F]/10 h-1.5 rounded-full" />
                     </label>}
-                    {selectedImage && <div className="grid grid-cols-2 gap-2">
-                        <label className="text-xs text-neutral-400">Entry transition
-                            <select value={selectedImage.transition ?? 'fade'} onChange={(event) => setImages((current) => current.map((clip) => clip.id === selectedImage.id ? { ...clip, transition: event.target.value as ReelImage['transition'] } : clip))} className="mt-1 w-full rounded-lg border border-neutral-700 bg-neutral-800 px-2 py-2 text-xs text-neutral-100"><option value="cut">Cut</option><option value="fade">Fade</option><option value="slide">Slide</option><option value="zoom">Zoom</option></select>
+                    {selectedImage && <div className="grid grid-cols-2 gap-2.5">
+                        <label className="text-xs font-semibold text-[#14121F]">Entry transition
+                            <div className="relative mt-1">
+                                <select value={selectedImage.transition ?? 'fade'} onChange={(event) => setImages((current) => current.map((clip) => clip.id === selectedImage.id ? { ...clip, transition: event.target.value as ReelImage['transition'] } : clip))} className="w-full appearance-none rounded-xl border border-[#14121F]/15 bg-[#F7F6FB] px-2.5 py-2 pr-7 text-xs font-medium text-[#14121F] focus:border-[#6A4CFF] focus:outline-none cursor-pointer shadow-xs"><option value="cut">Cut</option><option value="fade">Fade</option><option value="slide">Slide</option><option value="zoom">Zoom</option></select>
+                                <ChevronDown className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#14121F]/50" />
+                            </div>
                         </label>
-                        {selectedImage.type === 'image' && <label className="text-xs text-neutral-400">Photo motion
-                            <select value={selectedImage.motion ?? 'none'} onChange={(event) => setImages((current) => current.map((clip) => clip.id === selectedImage.id ? { ...clip, motion: event.target.value as ReelImage['motion'] } : clip))} className="mt-1 w-full rounded-lg border border-neutral-700 bg-neutral-800 px-2 py-2 text-xs text-neutral-100"><option value="none">Still</option><option value="zoom-in">Slow zoom in</option><option value="zoom-out">Slow zoom out</option><option value="pan-left">Slow pan left</option><option value="pan-right">Slow pan right</option><option value="depth-dolly">3D Depth · dolly in</option><option value="depth-orbit">3D Depth · orbit</option><option value="depth-sway">3D Depth · sway</option></select>
-                        {isDepthMotion(selectedImage.motion) && <span className="mt-1 flex items-center gap-1.5 text-[10px] text-fuchsia-200">{!depthStatus[selectedImage.id] ? <><Loader2 className="h-3 w-3 animate-spin" /> Computing depth map on your device…</> : depthStatus[selectedImage.id] === 'failed' ? 'Depth unavailable on this device — using slow zoom instead.' : 'Depth map ready.'}</span>}</label>}
+                        {selectedImage.type === 'image' && <label className="text-xs font-semibold text-[#14121F]">Photo motion
+                            <div className="relative mt-1">
+                                <select value={selectedImage.motion ?? 'none'} onChange={(event) => setImages((current) => current.map((clip) => clip.id === selectedImage.id ? { ...clip, motion: event.target.value as ReelImage['motion'] } : clip))} className="w-full appearance-none rounded-xl border border-[#14121F]/15 bg-[#F7F6FB] px-2.5 py-2 pr-7 text-xs font-medium text-[#14121F] focus:border-[#6A4CFF] focus:outline-none cursor-pointer shadow-xs"><option value="none">Still</option><option value="zoom-in">Slow zoom in</option><option value="zoom-out">Slow zoom out</option><option value="pan-left">Slow pan left</option><option value="pan-right">Slow pan right</option><option value="depth-dolly">3D Depth · dolly in</option><option value="depth-orbit">3D Depth · orbit</option><option value="depth-sway">3D Depth · sway</option></select>
+                                <ChevronDown className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#14121F]/50" />
+                            </div>
+                            {isDepthMotion(selectedImage.motion) && <span className="mt-1 flex items-center gap-1.5 text-[10px] font-semibold text-[#6A4CFF]">{!depthStatus[selectedImage.id] ? <><Loader2 className="h-3 w-3 animate-spin" /> Computing depth map on your device…</> : depthStatus[selectedImage.id] === 'failed' ? 'Depth unavailable on this device — using slow zoom instead.' : 'Depth map ready.'}</span>}</label>}
                     </div>}
-                    <label className="block text-xs text-neutral-400">Gradient overlay
-                        <select value={gradient} onChange={(event) => setGradient(event.target.value as GradientPreset)} className="mt-1.5 w-full rounded-lg border border-neutral-700 bg-neutral-800 px-3 py-2 text-sm text-neutral-100">{GRADIENTS.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select>
+                    <label className="block text-xs font-semibold text-[#14121F]">Gradient overlay
+                        <div className="relative mt-1.5">
+                            <select value={gradient} onChange={(event) => setGradient(event.target.value as GradientPreset)} className="w-full appearance-none rounded-xl border border-[#14121F]/15 bg-[#F7F6FB] px-3 py-2 pr-8 text-xs font-medium text-[#14121F] focus:border-[#6A4CFF] focus:outline-none cursor-pointer shadow-xs">{GRADIENTS.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select>
+                            <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#14121F]/50" />
+                        </div>
                     </label>
-                    {gradient !== 'none' && <label className="block text-xs text-neutral-400">Gradient strength · {gradientStrength}%<input type="range" min={0} max={85} value={gradientStrength} onChange={(event) => setGradientStrength(Number(event.target.value))} className="mt-2 w-full accent-fuchsia-500" /></label>}
-                    <label className="block text-xs text-neutral-400">Brightness · {brightness}%<input type="range" min={60} max={150} value={brightness} onChange={(event) => setBrightness(Number(event.target.value))} className="mt-2 w-full accent-fuchsia-500" /></label>
-                    <label className="block text-xs text-neutral-400">Saturation · {saturation}%<input type="range" min={0} max={180} value={saturation} onChange={(event) => setSaturation(Number(event.target.value))} className="mt-2 w-full accent-fuchsia-500" /></label>
-                    {selectedImage && <p className="text-[10px] text-neutral-500">Image crop: fill frame. Current look applies to all photos.</p>}
+                    {gradient !== 'none' && <label className="block text-xs font-semibold text-[#14121F]">Gradient strength · {gradientStrength}%<input type="range" min={0} max={85} value={gradientStrength} onChange={(event) => setGradientStrength(Number(event.target.value))} className="mt-2 w-full accent-[#6A4CFF] bg-[#14121F]/10 h-1.5 rounded-full" /></label>}
+                    <label className="block text-xs font-semibold text-[#14121F]">Brightness · {brightness}%<input type="range" min={60} max={150} value={brightness} onChange={(event) => setBrightness(Number(event.target.value))} className="mt-2 w-full accent-[#6A4CFF] bg-[#14121F]/10 h-1.5 rounded-full" /></label>
+                    <label className="block text-xs font-semibold text-[#14121F]">Saturation · {saturation}%<input type="range" min={0} max={180} value={saturation} onChange={(event) => setSaturation(Number(event.target.value))} className="mt-2 w-full accent-[#6A4CFF] bg-[#14121F]/10 h-1.5 rounded-full" /></label>
+                    {selectedImage && <p className="text-[10px] font-medium text-[#14121F]/50">Image crop: fill frame. Current look applies to all photos.</p>}
                 </section>
 
-                <section className="space-y-3 rounded-xl border border-neutral-800 bg-neutral-950/70 p-3">
-                    <div><h2 className="text-sm font-semibold">Add text to a clip</h2><p className="mt-1 text-[11px] text-neutral-500">Select a photo or video above, then type a title or caption. Text appears over that clip in your reel.</p></div>
+                <section className="space-y-3 rounded-2xl border border-[#14121F]/10 bg-white p-4 shadow-xs">
+                    <div><h2 className="text-xs font-bold uppercase tracking-wider text-[#14121F]/70">Add text to a clip</h2><p className="mt-1 text-xs leading-relaxed text-[#14121F]/60">Select a photo or video above, then type a title or caption. Text appears over that clip in your reel.</p></div>
                     {selectedImage ? <>
-                        <label className="block text-xs text-neutral-400">Describe this photo or clip for AI
-                            <textarea value={selectedImage.description ?? ''} onChange={(event) => setImages((current) => current.map((image) => image.id === selectedImage.id ? { ...image, description: event.target.value.slice(0, 500) } : image))} maxLength={500} rows={2} placeholder="Example: A sunset walk along the beach…" className="mt-1 w-full resize-y rounded-lg border border-neutral-700 bg-neutral-800 px-3 py-2 text-sm text-neutral-100 placeholder:text-neutral-500 focus:border-fuchsia-500 focus:outline-none" />
+                        <label className="block text-xs font-semibold text-[#14121F]">Describe this photo or clip for AI
+                            <textarea value={selectedImage.description ?? ''} onChange={(event) => setImages((current) => current.map((image) => image.id === selectedImage.id ? { ...image, description: event.target.value.slice(0, 500) } : image))} maxLength={500} rows={2} placeholder="Example: A sunset walk along the beach…" className="mt-1.5 w-full resize-y rounded-xl border border-[#14121F]/15 bg-[#F7F6FB] px-3.5 py-2.5 text-xs text-[#14121F] placeholder:text-[#14121F]/40 focus:border-[#6A4CFF] focus:outline-none shadow-xs" />
                         </label>
                         <div className="flex gap-2">
-                            <select aria-label="Caption language" value={captionLanguage} onChange={(event) => setCaptionLanguage(event.target.value)} className="min-w-0 flex-1 rounded-lg border border-neutral-700 bg-neutral-800 px-2 py-2 text-xs text-neutral-100"><option value="en">English</option><option value="hi">Hindi</option><option value="bn">Bengali</option><option value="ta">Tamil</option><option value="te">Telugu</option></select>
-                            <button type="button" onClick={() => void generateCaption(selectedImage)} disabled={isGeneratingCaption || (selectedImage.description ?? '').trim().length < 3} className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-500 disabled:opacity-50">{isGeneratingCaption ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}Generate caption</button>
+                            <div className="relative min-w-0 flex-1">
+                                <select aria-label="Caption language" value={captionLanguage} onChange={(event) => setCaptionLanguage(event.target.value)} className="w-full appearance-none rounded-xl border border-[#14121F]/15 bg-[#F7F6FB] pl-3 pr-8 py-2 text-xs font-medium text-[#14121F] focus:border-[#6A4CFF] focus:outline-none shadow-xs cursor-pointer"><option value="en">English</option><option value="hi">Hindi</option><option value="bn">Bengali</option><option value="ta">Tamil</option><option value="te">Telugu</option></select>
+                                <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#14121F]/50" />
+                            </div>
+                            <button type="button" onClick={() => void generateCaption(selectedImage)} disabled={isGeneratingCaption || (selectedImage.description ?? '').trim().length < 3} className="flex items-center gap-1.5 rounded-xl bg-[#6A4CFF] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[#5839e0] disabled:opacity-50 transition shadow-xs">{isGeneratingCaption ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}Generate caption</button>
                         </div>
-                        <textarea aria-label={`Text overlay for clip ${images.findIndex((image) => image.id === selectedImage.id) + 1}`} value={selectedImage.overlayText} onChange={(event) => setImages((current) => current.map((image) => image.id === selectedImage.id ? { ...image, overlayText: event.target.value.slice(0, 120) } : image))} maxLength={120} rows={2} placeholder="Type text to add to this clip…" className="w-full resize-y rounded-lg border border-neutral-700 bg-neutral-800 px-3 py-2 text-sm text-neutral-100 placeholder:text-neutral-500 focus:border-fuchsia-500 focus:outline-none" />
-                        <div className="grid grid-cols-2 gap-2">
-                            <label className="text-xs text-neutral-400">Design<select value={selectedImage.textStyle} onChange={(event) => setImages((current) => current.map((image) => image.id === selectedImage.id ? { ...image, textStyle: event.target.value as TextOverlayStyle } : image))} className="mt-1 w-full rounded-lg border border-neutral-700 bg-neutral-800 px-2 py-2 text-xs text-neutral-100"><option value="classic">Classic</option><option value="banner">Banner</option><option value="highlight">Highlight</option><option value="outline">Outline</option></select></label>
-                            <label className="text-xs text-neutral-400">Position<select value={selectedImage.textPosition} onChange={(event) => setImages((current) => current.map((image) => image.id === selectedImage.id ? { ...image, textPosition: event.target.value as ReelImage['textPosition'] } : image))} className="mt-1 w-full rounded-lg border border-neutral-700 bg-neutral-800 px-2 py-2 text-xs text-neutral-100"><option value="top">Top</option><option value="center">Center</option><option value="bottom">Bottom</option></select></label>
+                        <textarea aria-label={`Text overlay for clip ${images.findIndex((image) => image.id === selectedImage.id) + 1}`} value={selectedImage.overlayText} onChange={(event) => setImages((current) => current.map((image) => image.id === selectedImage.id ? { ...image, overlayText: event.target.value.slice(0, 120) } : image))} maxLength={120} rows={2} placeholder="Type text to add to this clip…" className="w-full resize-y rounded-xl border border-[#14121F]/15 bg-[#F7F6FB] px-3.5 py-2.5 text-xs text-[#14121F] placeholder:text-[#14121F]/40 focus:border-[#6A4CFF] focus:outline-none shadow-xs" />
+                        <div className="grid grid-cols-2 gap-2.5">
+                            <label className="text-xs font-semibold text-[#14121F]">Design
+                                <div className="relative mt-1">
+                                    <select value={selectedImage.textStyle} onChange={(event) => setImages((current) => current.map((image) => image.id === selectedImage.id ? { ...image, textStyle: event.target.value as TextOverlayStyle } : image))} className="w-full appearance-none rounded-xl border border-[#14121F]/15 bg-[#F7F6FB] px-2.5 py-2 pr-7 text-xs font-medium text-[#14121F] focus:border-[#6A4CFF] focus:outline-none cursor-pointer shadow-xs"><option value="classic">Classic</option><option value="banner">Banner</option><option value="highlight">Highlight</option><option value="outline">Outline</option></select>
+                                    <ChevronDown className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#14121F]/50" />
+                                </div>
+                            </label>
+                            <label className="text-xs font-semibold text-[#14121F]">Position
+                                <div className="relative mt-1">
+                                    <select value={selectedImage.textPosition} onChange={(event) => setImages((current) => current.map((image) => image.id === selectedImage.id ? { ...image, textPosition: event.target.value as ReelImage['textPosition'] } : image))} className="w-full appearance-none rounded-xl border border-[#14121F]/15 bg-[#F7F6FB] px-2.5 py-2 pr-7 text-xs font-medium text-[#14121F] focus:border-[#6A4CFF] focus:outline-none cursor-pointer shadow-xs"><option value="top">Top</option><option value="center">Center</option><option value="bottom">Bottom</option></select>
+                                    <ChevronDown className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#14121F]/50" />
+                                </div>
+                            </label>
                         </div>
-                        {selectedImage.overlayText && <button type="button" onClick={() => setImages((current) => current.map((image) => image.id === selectedImage.id ? { ...image, overlayText: '' } : image))} className="text-left text-xs text-neutral-400 hover:text-red-300">Remove text from this photo</button>}
-                    </> : <p className="rounded-lg border border-dashed border-neutral-700 px-3 py-4 text-center text-xs text-neutral-500">Add and select a photo or video above to edit its text.</p>}
+                        {selectedImage.overlayText && <button type="button" onClick={() => setImages((current) => current.map((image) => image.id === selectedImage.id ? { ...image, overlayText: '' } : image))} className="text-left text-xs font-semibold text-[#14121F]/60 hover:text-red-600">Remove text from this photo</button>}
+                    </> : <p className="rounded-xl border border-dashed border-[#14121F]/20 px-3.5 py-4 text-center text-xs font-medium text-[#14121F]/50">Add and select a photo or video above to edit its text.</p>}
                 </section>
 
-                <section className="space-y-3 rounded-xl border border-neutral-800 bg-neutral-950/70 p-3">
+                <section className="space-y-3 rounded-2xl border border-[#14121F]/10 bg-white p-4 shadow-xs">
                     <div>
-                        <h2 className="text-sm font-semibold">Narration voiceover</h2>
-                        <p className="mt-1 text-[10px] leading-relaxed text-neutral-500">Write a short narration or leave it blank to read your clip captions in order. Gemini generates a voice track for the reel.</p>
+                        <h2 className="text-xs font-bold uppercase tracking-wider text-[#14121F]/70">Narration voiceover</h2>
+                        <p className="mt-1 text-xs leading-relaxed text-[#14121F]/60">Write a short narration or leave it blank to read your clip captions in order. Gemini generates a voice track for the reel.</p>
                     </div>
-                    <textarea value={narrationText} onChange={(event) => setNarrationText(event.target.value.slice(0, 2000))} maxLength={2000} rows={3} placeholder="Write what the narrator should say…" className="w-full resize-y rounded-lg border border-neutral-700 bg-neutral-800 px-3 py-2 text-sm text-neutral-100 placeholder:text-neutral-500 focus:border-fuchsia-500 focus:outline-none" />
-                    <div className="grid grid-cols-2 gap-2">
-                        <label className="text-xs text-neutral-400">Narration language
-                            <select value={narrationLanguage} onChange={(event) => setNarrationLanguage(event.target.value as typeof narrationLanguage)} className="mt-1 w-full rounded-lg border border-neutral-700 bg-neutral-800 px-2 py-2 text-xs text-neutral-100"><option value="en">English</option><option value="hi">Hindi</option><option value="bn">Bengali</option><option value="ta">Tamil</option><option value="te">Telugu</option></select>
+                    <textarea value={narrationText} onChange={(event) => setNarrationText(event.target.value.slice(0, 2000))} maxLength={2000} rows={3} placeholder="Write what the narrator should say…" className="w-full resize-y rounded-xl border border-[#14121F]/15 bg-[#F7F6FB] px-3.5 py-2.5 text-xs text-[#14121F] placeholder:text-[#14121F]/40 focus:border-[#6A4CFF] focus:outline-none shadow-xs" />
+                    <div className="grid grid-cols-2 gap-2.5">
+                        <label className="text-xs font-semibold text-[#14121F]">Narration language
+                            <div className="relative mt-1">
+                                <select value={narrationLanguage} onChange={(event) => setNarrationLanguage(event.target.value as typeof narrationLanguage)} className="w-full appearance-none rounded-xl border border-[#14121F]/15 bg-[#F7F6FB] px-2.5 py-2 pr-7 text-xs font-medium text-[#14121F] focus:border-[#6A4CFF] focus:outline-none cursor-pointer shadow-xs"><option value="en">English</option><option value="hi">Hindi</option><option value="bn">Bengali</option><option value="ta">Tamil</option><option value="te">Telugu</option></select>
+                                <ChevronDown className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#14121F]/50" />
+                            </div>
                         </label>
-                        <label className="text-xs text-neutral-400">Voice
-                            <select value={narrationVoiceGender} onChange={(event) => setNarrationVoiceGender(event.target.value as typeof narrationVoiceGender)} className="mt-1 w-full rounded-lg border border-neutral-700 bg-neutral-800 px-2 py-2 text-xs text-neutral-100"><option value="female">Female</option><option value="male">Male</option></select>
+                        <label className="text-xs font-semibold text-[#14121F]">Voice
+                            <div className="relative mt-1">
+                                <select value={narrationVoiceGender} onChange={(event) => setNarrationVoiceGender(event.target.value as typeof narrationVoiceGender)} className="w-full appearance-none rounded-xl border border-[#14121F]/15 bg-[#F7F6FB] px-2.5 py-2 pr-7 text-xs font-medium text-[#14121F] focus:border-[#6A4CFF] focus:outline-none cursor-pointer shadow-xs"><option value="female">Female</option><option value="male">Male</option></select>
+                                <ChevronDown className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#14121F]/50" />
+                            </div>
                         </label>
                     </div>
-                    <button type="button" onClick={() => void generateVoiceover()} disabled={isGeneratingVoiceover || (!narrationText.trim() && !images.some((clip) => clip.overlayText.trim()))} className="flex w-full items-center justify-center gap-2 rounded-lg bg-indigo-600 px-3 py-2.5 text-xs font-semibold text-white hover:bg-indigo-500 disabled:opacity-50">
+                    <button type="button" onClick={() => void generateVoiceover()} disabled={isGeneratingVoiceover || (!narrationText.trim() && !images.some((clip) => clip.overlayText.trim()))} className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#6A4CFF] px-4 py-2.5 text-xs font-semibold text-white hover:bg-[#5839e0] disabled:opacity-50 transition shadow-sm">
                         {isGeneratingVoiceover ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}{isGeneratingVoiceover ? 'Generating narration…' : 'Generate voiceover'}
                     </button>
                     {voiceover && <>
-                        <audio ref={previewVoiceoverRef} src={voiceover.url} controls preload="auto" className="w-full" aria-label="Preview generated narration" onLoadedMetadata={(event) => {
+                        <audio ref={previewVoiceoverRef} src={voiceover.url} controls preload="auto" className="w-full accent-[#6A4CFF]" aria-label="Preview generated narration" onLoadedMetadata={(event) => {
                             const audio = event.currentTarget;
                             if (Number.isFinite(audio.duration) && audio.duration > 0) audio.currentTime = Math.min(previewTimeRef.current / 1000, Math.max(0, audio.duration - 0.05));
                         }} />
-                        <div className="flex gap-2"><a href={voiceover.url} download={voiceover.file.name} className="flex-1 rounded-md border border-neutral-700 px-2 py-2 text-center text-xs text-neutral-200 hover:bg-neutral-800">Download WAV</a><button type="button" onClick={() => { URL.revokeObjectURL(voiceover.url); setVoiceover(null); }} className="rounded-md border border-neutral-700 px-2 py-2 text-xs text-neutral-300 hover:border-red-500 hover:text-red-300">Remove voiceover</button></div>
+                        <div className="flex gap-2"><a href={voiceover.url} download={voiceover.file.name} className="flex-1 rounded-xl border border-[#14121F]/15 bg-[#F7F6FB] px-3.5 py-2.5 text-center text-xs font-semibold text-[#14121F] hover:bg-white transition shadow-xs">Download WAV</a><button type="button" onClick={() => { URL.revokeObjectURL(voiceover.url); setVoiceover(null); }} className="rounded-xl border border-[#14121F]/15 bg-[#F7F6FB] px-3.5 py-2.5 text-xs font-semibold text-[#14121F] hover:border-red-500 hover:text-red-600 transition shadow-xs">Remove voiceover</button></div>
                     </>}
                 </section>
 
-                <section className="space-y-3 rounded-xl border border-neutral-800 bg-neutral-950/70 p-3">
-                    <div className="flex items-center justify-between"><h2 className="flex items-center gap-2 text-sm font-semibold"><Music2 className="h-4 w-4 text-fuchsia-300" /> Background music</h2>{music && <button type="button" onClick={() => { URL.revokeObjectURL(music.url); setMusic(null); }} className="text-xs text-neutral-500 hover:text-red-300">Remove</button>}</div>
+                <section className="space-y-3 rounded-2xl border border-[#14121F]/10 bg-white p-4 shadow-xs">
+                    <div className="flex items-center justify-between"><h2 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#14121F]/70"><Music2 className="h-4 w-4 text-[#6A4CFF]" /> Background music</h2>{music && <button type="button" onClick={() => { URL.revokeObjectURL(music.url); setMusic(null); }} className="text-xs font-semibold text-[#14121F]/50 hover:text-red-600">Remove</button>}</div>
                     <input ref={musicInputRef} type="file" accept="audio/*" onChange={setMusicFile} className="hidden" />
-                    <button type="button" onClick={() => musicInputRef.current?.click()} className="w-full rounded-lg border border-neutral-700 bg-neutral-800 px-3 py-2 text-left text-xs text-neutral-300 hover:border-fuchsia-500">{music ? music.file.name : 'Choose music from your device'}</button>
+                    <button type="button" onClick={() => musicInputRef.current?.click()} className="w-full rounded-xl border border-[#14121F]/15 bg-[#F7F6FB] px-3.5 py-2.5 text-left text-xs font-semibold text-[#14121F] hover:border-[#6A4CFF] transition shadow-xs">{music ? music.file.name : 'Choose music from your device'}</button>
                     {music && <>
-                        <audio ref={previewAudioRef} src={music.url} controls preload="auto" className="w-full" aria-label="Preview background music" onLoadedMetadata={(event) => {
+                        <audio ref={previewAudioRef} src={music.url} controls preload="auto" className="w-full accent-[#6A4CFF]" aria-label="Preview background music" onLoadedMetadata={(event) => {
                             const audio = event.currentTarget;
                             if (Number.isFinite(audio.duration) && audio.duration > 0) audio.currentTime = (previewTimeRef.current / 1000) % audio.duration;
                         }} />
-                        <label className="block text-xs text-neutral-400">Music volume · {musicVolume}%<input type="range" min={0} max={100} value={musicVolume} onChange={(event) => setMusicVolume(Number(event.target.value))} className="mt-2 w-full accent-fuchsia-500" /></label>
-                        <p className="text-[10px] text-neutral-500">Music plays across the reel and follows the timeline. Video clip audio is muted so it won’t compete with the soundtrack.</p>
+                        <label className="block text-xs font-semibold text-[#14121F]">Music volume · {musicVolume}%<input type="range" min={0} max={100} value={musicVolume} onChange={(event) => setMusicVolume(Number(event.target.value))} className="mt-2 w-full accent-[#6A4CFF] bg-[#14121F]/10 h-1.5 rounded-full" /></label>
+                        <p className="text-[11px] leading-relaxed text-[#14121F]/50">Music plays across the reel and follows the timeline. Video clip audio is muted so it won’t compete with the soundtrack.</p>
                     </>}
-                    {music && <button type="button" onClick={() => void syncToMusicBeat()} disabled={isAnalyzingBeats || images.length === 0} className="flex w-full items-center justify-center gap-2 rounded-lg border border-neutral-700 px-3 py-2 text-xs font-medium text-neutral-300 hover:border-fuchsia-500 disabled:opacity-50">{isAnalyzingBeats ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Music2 className="h-3.5 w-3.5" />}{isAnalyzingBeats ? 'Analyzing beat…' : 'Sync photo timing to beat'}</button>}
-                    {beatSyncMessage && <p className="text-[10px] text-fuchsia-200">{beatSyncMessage}</p>}
+                    {music && <button type="button" onClick={() => void syncToMusicBeat()} disabled={isAnalyzingBeats || images.length === 0} className="flex w-full items-center justify-center gap-2 rounded-xl border border-[#14121F]/15 bg-[#F7F6FB] px-3.5 py-2.5 text-xs font-semibold text-[#14121F] hover:border-[#6A4CFF] transition shadow-xs disabled:opacity-50">{isAnalyzingBeats ? <Loader2 className="h-3.5 w-3.5 animate-spin text-[#6A4CFF]" /> : <Music2 className="h-3.5 w-3.5 text-[#6A4CFF]" />}{isAnalyzingBeats ? 'Analyzing beat…' : 'Sync photo timing to beat'}</button>}
+                    {beatSyncMessage && <p className="text-[11px] font-medium text-[#6A4CFF]">{beatSyncMessage}</p>}
                 </section>
-                <p className="text-[10px] leading-relaxed text-neutral-500">Use music you have permission to use. Free exports are limited to 60 seconds and include a small watermark.</p>
+                <p className="text-[11px] leading-relaxed text-[#14121F]/40">Use music you have permission to use. Free exports are limited to 60 seconds and include a small watermark.</p>
             </aside>
 
             <section className="flex min-h-[70dvh] min-w-0 flex-1 flex-col items-center justify-center gap-4 p-4 lg:min-h-0 lg:p-8">
                 <div className="flex w-full max-w-4xl items-center justify-between gap-3">
-                    <div><h2 className="text-lg font-semibold">Reel preview</h2><p className="text-xs text-neutral-500">{images.length} clips · {durationLabel}</p></div>
-                    {images.length > 0 && <button type="button" onClick={togglePreview} className="flex items-center gap-2 rounded-lg border border-neutral-700 px-3 py-2 text-xs font-semibold hover:bg-neutral-800"><Play className="h-3.5 w-3.5" />{isPreviewPlaying ? 'Pause preview' : 'Play preview'}</button>}
+                    <div>
+                        <h2 className="text-base font-bold uppercase tracking-wider text-[#14121F]/70">Reel preview</h2>
+                        <p className="text-xs font-medium text-[#14121F]/50">{images.length} clips · {durationLabel}</p>
+                    </div>
+                    {images.length > 0 && (
+                        <button
+                            type="button"
+                            onClick={togglePreview}
+                            className="flex items-center gap-2 rounded-xl border border-[#14121F]/15 bg-white px-4 py-2 text-xs font-semibold text-[#14121F] hover:bg-gray-100 hover:border-[#6A4CFF]/40 shadow-xs transition"
+                        >
+                            <Play className="h-3.5 w-3.5 text-[#6A4CFF]" />
+                            {isPreviewPlaying ? 'Pause preview' : 'Play preview'}
+                        </button>
+                    )}
                 </div>
-                <div className="relative flex max-h-[65dvh] min-h-80 w-full max-w-4xl items-center justify-center overflow-hidden rounded-2xl border border-neutral-800 bg-neutral-900 p-4">
-                    <div className={`relative overflow-hidden rounded-xl bg-neutral-950 shadow-2xl ${aspectRatio === '9:16' ? 'h-[min(62dvh,38rem)] aspect-9/16' : aspectRatio === '1:1' ? 'h-[min(62dvh,38rem)] aspect-square' : 'w-full aspect-video'}`} style={transitionStyle}>
+                <div className="relative flex max-h-[65dvh] min-h-80 w-full max-w-4xl items-center justify-center overflow-hidden rounded-3xl border border-[#14121F]/10 bg-[#F7F6FB] p-5 shadow-sm">
+                    <div className={`relative overflow-hidden rounded-2xl bg-[#14121F] shadow-xl ${aspectRatio === '9:16' ? 'h-[min(62dvh,38rem)] aspect-9/16' : aspectRatio === '1:1' ? 'h-[min(62dvh,38rem)] aspect-square' : 'w-full aspect-video'}`} style={transitionStyle}>
                         {activeImage?.type === 'video' ? <video key={activeImage.id} ref={previewVideoRef} src={activeImage.url} muted playsInline preload="auto" onLoadedMetadata={(event) => {
                             const video = event.currentTarget;
                             const localTime = Math.max(0, (previewTimeRef.current - activeClipStartMs) / 1000);
                             video.currentTime = Math.min(localTime, Math.max(0, video.duration - 0.05));
                             if (isPreviewPlaying) video.play().catch(() => setError('This video clip could not play in the preview.'));
-                        }} className="h-full w-full object-cover" style={{ filter: filterStyle, ...photoMotionStyle }} /> : activeImage && activeDepth ? <DepthPreview clip={activeImage} depth={activeDepth} progress={activeClipProgress} aspectRatio={aspectRatio} filter={filterStyle} /> : activeImage ? <img src={activeImage.url} alt={`${activeImage.type === 'image' ? 'Photo' : 'Video'} ${safePreviewIndex + 1} preview`} className="h-full w-full object-cover" style={{ filter: filterStyle, ...photoMotionStyle }} /> : <div className="flex h-full items-center justify-center text-center text-sm text-neutral-500"><span><ImagePlus className="mx-auto mb-3 h-8 w-8" />Add photos or videos to preview your reel</span></div>}
-                        {activeDepthLoading && <div className="pointer-events-none absolute left-1/2 top-3 z-10 flex -translate-x-1/2 items-center gap-2 rounded-full bg-black/70 px-3 py-1.5 text-[11px] text-white"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Building 3D depth…</div>}
+                        }} className="h-full w-full object-cover" style={{ filter: filterStyle, ...photoMotionStyle }} /> : activeImage && activeDepth ? <DepthPreview clip={activeImage} depth={activeDepth} progress={activeClipProgress} aspectRatio={aspectRatio} filter={filterStyle} /> : activeImage ? <img src={activeImage.url} alt={`${activeImage.type === 'image' ? 'Photo' : 'Video'} ${safePreviewIndex + 1} preview`} className="h-full w-full object-cover" style={{ filter: filterStyle, ...photoMotionStyle }} /> : <div className="flex h-full items-center justify-center text-center text-xs font-semibold text-white/50"><span><ImagePlus className="mx-auto mb-3 h-8 w-8 text-white/40" />Add photos or videos to preview your reel</span></div>}
+                        {activeDepthLoading && <div className="pointer-events-none absolute left-1/2 top-3 z-10 flex -translate-x-1/2 items-center gap-2 rounded-full bg-black/70 px-3.5 py-1.5 text-xs font-semibold text-white backdrop-blur-md"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Building 3D depth…</div>}
                         {activeImage && gradient !== 'none' && <div className="pointer-events-none absolute inset-0" style={{ backgroundImage: `${gradientColor}, ${gradientStyle}` }} />}
                         {activeImage?.overlayText && <div className={`pointer-events-none absolute left-1/2 w-[84%] -translate-x-1/2 px-3 py-2 text-center text-sm font-bold sm:text-xl ${activeImage.textPosition === 'top' ? 'top-[15%]' : activeImage.textPosition === 'center' ? 'top-1/2 -translate-y-1/2' : 'bottom-[15%]'} ${activeImage.textStyle === 'banner' ? 'rounded-lg bg-black/80 text-white' : activeImage.textStyle === 'highlight' ? 'rounded-lg bg-yellow-400/95 text-neutral-950' : activeImage.textStyle === 'outline' ? 'text-white [text-shadow:-1px_-1px_0_#000,1px_-1px_0_#000,-1px_1px_0_#000,1px_1px_0_#000]' : 'text-white [text-shadow:0_2px_7px_#000]'}`}>{activeImage.overlayText}</div>}
-                        {activeImage && <div className="absolute bottom-3 right-3 rounded bg-black/60 px-2 py-1 text-[9px] font-semibold text-white/80">CLIPRAME · FREE</div>}
+                        {activeImage && <div className="absolute bottom-3 right-3 rounded-lg bg-black/60 px-2.5 py-1 text-[10px] font-bold text-white/90 backdrop-blur-md">CLIPRAME · FREE</div>}
                     </div>
                 </div>
-                {images.length > 0 && <div className="w-full max-w-4xl rounded-xl border border-neutral-800 bg-neutral-900 px-4 py-3">
-                    <div className="mb-2 flex justify-between text-[11px] font-mono text-neutral-400"><span>Photo {safePreviewIndex + 1} of {images.length}</span><span>{(previewTimeMs / 1000).toFixed(1)}s / {(durationMs / 1000).toFixed(1)}s</span></div>
-                    <input aria-label="Reel preview timeline" type="range" min={0} max={Math.max(durationMs, 1)} step={100} value={Math.min(previewTimeMs, durationMs)} onChange={(event) => seekPreview(Number(event.target.value))} className="w-full cursor-pointer accent-fuchsia-500" />
-                    <div className="mt-2 flex gap-1.5 overflow-x-auto">
-                        {images.map((image, index) => <button key={image.id} type="button" onClick={() => { setSelectedImageId(image.id); setIsPreviewPlaying(false); seekPreview(images.slice(0, index).reduce((total, clip) => total + getClipDurationMs(clip), 0)); }} aria-label={`Preview clip ${index + 1}`} aria-pressed={safePreviewIndex === index} className={`relative h-11 w-10 shrink-0 overflow-hidden rounded border-2 ${safePreviewIndex === index ? 'border-fuchsia-400' : 'border-transparent'}`}>{image.type === 'video' ? <video src={image.url} muted playsInline className="h-full w-full object-cover" /> : <img src={image.url} alt="" className="h-full w-full object-cover" />}</button>)}
+                {images.length > 0 && <div className="w-full max-w-4xl rounded-2xl border border-[#14121F]/10 bg-white p-4 shadow-xs">
+                    <div className="mb-2.5 flex justify-between text-xs font-mono font-semibold text-[#14121F]/70"><span>Photo {safePreviewIndex + 1} of {images.length}</span><span>{(previewTimeMs / 1000).toFixed(1)}s / {(durationMs / 1000).toFixed(1)}s</span></div>
+                    <input aria-label="Reel preview timeline" type="range" min={0} max={Math.max(durationMs, 1)} step={100} value={Math.min(previewTimeMs, durationMs)} onChange={(event) => seekPreview(Number(event.target.value))} className="w-full cursor-pointer accent-[#6A4CFF] bg-[#14121F]/10 h-1.5 rounded-full" />
+                    <div className="mt-3 flex gap-2 overflow-x-auto">
+                        {images.map((image, index) => <button key={image.id} type="button" onClick={() => { setSelectedImageId(image.id); setIsPreviewPlaying(false); seekPreview(images.slice(0, index).reduce((total, clip) => total + getClipDurationMs(clip), 0)); }} aria-label={`Preview clip ${index + 1}`} aria-pressed={safePreviewIndex === index} className={`relative h-12 w-11 shrink-0 overflow-hidden rounded-xl border-2 transition ${safePreviewIndex === index ? 'border-[#6A4CFF] shadow-xs' : 'border-transparent opacity-70 hover:opacity-100'}`}>{image.type === 'video' ? <video src={image.url} muted playsInline className="h-full w-full object-cover" /> : <img src={image.url} alt="" className="h-full w-full object-cover" />}</button>)}
                     </div>
                 </div>}
-                {(isExporting || completedExportUrl) && <div role="status" aria-live="polite" className="w-full max-w-4xl rounded-xl border border-fuchsia-500/30 bg-fuchsia-950/20 px-4 py-3">
+                {(isExporting || completedExportUrl) && <div role="status" aria-live="polite" className="w-full max-w-4xl rounded-2xl border border-[#6A4CFF]/30 bg-[#6A4CFF]/5 p-4 shadow-xs">
                     <div className="flex items-center gap-3">
-                        {isExporting && <Loader2 className="h-5 w-5 shrink-0 animate-spin text-fuchsia-300" />}
+                        {isExporting && <Loader2 className="h-5 w-5 shrink-0 animate-spin text-[#6A4CFF]" />}
                         <div className="min-w-0 flex-1">
-                            <div className="flex items-center justify-between gap-3 text-xs font-semibold text-neutral-100">
+                            <div className="flex items-center justify-between gap-3 text-xs font-semibold text-[#14121F]">
                                 <span className="truncate">{exportStatus ?? 'Preparing your reel…'}</span>
-                                {isExporting && <span className="shrink-0 tabular-nums text-fuchsia-200">{exportProgress}%</span>}
+                                {isExporting && <span className="shrink-0 tabular-nums font-mono font-bold text-[#6A4CFF]">{exportProgress}%</span>}
                             </div>
-                            {isExporting && <div className="mt-2 h-2 overflow-hidden rounded-full bg-neutral-800"><div className="h-full rounded-full bg-linear-to-r from-fuchsia-600 to-indigo-400 transition-[width] duration-200" style={{ width: `${Math.max(3, exportProgress)}%` }} /></div>}
+                            {isExporting && <div className="mt-2.5 h-2 overflow-hidden rounded-full bg-[#14121F]/10"><div className="h-full rounded-full bg-[#6A4CFF] transition-[width] duration-200" style={{ width: `${Math.max(3, exportProgress)}%` }} /></div>}
                         </div>
-                        {completedExportUrl && !isExporting && <a href={completedExportUrl} download="photo-reel.mp4" className="shrink-0 rounded-lg bg-fuchsia-600 px-3 py-2 text-xs font-semibold text-white hover:bg-fuchsia-500"><Download className="mr-1 inline h-3.5 w-3.5" />Download reel</a>}
+                        {completedExportUrl && !isExporting && <a href={completedExportUrl} download="photo-reel.mp4" className="shrink-0 rounded-xl bg-[#6A4CFF] px-4 py-2.5 text-xs font-semibold text-white hover:bg-[#5839e0] transition shadow-sm"><Download className="mr-1.5 inline h-3.5 w-3.5" />Download reel</a>}
                     </div>
                 </div>}
-                <div className="flex w-full max-w-4xl flex-wrap items-center justify-between gap-3 rounded-xl border border-neutral-800 bg-neutral-900 p-3">
-                    <div className="text-xs text-neutral-400">{durationLabel} total {durationMs > FREE_VIDEO_LIMIT_MS && <span className="text-red-300">· Over 60-second limit</span>}</div>
-                    <button type="button" onClick={() => void exportReel()} disabled={!images.length || isExporting || durationMs > FREE_VIDEO_LIMIT_MS} className="flex items-center gap-2 rounded-lg bg-fuchsia-600 px-5 py-3 text-sm font-semibold text-white hover:bg-fuchsia-500 disabled:cursor-not-allowed disabled:opacity-50">
+                <div className="flex w-full max-w-4xl flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#14121F]/10 bg-white p-4 shadow-xs">
+                    <div className="text-xs font-semibold text-[#14121F]/70">{durationLabel} total {durationMs > FREE_VIDEO_LIMIT_MS && <span className="text-red-600">· Over 60-second limit</span>}</div>
+                    <button type="button" onClick={() => void exportReel()} disabled={!images.length || isExporting || durationMs > FREE_VIDEO_LIMIT_MS} className="flex items-center gap-2 rounded-xl bg-[#6A4CFF] px-6 py-3 text-xs font-bold text-white hover:bg-[#5839e0] disabled:cursor-not-allowed disabled:opacity-50 transition shadow-md shadow-[#6A4CFF]/20">
                         {isExporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}{isExporting ? 'Rendering reel…' : completedExportUrl ? 'Create another export' : 'Create & download reel'}
                     </button>
                 </div>
-                {error && <p role="alert" className="w-full max-w-4xl rounded-lg border border-red-900/70 bg-red-950/30 px-3 py-2 text-xs text-red-200">{error}</p>}
+                {error && <p role="alert" className="w-full max-w-4xl rounded-2xl border border-red-200 bg-red-50 p-3.5 text-xs font-medium text-red-600 shadow-xs">{error}</p>}
                 <canvas ref={canvasRef} className="hidden" />
             </section>
         </main>

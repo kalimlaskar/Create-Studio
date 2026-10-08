@@ -9,7 +9,6 @@ interface Preset {
     values: ColorGradeSettings;
 }
 
-// Instagram-style presets — each is just a named combination of the same sliders
 export const FILTER_PRESETS: Preset[] = [
     { name: 'Original', values: { brightness: 100, contrast: 100, saturation: 100, temperature: 0 } },
     { name: 'Vivid', values: { brightness: 105, contrast: 115, saturation: 130, temperature: 5 } },
@@ -26,21 +25,21 @@ interface ColorGradePanelProps {
 
 export function ColorGradePanel({ colorGrade, onChange }: ColorGradePanelProps) {
     return (
-        <div className="space-y-5">
+        <div className="space-y-5 font-[family-name:var(--font-body)] text-[#14121F]">
             <div>
-                <label className="text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-2 block">Filters</label>
-                <div className="grid grid-cols-3 gap-2">
+                <label className="text-[11px] font-bold uppercase tracking-wider text-[#14121F]/70 mb-2.5 block">Filters</label>
+                <div className="grid grid-cols-3 gap-2.5">
                     {FILTER_PRESETS.map((preset) => (
                         <button
                             key={preset.name}
                             onClick={() => onChange(preset.values)}
-                            className="overflow-hidden rounded-lg border border-neutral-700 bg-neutral-800/50 text-[11px] text-neutral-300 transition-colors hover:border-indigo-500 hover:text-white">
-                            <span className="relative block h-14 overflow-hidden" aria-hidden="true">
-                                <span className="absolute inset-0" style={{ filter: buildColorGradeFilter(preset.values), background: 'linear-gradient(145deg, #38bdf8 0%, #a3e635 35%, #f97316 70%, #7c3aed 100%)' }} />
-                                <span className="absolute -right-1 top-1 h-8 w-8 rounded-full bg-amber-100/80 shadow-lg" />
-                                <span className="absolute bottom-0 left-1/2 h-8 w-6 -translate-x-1/2 rounded-t-full bg-neutral-950/80" />
+                            className="overflow-hidden rounded-2xl border border-[#14121F]/10 bg-[#F7F6FB] text-xs font-semibold text-[#14121F]/80 transition-all hover:border-[#6A4CFF] hover:bg-white hover:shadow-md">
+                            <span className="relative block h-16 overflow-hidden rounded-t-2xl" aria-hidden="true">
+                                <span className="absolute inset-0" style={{ filter: buildColorGradeFilter(preset.values), background: 'linear-gradient(145deg, #FFE347 0%, #FF3D81 35%, #6A4CFF 70%, #14121F 100%)' }} />
+                                <span className="absolute -right-1 top-1 h-8 w-8 rounded-full bg-white/40 blur-[2px]" />
+                                <span className="absolute bottom-0 left-1/2 h-8 w-6 -translate-x-1/2 rounded-t-full bg-[#14121F]/80" />
                             </span>
-                            <span className="block px-1.5 py-1.5 text-center">{preset.name}</span>
+                            <span className="block px-2 py-2 text-center">{preset.name}</span>
                         </button>
                     ))}
                 </div>
@@ -63,13 +62,13 @@ function Slider({ label, value, min, max, unit, onChange }: {
 }) {
     return (
         <div>
-            <div className="flex justify-between text-xs text-neutral-400 mb-1">
-                <span>{label}</span><span>{value}{unit}</span>
+            <div className="flex justify-between text-xs font-medium text-[#14121F]/70 mb-1.5">
+                <span>{label}</span><span className="font-mono text-[#14121F] font-semibold">{value}{unit}</span>
             </div>
             <input
                 type="range" min={min} max={max} value={value}
                 onChange={(e) => onChange(Number(e.target.value))}
-                className="w-full accent-indigo-500 bg-neutral-800 h-1 rounded cursor-pointer"
+                className="w-full accent-[#6A4CFF] bg-[#14121F]/10 h-1.5 rounded-full cursor-pointer"
             />
         </div>
     );

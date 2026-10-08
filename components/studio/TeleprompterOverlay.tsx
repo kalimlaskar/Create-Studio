@@ -87,7 +87,6 @@ export function TeleprompterOverlay({ scriptText }: TeleprompterOverlayProps) {
         return () => observer.disconnect();
     }, [isVisible]);
 
-    // Reset isAtEnd safely during render when scriptText changes (replaces the bad useEffect)
     if (scriptText !== prevScriptText) {
         setPrevScriptText(scriptText);
         setIsAtEnd(false);
@@ -196,7 +195,7 @@ export function TeleprompterOverlay({ scriptText }: TeleprompterOverlayProps) {
     };
 
     return (
-        <div ref={containerRef} className="pointer-events-none absolute inset-0 z-20">
+        <div ref={containerRef} className="pointer-events-none absolute inset-0 z-20 font-[family-name:var(--font-body)] text-[#14121F]">
             <button
                 type="button"
                 onPointerDown={(event) => event.stopPropagation()}
@@ -206,7 +205,7 @@ export function TeleprompterOverlay({ scriptText }: TeleprompterOverlayProps) {
                     setIsVisible(!isVisible);
                 }}
                 aria-expanded={isVisible}
-                className="pointer-events-auto absolute right-3 top-16 rounded-full border border-white/20 bg-neutral-950/70 px-3 py-2 text-[11px] font-semibold text-white/90 shadow backdrop-blur hover:bg-neutral-900/90 sm:right-4 sm:top-4"
+                className="pointer-events-auto absolute right-3 top-16 rounded-full border border-[#14121F]/15 bg-[#F7F6FB]/90 px-3.5 py-2 text-xs font-semibold text-[#14121F] shadow-sm backdrop-blur hover:bg-white sm:right-4 sm:top-4 transition"
             >
                 {isVisible ? 'Hide prompter' : 'Show prompter'}
             </button>
@@ -217,10 +216,10 @@ export function TeleprompterOverlay({ scriptText }: TeleprompterOverlayProps) {
                     aria-label="Teleprompter overlay"
                     onPointerDown={(event) => event.stopPropagation()}
                     style={{ left: `${position.x * 100}%`, top: `${position.y * 100}%`, transform: 'translate(-50%, -50%)' }}
-                    className={`pointer-events-auto absolute flex h-[24%] w-[calc(100%-1.5rem)] max-w-3xl flex-col overflow-hidden rounded-xl border border-white/20 bg-neutral-950/75 text-white shadow-2xl backdrop-blur-md sm:h-[22%] ${isDragging ? 'ring-1 ring-indigo-400/70' : ''}`}
+                    className={`pointer-events-auto absolute flex h-[24%] w-[calc(100%-1.5rem)] max-w-3xl flex-col overflow-hidden rounded-2xl border border-[#14121F]/15 bg-[#F7F6FB]/95 text-[#14121F] shadow-xl backdrop-blur-md sm:h-[22%] ${isDragging ? 'ring-2 ring-[#6A4CFF]/70' : ''}`}
                 >
-                    <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-3 py-1.5">
-                        <div className="flex min-w-0 items-center gap-1.5">
+                    <div className="flex shrink-0 items-center justify-between border-b border-[#14121F]/10 px-3.5 py-2">
+                        <div className="flex min-w-0 items-center gap-2">
                             <button
                                 type="button"
                                 aria-label="Move teleprompter"
@@ -231,23 +230,23 @@ export function TeleprompterOverlay({ scriptText }: TeleprompterOverlayProps) {
                                 onPointerCancel={stopDragging}
                                 onLostPointerCapture={() => { dragRef.current = null; setIsDragging(false); }}
                                 onKeyDown={nudgePanel}
-                                className="touch-none cursor-move rounded p-1 text-white/50 hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400"
+                                className="touch-none cursor-move rounded-lg p-1 text-[#14121F]/50 hover:bg-[#14121F]/10 hover:text-[#14121F] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6A4CFF]"
                             >
-                                <Grip className="h-3.5 w-3.5" />
+                                <Grip className="h-4 w-4" />
                             </button>
-                            <span className="truncate text-[9px] font-semibold uppercase tracking-[0.16em] text-white/70">Teleprompter</span>
+                            <span className="truncate text-[10px] font-bold uppercase tracking-wider text-[#14121F]/70">Teleprompter</span>
                         </div>
                         <button
                             type="button"
                             onClick={toggleScroll}
-                            className="flex items-center gap-1 rounded-full bg-white/15 px-2.5 py-1 text-[10px] font-semibold text-white transition-colors hover:bg-white/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400"
+                            className="flex items-center gap-1.5 rounded-full bg-[#6A4CFF] px-3 py-1 text-xs font-semibold text-white transition-colors hover:bg-[#5839e0] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6A4CFF] shadow-xs"
                             aria-label={isScrolling ? 'Pause teleprompter' : isAtEnd ? 'Restart teleprompter' : 'Start teleprompter scrolling'}
                         >
-                            {isScrolling ? <><Pause className="h-3 w-3" /> Pause</> : isAtEnd ? <><RotateCcw className="h-3 w-3" /> Restart</> : <><Play className="h-3 w-3" /> Scroll</>}
+                            {isScrolling ? <><Pause className="h-3.5 w-3.5" /> Pause</> : isAtEnd ? <><RotateCcw className="h-3.5 w-3.5" /> Restart</> : <><Play className="h-3.5 w-3.5" /> Scroll</>}
                         </button>
                     </div>
-                    <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-4 py-2 scrollbar-thin">
-                        <p className="whitespace-pre-wrap text-center text-xs font-medium leading-relaxed drop-shadow-md sm:text-sm md:text-base">{scriptText}</p>
+                    <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-4 py-3 scrollbar-thin">
+                        <p className="whitespace-pre-wrap text-center text-xs font-medium leading-relaxed text-[#14121F]/90 sm:text-sm md:text-base">{scriptText}</p>
                     </div>
                 </section>
             )}

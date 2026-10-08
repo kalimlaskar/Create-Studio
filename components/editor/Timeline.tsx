@@ -23,9 +23,9 @@ interface TimelineProps {
 }
 
 const TRANSITION_COLORS: Record<TransitionType, string> = {
-    particles: 'rgba(56,189,248,.65)',
-    portal: 'rgba(168,85,247,.65)',
-    warp: 'rgba(250,250,250,.6)',
+    particles: 'rgba(106,76,255,.65)',
+    portal: 'rgba(255,61,129,.65)',
+    warp: 'rgba(20,18,31,.6)',
 };
 
 function formatTime(ms: number) {
@@ -58,29 +58,29 @@ export function Timeline({ durationMs, playheadMs, isPlaying, onSeek, onTogglePl
     const selectedTransition = selectedSplit !== null ? videoEdit.transitions?.find((transition) => transition.atMs === selectedSplit) : undefined;
 
     return (
-        <div className="bg-neutral-900 border-t border-neutral-800 p-3 md:p-4">
-            <div className="flex items-center gap-4 mb-3">
+        <div className="bg-white border-t border-[#14121F]/10 p-4 font-[family-name:var(--font-body)] text-[#14121F]">
+            <div className="flex items-center gap-3 mb-3">
                 <button
                     onClick={onTogglePlay}
-                    className="flex items-center justify-center w-10 h-10 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white transition-colors">
+                    className="flex items-center justify-center w-10 h-10 rounded-full bg-[#6A4CFF] hover:bg-[#5839e0] text-white shadow-sm transition-colors">
                     {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 ml-0.5" />}
                 </button>
-                <button type="button" aria-label="Back 5 seconds" onClick={() => onSeek(Math.max(videoEdit.trimStartMs, playheadMs - 5000))} className="flex h-10 w-10 items-center justify-center rounded-full bg-neutral-800 text-neutral-200 hover:bg-neutral-700"><SkipBack className="h-4 w-4" /></button>
-                <button type="button" aria-label="Forward 5 seconds" onClick={() => onSeek(Math.min(videoEdit.trimEndMs, playheadMs + 5000))} className="flex h-10 w-10 items-center justify-center rounded-full bg-neutral-800 text-neutral-200 hover:bg-neutral-700"><SkipForward className="h-4 w-4" /></button>
-                <span className="ml-auto text-xs text-neutral-400 font-mono tabular-nums">
+                <button type="button" aria-label="Back 5 seconds" onClick={() => onSeek(Math.max(videoEdit.trimStartMs, playheadMs - 5000))} className="flex h-10 w-10 items-center justify-center rounded-full border border-[#14121F]/15 bg-[#F7F6FB] text-[#14121F] hover:bg-[#14121F] hover:text-white transition"><SkipBack className="h-4 w-4" /></button>
+                <button type="button" aria-label="Forward 5 seconds" onClick={() => onSeek(Math.min(videoEdit.trimEndMs, playheadMs + 5000))} className="flex h-10 w-10 items-center justify-center rounded-full border border-[#14121F]/15 bg-[#F7F6FB] text-[#14121F] hover:bg-[#14121F] hover:text-white transition"><SkipForward className="h-4 w-4" /></button>
+                <span className="ml-auto text-xs font-semibold text-[#14121F]/60 font-mono tabular-nums">
                     {formatTime(playheadMs)} / {hasDuration ? formatTime(durationMs) : 'Loading duration…'}
                 </span>
             </div>
 
             <div className="mb-2 flex items-center justify-between gap-3">
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-neutral-500">Drag the purple handles to trim</span>
+                <span className="text-[11px] font-bold uppercase tracking-wider text-[#14121F]/70">Drag the handles to trim</span>
                 <button type="button" onClick={onSplit} disabled={!hasDuration || playheadMs <= videoEdit.trimStartMs + 100 || playheadMs >= videoEdit.trimEndMs - 100}
-                    className="flex items-center gap-1.5 rounded-md border border-neutral-700 px-2.5 py-1.5 text-xs font-medium text-neutral-300 transition-colors hover:border-indigo-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-40">
+                    className="flex items-center gap-1.5 rounded-full border border-[#14121F]/15 bg-[#F7F6FB] px-3 py-1.5 text-xs font-semibold text-[#14121F] transition-colors hover:bg-[#14121F] hover:text-white disabled:cursor-not-allowed disabled:opacity-40">
                     <Scissors className="h-3.5 w-3.5" /> Split at playhead
                 </button>
             </div>
-            <div className="relative mb-1 h-10 select-none overflow-hidden md:h-8 rounded-lg border border-neutral-800 bg-neutral-950">
-                <div className="absolute inset-y-0 bg-neutral-800/70" style={{ left: `${trimStartPercent}%`, width: `${Math.max(0, trimEndPercent - trimStartPercent)}%` }} />
+            <div className="relative mb-2 h-10 select-none overflow-hidden md:h-9 rounded-2xl border border-[#14121F]/10 bg-[#F7F6FB]">
+                <div className="absolute inset-y-0 bg-[#14121F]/5" style={{ left: `${trimStartPercent}%`, width: `${Math.max(0, trimEndPercent - trimStartPercent)}%` }} />
                 {(videoEdit.transitions ?? []).filter((transition) => visibleSplits.includes(transition.atMs)).map((transition) => (
                     <div key={`t-${transition.atMs}`} className="pointer-events-none absolute bottom-0 h-2 rounded-r-full" style={{
                         left: `${(transition.atMs / durationMs) * 100}%`,
@@ -92,12 +92,12 @@ export function Timeline({ durationMs, playheadMs, isPlaying, onSeek, onTogglePl
                     const hasTransition = videoEdit.transitions?.some((transition) => transition.atMs === point);
                     return (
                         <button type="button" key={point} onClick={() => setSelectedSplitMs((current) => current === point ? null : point)} aria-label={`Split at ${formatTime(point)}${hasTransition ? ' with transition' : ''}. Click to add a transition`} aria-pressed={selectedSplit === point}
-                            className={`absolute inset-y-0 z-10 w-3 -translate-x-1/2 cursor-pointer border-x ${selectedSplit === point ? 'border-white bg-amber-300/80' : 'border-amber-300 bg-amber-300/20 hover:bg-amber-300/70'}`} style={{ left: `${(point / durationMs) * 100}%` }} title={`Split at ${formatTime(point)} · click to add a transition`}>
-                            {hasTransition && <Sparkles className="absolute left-1/2 top-0.5 h-3 w-3 -translate-x-1/2 text-white drop-shadow" />}
+                            className={`absolute inset-y-0 z-10 w-3 -translate-x-1/2 cursor-pointer border-x ${selectedSplit === point ? 'border-[#14121F] bg-[#FFE347]' : 'border-[#FFE347] bg-[#FFE347]/40 hover:bg-[#FFE347]'}`} style={{ left: `${(point / durationMs) * 100}%` }} title={`Split at ${formatTime(point)} · click to add a transition`}>
+                            {hasTransition && <Sparkles className="absolute left-1/2 top-0.5 h-3 w-3 -translate-x-1/2 text-[#14121F] drop-shadow" />}
                         </button>
                     );
                 })}
-                <button type="button" className="absolute inset-y-0 z-20 w-6 touch-none -translate-x-1/2 cursor-ew-resize rounded-md border-x-4 border-indigo-400 bg-indigo-400/40 shadow-[0_0_10px_rgba(99,102,241,.7)]" style={{ left: `${trimStartPercent}%` }}
+                <button type="button" className="absolute inset-y-0 z-20 w-6 touch-none -translate-x-1/2 cursor-ew-resize rounded-xl border-x-4 border-[#6A4CFF] bg-[#6A4CFF]/30 shadow-md" style={{ left: `${trimStartPercent}%` }}
                     aria-label="Trim start" title={`Trim in: ${formatTime(videoEdit.trimStartMs)}`} onPointerDown={(event) => { onTrimStart(); event.currentTarget.setPointerCapture(event.pointerId); }}
                     onPointerMove={(event) => {
                         if (event.buttons !== 1 || !trackRef.current || !hasDuration) return;
@@ -105,7 +105,7 @@ export function Timeline({ durationMs, playheadMs, isPlaying, onSeek, onTogglePl
                         const time = Math.max(0, Math.min(videoEdit.trimEndMs - 250, ((event.clientX - rect.left) / rect.width) * durationMs));
                         onTrimChange({ trimStartMs: Math.round(time) });
                     }} />
-                <button type="button" className="absolute inset-y-0 z-20 w-6 touch-none -translate-x-1/2 cursor-ew-resize rounded-md border-x-4 border-indigo-400 bg-indigo-400/40 shadow-[0_0_10px_rgba(99,102,241,.7)]" style={{ left: `${trimEndPercent}%` }}
+                <button type="button" className="absolute inset-y-0 z-20 w-6 touch-none -translate-x-1/2 cursor-ew-resize rounded-xl border-x-4 border-[#6A4CFF] bg-[#6A4CFF]/30 shadow-md" style={{ left: `${trimEndPercent}%` }}
                     aria-label="Trim end" title={`Trim out: ${formatTime(videoEdit.trimEndMs)}`} onPointerDown={(event) => { onTrimStart(); event.currentTarget.setPointerCapture(event.pointerId); }}
                     onPointerMove={(event) => {
                         if (event.buttons !== 1 || !trackRef.current || !hasDuration) return;
@@ -118,54 +118,54 @@ export function Timeline({ durationMs, playheadMs, isPlaying, onSeek, onTogglePl
                 ref={trackRef}
                 onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); handleScrub(e.clientX); }}
                 onPointerMove={(e) => { if (e.buttons === 1) handleScrub(e.clientX); }}
-                className="relative h-4 touch-none rounded-full bg-neutral-800 cursor-pointer group my-2">
+                className="relative h-4 touch-none rounded-full bg-[#14121F]/10 cursor-pointer group my-2">
                 <div
-                    className="absolute top-0 left-0 h-full bg-indigo-600 rounded-full pointer-events-none"
+                    className="absolute top-0 left-0 h-full bg-[#6A4CFF] rounded-full pointer-events-none"
                     style={{ left: `${trimStartPercent}%`, width: `${Math.max(0, Math.min(progress, trimEndPercent) - trimStartPercent)}%` }}
                 />
-                <div className="absolute top-1/2 h-5 w-5 -translate-y-1/2 rounded-full bg-white shadow pointer-events-none transition-transform group-hover:scale-110" style={{ left: `calc(${progress}% - 10px)` }} />
+                <div className="absolute top-1/2 h-5 w-5 -translate-y-1/2 rounded-full bg-white border border-[#14121F]/15 shadow pointer-events-none transition-transform group-hover:scale-110" style={{ left: `calc(${progress}% - 10px)` }} />
             </div>
             {visibleSplits.length > 0 && selectedSplit === null && (
-                <p className="mt-1 text-[11px] text-neutral-500">Tap a yellow split marker to add a sci-fi transition.</p>
+                <p className="mt-1 text-[11px] text-[#14121F]/50">Tap a split marker to add a sci-fi transition.</p>
             )}
             {selectedSplit !== null && (
-                <div className="mt-2 max-h-[34dvh] space-y-2 overflow-y-auto rounded-xl border border-neutral-800 bg-neutral-950 p-2.5" role="group" aria-label={`Transition at ${formatTime(selectedSplit)}`}>
+                <div className="mt-2.5 max-h-[34dvh] space-y-3 overflow-y-auto rounded-3xl border border-[#14121F]/10 bg-[#F7F6FB] p-4" role="group" aria-label={`Transition at ${formatTime(selectedSplit)}`}>
                     <div className="flex items-center justify-between gap-2">
-                        <span className="flex items-center gap-1.5 text-xs font-semibold text-neutral-200"><Sparkles className="h-3.5 w-3.5 text-indigo-300" /> Transition · {formatTime(selectedSplit)}</span>
-                        <button type="button" onClick={() => { onRemoveSplit(selectedSplit); setSelectedSplitMs(null); }} className="flex items-center gap-1 rounded-md border border-neutral-700 px-2 py-1 text-[11px] text-neutral-300 hover:border-red-900/60 hover:text-red-300">
+                        <span className="flex items-center gap-1.5 text-xs font-bold text-[#14121F]"><Sparkles className="h-3.5 w-3.5 text-[#6A4CFF]" /> Transition · {formatTime(selectedSplit)}</span>
+                        <button type="button" onClick={() => { onRemoveSplit(selectedSplit); setSelectedSplitMs(null); }} className="flex items-center gap-1 rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-[11px] font-semibold text-red-600 hover:bg-red-600 hover:text-white transition">
                             <Trash2 className="h-3 w-3" /> Remove split
                         </button>
                     </div>
-                    <div className="grid grid-cols-4 gap-1.5">
+                    <div className="grid grid-cols-4 gap-2">
                         <button type="button" onClick={() => onSetTransition(selectedSplit, null)} aria-pressed={!selectedTransition}
-                            className={`rounded-lg px-1 py-2 text-xs font-medium transition-colors ${!selectedTransition ? 'bg-indigo-600 text-white' : 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700'}`}>None</button>
+                            className={`rounded-xl px-2 py-2 text-xs font-semibold transition-colors ${!selectedTransition ? 'bg-[#14121F] text-white shadow-sm' : 'border border-[#14121F]/10 bg-white text-[#14121F]/70 hover:bg-[#14121F]/5'}`}>None</button>
                         {TRANSITION_OPTIONS.map((option) => (
                             <button type="button" key={option.type} title={`${option.label}: ${option.hint}`} aria-label={option.label} onClick={() => onSetTransition(selectedSplit, option.type, selectedTransition?.durationMs ?? DEFAULT_TRANSITION_MS)} aria-pressed={selectedTransition?.type === option.type}
-                                className={`rounded-lg px-1 py-2 text-xs font-medium transition-colors ${selectedTransition?.type === option.type ? 'bg-indigo-600 text-white' : 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700'}`}>{option.short}</button>
+                                className={`rounded-xl px-2 py-2 text-xs font-semibold transition-colors ${selectedTransition?.type === option.type ? 'bg-[#6A4CFF] text-white shadow-sm' : 'border border-[#14121F]/10 bg-white text-[#14121F]/70 hover:bg-[#14121F]/5'}`}>{option.short}</button>
                         ))}
                     </div>
                     {selectedTransition && (
                         <>
-                            <p className="hidden text-[11px] text-neutral-500 md:block">{TRANSITION_OPTIONS.find((option) => option.type === selectedTransition.type)?.hint} Plays from the split for the duration below.</p>
-                            <div className="flex items-center gap-2">
-                                <label className="min-w-0 flex-1 text-xs text-neutral-400">
-                                    <span className="flex justify-between"><span>Duration</span><span className="font-mono text-neutral-200">{(selectedTransition.durationMs / 1000).toFixed(1)}s</span></span>
+                            <p className="hidden text-[11px] text-[#14121F]/60 md:block">{TRANSITION_OPTIONS.find((option) => option.type === selectedTransition.type)?.hint} Plays from the split for the duration below.</p>
+                            <div className="flex items-center gap-3">
+                                <label className="min-w-0 flex-1 text-xs font-medium text-[#14121F]/80">
+                                    <span className="flex justify-between mb-1"><span>Duration</span><span className="font-mono text-[#14121F] font-semibold">{(selectedTransition.durationMs / 1000).toFixed(1)}s</span></span>
                                     <input type="range" min={MIN_TRANSITION_MS} max={MAX_TRANSITION_MS} step={100} value={selectedTransition.durationMs} aria-label="Transition duration"
-                                        onChange={(event) => onSetTransition(selectedSplit, selectedTransition.type, clampTransitionMs(Number(event.target.value)))} className="w-full accent-indigo-500" />
+                                        onChange={(event) => onSetTransition(selectedSplit, selectedTransition.type, clampTransitionMs(Number(event.target.value)))} className="w-full accent-[#6A4CFF]" />
                                 </label>
-                                <button type="button" onClick={() => onPreviewTransition(selectedSplit)} className="flex shrink-0 items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-500">
-                                    <Play className="h-3.5 w-3.5" /> Preview
+                                <button type="button" onClick={() => onPreviewTransition(selectedSplit)} className="flex shrink-0 items-center gap-1.5 rounded-full bg-[#6A4CFF] px-4 py-2.5 text-xs font-semibold text-white hover:bg-[#5839e0] shadow-sm">
+                                    <Play className="h-3.5 w-3.5 fill-current" /> Preview
                                 </button>
                             </div>
                         </>
                     )}
-                    <label className="flex items-center gap-2 text-[11px] text-neutral-400">
-                        <input type="checkbox" checked={performanceMode} onChange={(event) => onPerformanceModeChange(event.target.checked)} className="accent-indigo-500" />
+                    <label className="flex items-center gap-2 text-xs font-medium text-[#14121F]/80">
+                        <input type="checkbox" checked={performanceMode} onChange={(event) => onPerformanceModeChange(event.target.checked)} className="accent-[#6A4CFF] rounded" />
                         Performance mode (fewer particles, lighter render)
                     </label>
                 </div>
             )}
-            <div className="mt-2 flex justify-between text-[10px] font-mono text-neutral-500">
+            <div className="mt-2.5 flex justify-between text-[11px] font-mono font-semibold text-[#14121F]/50">
                 <span>IN {formatTime(videoEdit.trimStartMs)}</span>
                 <span>{videoEdit.splitPointsMs.filter(Number.isFinite).length} split{videoEdit.splitPointsMs.filter(Number.isFinite).length === 1 ? '' : 's'}</span>
                 <span>OUT {formatTime(videoEdit.trimEndMs)}</span>

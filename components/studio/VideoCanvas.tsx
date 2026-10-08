@@ -38,19 +38,12 @@ const MODEL_ASSET_URL =
 const FACE_MODEL_ASSET_URL =
     'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task';
 
-// Wrapped so the render-purity lint rule doesn't flag per-frame clock reads inside the render loop helpers.
 const clockMs = () => performance.now();
 
 const SEGMENTATION_MODES = ['green', 'blur', 'image', 'transparent'];
 
-// display:none can make browsers suspend video decoding, so hidden <video>
-// sources used for canvas capture are kept rendered but invisible instead.
 const OFFSCREEN_VIDEO_CLASS =
     'pointer-events-none fixed left-0 top-0 z-[-1] h-px w-px opacity-[0.01]';
-
-/* -------------------------------------------------------------------------- */
-/* Pure helpers                                                               */
-/* -------------------------------------------------------------------------- */
 
 function getVideoFilter(settings: StudioSettings) {
     const preset = settings.filterPreset === 'cinematic'
@@ -78,7 +71,6 @@ function drawImageCover(ctx: CanvasRenderingContext2D, img: HTMLImageElement, w:
     ctx.drawImage(img, sx, sy, sWidth, sHeight, 0, 0, w, h);
 }
 
-/** Draws a source horizontally mirrored, cropped, with an optional CSS filter. Leaves ctx state untouched. */
 function drawMirrored(
     ctx: CanvasRenderingContext2D,
     source: CanvasImageSource,
@@ -98,11 +90,6 @@ function drawMirrored(
     ctx.restore();
 }
 
-/**
- * Crop region of the video, scaled into mask pixel space. The mask is usually a
- * different resolution than the raw video frame, so it must be scaled
- * proportionally or the two will misalign.
- */
 function getMaskCropRect(
     maskWidth: number,
     maskHeight: number,
@@ -120,11 +107,6 @@ function getMaskCropRect(
     };
 }
 
-/**
- * Screen share fitted into the frame, with a floating camera card (captured into the canvas, not a DOM overlay).
- * When `frame` is provided and its style is not 'off', the screen is drawn inside a styled window
- * on a gradient background instead of a plain letterboxed rectangle.
- */
 function drawScreenShareFrame(
     ctx: CanvasRenderingContext2D,
     canvas: HTMLCanvasElement,
@@ -138,7 +120,7 @@ function drawScreenShareFrame(
 
     ctx.save();
     ctx.clearRect(0, 0, width, height);
-    ctx.fillStyle = '#080a12';
+    ctx.fillStyle = '#14121F';
     ctx.fillRect(0, 0, width, height);
 
     let framed: ReturnType<typeof drawScreenFrame> = null;
@@ -146,7 +128,6 @@ function drawScreenShareFrame(
         try {
             framed = drawScreenFrame(ctx, screen, screen.videoWidth, screen.videoHeight, width, height, frame);
         } catch (error) {
-            // Never let a styling problem blank the recording: fall back to the plain screen layout.
             console.error('Screen frame failed, drawing the plain layout instead:', error);
         }
     }
@@ -164,14 +145,13 @@ function drawScreenShareFrame(
         const inset = Math.max(18, Math.round(width * 0.018));
         const cardX = width - cardWidth - inset;
         const cardY = height - cardHeight - inset;
-        const radius = Math.max(14, Math.round(cardWidth * 0.06));
+        const radius = Math.max(16, Math.round(cardWidth * 0.08));
         const crop = getFrameCrop(camera.videoWidth, camera.videoHeight, '16:9');
 
-        // Camera image (clipped, mirrored, shadowed)
         ctx.save();
-        ctx.shadowColor = 'rgba(0,0,0,0.55)';
-        ctx.shadowBlur = Math.max(12, Math.round(width * 0.012));
-        ctx.shadowOffsetY = Math.max(4, Math.round(width * 0.004));
+        ctx.shadowColor = 'rgba(20,18,31,0.2)';
+        ctx.shadowBlur = Math.max(16, Math.round(width * 0.015));
+        ctx.shadowOffsetY = Math.max(6, Math.round(width * 0.005));
         ctx.beginPath();
         ctx.roundRect(cardX, cardY, cardWidth, cardHeight, radius);
         ctx.clip();
@@ -185,20 +165,18 @@ function drawScreenShareFrame(
         ctx.drawImage(camera, crop.x, crop.y, crop.width, crop.height, 0, 0, cardWidth, cardHeight);
         ctx.restore();
 
-        // Border
         ctx.lineWidth = Math.max(3, width * 0.002);
         ctx.strokeStyle = 'rgba(255,255,255,0.9)';
         ctx.beginPath();
         ctx.roundRect(cardX, cardY, cardWidth, cardHeight, radius);
         ctx.stroke();
 
-        // "YOU" label
-        ctx.font = `600 ${Math.max(12, Math.round(width * 0.012))}px sans-serif`;
+        ctx.font = `700 ${Math.max(11, Math.round(width * 0.012))}px var(--font-display, sans-serif)`;
         ctx.textAlign = 'left';
         ctx.textBaseline = 'middle';
         const pad = Math.max(8, Math.round(cardWidth * 0.035));
         const labelHeight = Math.max(22, Math.round(cardHeight * 0.15));
-        ctx.fillStyle = 'rgba(0,0,0,0.58)';
+        ctx.fillStyle = 'rgba(20,18,31,0.75)';
         ctx.beginPath();
         ctx.roundRect(cardX + pad, cardY + pad, Math.max(48, cardWidth * 0.2), labelHeight, labelHeight / 2);
         ctx.fill();
@@ -209,11 +187,6 @@ function drawScreenShareFrame(
     ctx.restore();
 }
 
-/**
- * Drives a callback at a fixed rate from a Worker. Worker timers are not
- * throttled in background tabs the way main-thread timers and rAF are.
- * Falls back to a main-thread interval if a Worker can't be created (e.g. strict CSP).
- */
 function createBackgroundTicker(onTick: () => void, fps: number) {
     const intervalMs = 1000 / fps;
     try {
@@ -241,10 +214,6 @@ function getAspectRatioClass(ratio: AspectRatioType) {
     }
 }
 
-/* -------------------------------------------------------------------------- */
-/* Component                                                                  */
-/* -------------------------------------------------------------------------- */
-
 export function VideoCanvas({
     videoRef,
     canvasStreamRef,
@@ -266,10 +235,8 @@ export function VideoCanvas({
     const avatarImageRef = useRef<HTMLImageElement | null>(null);
     const settingsRef = useRef(settings);
     const isRecordingRef = useRef(isRecording);
-    // Time (performance.now) at which the framed screen layout first rendered; drives the entry animation.
     const screenFrameStartRef = useRef<number | null>(null);
 
-    // Reused offscreen buffers (avoid allocating canvases every frame)
     const prevMaskRef = useRef<Float32Array | null>(null);
     const maskCanvasRef = useRef<HTMLCanvasElement | null>(null);
     const softMaskCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -279,7 +246,6 @@ export function VideoCanvas({
     const airDrawingRef = useRef<AirDrawingEngine | null>(null);
     const airLayerRef = useRef<HTMLCanvasElement | null>(null);
     const isPausedRef = useRef(isRecordingPaused);
-    // Recorded (un-paused) time base, used to timestamp annotation snapshots for screen-share exports.
     const recordingClockRef = useRef({ startedAt: 0, pausedTotal: 0, pausedAt: null as number | null });
     const [airStatus, setAirStatus] = useState<string | null>(null);
     const [editing, setEditing] = useState<(TextItemInfo & { left: number; top: number; draft: string }) | null>(null);
@@ -292,8 +258,6 @@ export function VideoCanvas({
         }
         return ref.current;
     };
-
-    /* ----------------------------- ref syncing ----------------------------- */
 
     useEffect(() => { settingsRef.current = settings; }, [settings]);
     useEffect(() => { isRecordingRef.current = isRecording; }, [isRecording]);
@@ -312,8 +276,6 @@ export function VideoCanvas({
         recordingClockRef.current = { startedAt: performance.now(), pausedTotal: 0, pausedAt: null };
         annotationTimeline.begin();
     }, [isRecording]);
-
-    /* ------------------------------ assets --------------------------------- */
 
     useEffect(() => {
         avatarImageRef.current = null;
@@ -336,11 +298,8 @@ export function VideoCanvas({
         return () => { bgImageRef.current = null; };
     }, [settings.backgroundImageUrl]);
 
-    /* --------------------------- screen share ------------------------------ */
-
     useEffect(() => {
         screenShareStreamRef.current = screenShareStream;
-        // A new share (or stopping one) restarts the frame's entry animation.
         screenFrameStartRef.current = null;
         const screenVideo = screenVideoRef.current;
         if (!screenVideo) return;
@@ -374,9 +333,6 @@ export function VideoCanvas({
         };
     }, [screenShareStream, onScreenFrame]);
 
-    /* ----------------------------- ML models ------------------------------- */
-
-    // ImageSegmenter: GPU -> CPU fallback, pinned model/fileset versions.
     useEffect(() => {
         if (!SEGMENTATION_MODES.includes(settings.backgroundMode) && !settings.hologramEnabled) {
             segmenterRef.current?.close();
@@ -416,14 +372,12 @@ export function VideoCanvas({
         void init();
         return () => {
             cancelled = true;
-            // Null the ref so the render loop never calls a closed segmenter.
             const segmenter = segmenterRef.current;
             segmenterRef.current = null;
             segmenter?.close();
         };
     }, [settings.backgroundMode, settings.hologramEnabled]);
 
-    // The WebGL hologram pass only exists while the effect is on.
     useEffect(() => {
         if (!settings.hologramEnabled) return;
         hologramRendererRef.current = createHologramRenderer();
@@ -472,7 +426,6 @@ export function VideoCanvas({
         };
     }, [settings.cameraArtEffect]);
 
-    // Hand tracking only exists while Air Drawing is on; turning it off drops the strokes.
     useEffect(() => {
         if (!settings.airDrawingEnabled) return;
         const engine = new AirDrawingEngine({
@@ -488,8 +441,6 @@ export function VideoCanvas({
             setEditing(null);
         };
     }, [settings.airDrawingEnabled]);
-
-    /* ------------------------------ rendering ------------------------------ */
 
     const getAirOptions = (): AirDrawingOptions => {
         const s = settingsRef.current;
@@ -507,9 +458,6 @@ export function VideoCanvas({
         };
     };
 
-    // Screen-share annotations are normalised to the shared screen's rectangle so they stay
-    // pinned to the screen content; camera annotations use the whole frame.
-    // When the screen is drawn inside a styled window, that rectangle is the window's content area.
     const getAirSpace = (canvas: HTMLCanvasElement): { space: AnnotationSpace; rect: TargetRect } => {
         const screen = screenVideoRef.current;
         if (isScreenFrameReady() && screen) {
@@ -532,7 +480,6 @@ export function VideoCanvas({
         const { space, rect } = getAirSpace(canvas);
         engine.render(ctx, layer, now, opts, !isRecordingRef.current, space, rect);
 
-        // Screen-share recordings are composed from the raw tracks, so log the layer separately.
         if (space === 'screen' && isRecordingRef.current && !isPausedRef.current) {
             const clock = recordingClockRef.current;
             annotationTimeline.capture(
@@ -554,7 +501,6 @@ export function VideoCanvas({
         engine.update(video, clockMs(), getAirOptions(), {
             videoWidth: video.videoWidth,
             videoHeight: video.videoHeight,
-            // On a shared screen the whole camera view maps onto the screen, not the cropped output frame.
             crop: space === 'screen'
                 ? { x: 0, y: 0, width: video.videoWidth, height: video.videoHeight }
                 : getFrameCrop(video.videoWidth, video.videoHeight, current.aspectRatio),
@@ -593,7 +539,6 @@ export function VideoCanvas({
         return softened;
     };
 
-    /** Common end-of-frame work: artistic effect (camera only) + free-tier watermark. */
     const finishFrame = (ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, withEffect: boolean) => {
         if (withEffect) {
             applyArtisticEffect(canvas, settingsRef.current.cameraArtEffect as CameraArtEffect);
@@ -632,7 +577,6 @@ export function VideoCanvas({
         }
         const { width, height } = canvas;
 
-        // 1) Screen share layout (screen inside a styled window frame, camera card on top)
         if (isScreenFrameReady()) {
             if (screenFrameStartRef.current === null) screenFrameStartRef.current = clockMs();
             drawScreenShareFrame(ctx, canvas, screenVideoRef.current!, video, filter, mirror, {
@@ -648,7 +592,6 @@ export function VideoCanvas({
         const crop = getFrameCrop(vWidth, vHeight, current.aspectRatio);
         const mask = result?.confidenceMasks?.[0];
 
-        // 2) Plain camera (no segmentation result)
         if (!mask) {
             ctx.clearRect(0, 0, width, height);
             drawMirrored(ctx, video, crop, width, height, filter, mirror);
@@ -656,11 +599,10 @@ export function VideoCanvas({
             return;
         }
 
-        // 3) Camera with background segmentation
         const maskFloat = mask.getAsFloat32Array();
         const maskWidth = mask.width;
         const maskHeight = mask.height;
-        mask.close(); // release GPU/WASM memory now that data is copied out
+        mask.close();
 
         const smoothedMask = buildSmoothedMaskCanvas(maskFloat, maskWidth, maskHeight);
         const maskCrop = getMaskCropRect(maskWidth, maskHeight, vWidth, vHeight, crop);
@@ -680,14 +622,13 @@ export function VideoCanvas({
             } else if (mode === 'image' && bgImageRef.current?.complete) {
                 drawImageCover(ctx, bgImageRef.current, width, height);
             } else if (mode !== 'transparent') {
-                ctx.fillStyle = '#02060d';
+                ctx.fillStyle = '#14121F';
                 ctx.fillRect(0, 0, width, height);
                 ctx.globalAlpha = 0.15;
                 drawMirrored(ctx, video, crop, width, height, 'none', mirror);
                 ctx.globalAlpha = 1;
             }
 
-            // The shader runs at reduced resolution; the glow is soft so it upscales cleanly.
             const holoScale = Math.min(1, 540 / Math.min(width, height));
             const pw = Math.max(2, Math.round(width * holoScale));
             const ph = Math.max(2, Math.round(height * holoScale));
@@ -716,7 +657,6 @@ export function VideoCanvas({
                 ctx.drawImage(layer ?? person, 0, 0, width, height);
             }
         } else if (mode === 'green' || mode === 'blur' || mode === 'image') {
-            // Background layer
             if (mode === 'green') {
                 ctx.fillStyle = '#00FF00';
                 ctx.fillRect(0, 0, width, height);
@@ -725,11 +665,10 @@ export function VideoCanvas({
             } else if (bgImageRef.current?.complete) {
                 drawImageCover(ctx, bgImageRef.current, width, height);
             } else {
-                ctx.fillStyle = '#1a1a1a';
+                ctx.fillStyle = '#14121F';
                 ctx.fillRect(0, 0, width, height);
             }
 
-            // Person layer: mirrored video, masked with the same transform/crop math
             const person = getBuffer(personCanvasRef, width, height);
             const personCtx = person.getContext('2d', { willReadFrequently: true });
             if (personCtx) {
@@ -766,8 +705,6 @@ export function VideoCanvas({
         ctx.restore();
         finishFrame(ctx, canvas, true);
     };
-
-    /* ----------------------------- render loop ----------------------------- */
 
     useEffect(() => {
         const video = videoRef.current;
@@ -824,7 +761,6 @@ export function VideoCanvas({
             }
         };
 
-        // One bad frame must never kill the loop, so errors are caught per tick.
         const tick = () => {
             if (cancelled) return;
             try {
@@ -832,13 +768,9 @@ export function VideoCanvas({
             } catch (error) {
                 console.error('Frame render failed:', error);
             }
-            // rAF drives visible tabs; while the Worker ticker is active it drives itself.
             if (!cancelled && !stopTicker) rafId = requestAnimationFrame(tick);
         };
 
-        // rAF and main-thread timers are throttled/paused in hidden tabs, which freezes
-        // the canvas (audio keeps going because it's a separate track). While the tab is
-        // hidden and we are recording or sharing, drive the loop from a Worker instead.
         const syncLoop = () => {
             cancelAnimationFrame(rafId);
             stopTicker?.();
@@ -866,11 +798,7 @@ export function VideoCanvas({
             stopTicker = null;
             document.removeEventListener('visibilitychange', syncLoop);
         };
-        // renderFrame and helpers only read refs, so the loop is created once.
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [videoRef, canvasStreamRef, microphoneLevelRef]);
-
-    /* -------------------------------- JSX ---------------------------------- */
 
     const handleCanvasTap = (event: React.MouseEvent<HTMLCanvasElement>) => {
         const engine = airDrawingRef.current;
@@ -891,14 +819,13 @@ export function VideoCanvas({
     const isPhotoAvatarEditable = settings.cameraArtEffect === 'photo-avatar' && Boolean(settings.cameraAvatarImageUrl);
 
     return (
-        <div className="relative flex min-h-0 flex-1 flex-col items-center justify-center overflow-hidden bg-neutral-950 p-2 sm:p-4">
+        <div className="relative flex min-h-0 flex-1 flex-col items-center justify-center overflow-hidden bg-[#14121F] p-3 sm:p-6">
             {countdown !== null && (
-                <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/70 backdrop-blur-sm">
-                    <span className="animate-pulse text-8xl font-black text-indigo-500">{countdown}</span>
+                <div className="absolute inset-0 z-30 flex items-center justify-center bg-[#14121F]/80 backdrop-blur-md">
+                    <span className="animate-pulse text-8xl font-extrabold text-[#6A4CFF] font-[family-name:var(--font-display)]">{countdown}</span>
                 </div>
             )}
 
-            {/* Camera + screen sources: rendered off-screen, never display:none */}
             <video ref={videoRef} autoPlay playsInline muted aria-hidden="true" className={OFFSCREEN_VIDEO_CLASS} />
             <video ref={screenVideoRef} autoPlay playsInline muted aria-hidden="true" className={OFFSCREEN_VIDEO_CLASS} />
 
@@ -912,7 +839,7 @@ export function VideoCanvas({
                         Math.max(0.35, Math.min(0.9, (event.clientY - rect.top) / rect.height))
                     );
                 }}
-                className={`relative h-full max-h-full max-w-full shrink-0 overflow-hidden rounded-2xl border-2 border-neutral-800 bg-black shadow-2xl transition-all duration-300 ${getAspectRatioClass(settings.aspectRatio)} ${isPhotoAvatarEditable ? 'cursor-crosshair' : ''}`}
+                className={`relative h-full max-h-full max-w-full shrink-0 overflow-hidden rounded-[2.2rem] border border-white/10 bg-black shadow-[0_20px_50px_-15px_rgba(20,18,31,0.25)] transition-all duration-300 ${getAspectRatioClass(settings.aspectRatio)} ${isPhotoAvatarEditable ? 'cursor-crosshair' : ''}`}
             >
                 <canvas
                     ref={visibleCanvasRef}
@@ -921,7 +848,7 @@ export function VideoCanvas({
                 />
 
                 {airStatus && (
-                    <div role="status" className="pointer-events-none absolute left-1/2 top-3 z-30 max-w-[90%] -translate-x-1/2 rounded-full bg-neutral-900/90 px-3 py-1.5 text-center text-[11px] font-medium text-neutral-100 shadow-lg">
+                    <div role="status" className="pointer-events-none absolute left-1/2 top-4 z-30 max-w-[90%] -translate-x-1/2 rounded-full border border-white/10 bg-white/90 px-4 py-2 text-center text-xs font-semibold text-[#14121F] shadow-lg backdrop-blur-md">
                         {airStatus}
                     </div>
                 )}
@@ -933,28 +860,28 @@ export function VideoCanvas({
                             event.preventDefault();
                             applyEdit((engine, id) => engine.setText(id, editing.draft));
                         }}
-                        className="absolute z-40 w-56 -translate-x-1/2 space-y-2 rounded-xl border border-neutral-700 bg-neutral-900/95 p-2.5 shadow-2xl"
+                        className="absolute z-40 w-64 -translate-x-1/2 space-y-2.5 rounded-3xl border border-[#14121F]/10 bg-white p-4 shadow-2xl text-[#14121F] backdrop-blur-xl"
                         style={{ left: `${Math.min(80, Math.max(20, editing.left * 100))}%`, top: `${Math.min(75, editing.top * 100 + 4)}%` }}
                     >
-                        <label className="block text-[10px] font-semibold uppercase tracking-wider text-neutral-400" htmlFor="air-text-edit">Correct text</label>
+                        <label className="block text-[11px] font-bold uppercase tracking-wider text-[#14121F]/70" htmlFor="air-text-edit">Correct text</label>
                         <input
                             id="air-text-edit"
                             autoFocus
                             value={editing.draft}
                             onChange={(event) => setEditing({ ...editing, draft: event.target.value })}
-                            className="w-full rounded-md border border-neutral-700 bg-neutral-950 px-2 py-1.5 text-sm text-white outline-none focus:border-fuchsia-400"
+                            className="w-full rounded-2xl border border-[#14121F]/15 bg-[#F7F6FB] px-3.5 py-2.5 text-sm font-medium text-[#14121F] outline-none focus:border-[#6A4CFF] focus:bg-white"
                         />
-                        <div className="flex gap-1.5 text-[11px]">
-                            <button type="submit" className="flex-1 rounded-md bg-fuchsia-500 px-2 py-1.5 font-semibold text-white">Save</button>
+                        <div className="flex gap-2 text-xs font-semibold">
+                            <button type="submit" className="flex-1 rounded-full bg-[#6A4CFF] px-3 py-2 text-white shadow-sm hover:bg-[#5839e0]">Save</button>
                             {editing.status === 'done' && (
                                 <button
                                     type="button"
                                     onClick={() => applyEdit((engine, id) => engine.setShowOriginal(id, !editing.showOriginal))}
-                                    className="flex-1 rounded-md border border-neutral-600 px-2 py-1.5 text-neutral-200">
+                                    className="flex-1 rounded-full border border-[#14121F]/15 bg-[#F7F6FB] px-3 py-2 text-[#14121F] hover:bg-[#14121F] hover:text-white transition">
                                     {editing.showOriginal ? 'Use typed' : 'My writing'}
                                 </button>
                             )}
-                            <button type="button" aria-label="Delete word" onClick={() => applyEdit((engine, id) => engine.removeItem(id))} className="rounded-md border border-neutral-600 px-2 py-1.5 text-red-300">Delete</button>
+                            <button type="button" aria-label="Delete word" onClick={() => applyEdit((engine, id) => engine.removeItem(id))} className="rounded-full border border-red-200 bg-red-50 px-3 py-2 text-red-600 hover:bg-red-600 hover:text-white transition">Delete</button>
                         </div>
                     </form>
                 )}
@@ -965,17 +892,17 @@ export function VideoCanvas({
                         className="pointer-events-none absolute z-30 -translate-x-1/2 -translate-y-1/2"
                         style={{ left: `${settings.cameraAvatarMouthX * 100}%`, top: `${settings.cameraAvatarMouthY * 100}%` }}
                     >
-                        <span className="block h-5 w-5 rounded-full border-2 border-fuchsia-300 bg-fuchsia-500/35 shadow-[0_0_12px_rgba(217,70,239,.85)]" />
-                        <span className="absolute left-1/2 top-1/2 h-px w-8 -translate-x-1/2 -translate-y-1/2 bg-white/90" />
-                        <span className="absolute left-1/2 top-1/2 h-8 w-px -translate-x-1/2 -translate-y-1/2 bg-white/90" />
+                        <span className="block h-6 w-6 rounded-full border-2 border-white bg-[#6A4CFF]/50 shadow-[0_0_15px_rgba(106,76,255,.8)]" />
+                        <span className="absolute left-1/2 top-1/2 h-px w-8 -translate-x-1/2 -translate-y-1/2 bg-white" />
+                        <span className="absolute left-1/2 top-1/2 h-8 w-px -translate-x-1/2 -translate-y-1/2 bg-white" />
                     </div>
                 )}
 
                 {!screenShareStream && <TeleprompterOverlay scriptText={settings.scriptText} />}
 
                 {isRecording && (
-                    <div className={`absolute left-3 top-3 z-30 flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold text-white shadow-lg sm:left-4 sm:top-4 ${isRecordingPaused ? 'bg-amber-500/90' : 'bg-red-600/90'}`}>
-                        <span className={`h-2 w-2 rounded-full bg-white ${isRecordingPaused ? '' : 'animate-pulse'}`} />
+                    <div className={`absolute left-4 top-4 z-30 flex items-center gap-2 rounded-full px-4 py-2 text-xs font-bold text-white shadow-lg backdrop-blur-md sm:left-5 sm:top-5 ${isRecordingPaused ? 'bg-amber-500/90' : 'bg-[#FF3D81]/90 shadow-[0_4px_20px_rgba(255,61,129,0.4)]'}`}>
+                        <span className={`h-2.5 w-2.5 rounded-full bg-white ${isRecordingPaused ? '' : 'animate-pulse'}`} />
                         {isRecordingPaused ? 'PAUSED' : 'RECORDING'} · FREE PLAN
                     </div>
                 )}

@@ -68,126 +68,126 @@ export function EditorSidebar({
                                 : project.videoEdit.trimStartMs > 0 || project.videoEdit.trimEndMs < project.durationMs || project.videoEdit.splitPointsMs.length > 0;
 
     return (
-        <aside className="order-2 flex w-full shrink-0 flex-col border-t border-neutral-800 bg-neutral-900 pb-[env(safe-area-inset-bottom)] md:order-1 md:h-full md:w-72 md:overflow-y-auto md:border-r md:border-t-0 md:p-4 md:pb-4">
+        <aside className="order-2 flex w-full shrink-0 flex-col border-t border-[#14121F]/10 bg-white pb-[env(safe-area-inset-bottom)] font-[family-name:var(--font-body)] text-[#14121F] md:order-1 md:h-full md:w-72 md:overflow-y-auto md:border-r md:border-t-0 md:p-5 md:pb-5">
             <button
                 onClick={onBack}
-                className="mb-4 hidden items-center gap-2 text-sm text-neutral-400 transition-colors hover:text-neutral-100 md:flex">
+                className="mb-4 hidden items-center gap-2 text-xs font-semibold text-[#14121F]/60 transition-colors hover:text-[#14121F] md:flex">
                 <ArrowLeft className="w-4 h-4" /> Back to Recording
             </button>
 
-            <div className="flex gap-1 overflow-x-auto p-2 [scrollbar-width:none] md:mb-5 md:grid md:grid-cols-3 md:overflow-visible md:rounded-lg md:bg-neutral-800/50 md:p-1">
+            <div className="flex gap-1.5 overflow-x-auto p-2 [scrollbar-width:none] md:mb-5 md:grid md:grid-cols-3 md:overflow-visible md:rounded-2xl md:bg-[#F7F6FB] md:border md:border-[#14121F]/10 md:p-1.5">
                 {([['style', 'Styles', Sparkles], ['color', 'Color', Palette], ['text', 'Text', Type], ['captions', 'Captions', Captions], ['clip', 'Trim', Scissors], ['coach', 'Coach', Mic], ['zoom', 'Zoom', ZoomIn], ['speed', 'Speed', Gauge], ['music', 'Music', Music]] as const).map(([key, label, Icon]) => (
                     <button
                         key={key}
                         onClick={() => { if (tab === key && panelOpen) setPanelOpen(false); else { setTab(key); setPanelOpen(true); } }}
-                        className={`shrink-0 whitespace-nowrap rounded-full px-4 py-2.5 text-xs font-medium transition-colors md:flex-1 md:rounded-md md:px-0 md:py-2.5 ${tab === key && (panelOpen || false) ? 'bg-indigo-600 text-white' : tab === key ? 'bg-neutral-800 text-white md:bg-indigo-600' : 'text-neutral-400 hover:text-neutral-200'
+                        className={`shrink-0 whitespace-nowrap rounded-full px-4 py-2.5 text-xs font-semibold transition-colors md:flex-1 md:rounded-xl md:px-0 md:py-2.5 ${tab === key && (panelOpen || false) ? 'bg-[#14121F] text-white shadow-sm' : tab === key ? 'bg-[#14121F] text-white shadow-sm md:bg-[#14121F]' : 'text-[#14121F]/70 hover:bg-[#14121F]/5 hover:text-[#14121F]'
                             }`}>
                         <span className="flex items-center justify-center gap-1.5 md:flex-col md:gap-1"><Icon className="h-4 w-4" />{label}</span>
                     </button>
                 ))}
             </div>
 
-            <div className={`${panelOpen ? 'flex' : 'hidden'} max-h-[42dvh] flex-col overflow-y-auto overscroll-contain border-t border-neutral-800 p-3 md:block md:max-h-none md:overflow-visible md:border-0 md:p-0`}>
-            <div className="mb-4 flex items-center justify-between gap-2">
-                <span className="text-xs font-semibold capitalize text-neutral-300">{tab === 'text' ? 'Text + Hook builder' : tab === 'style' ? 'One-click style' : tab === 'clip' ? 'Video clip' : tab === 'coach' ? 'Delivery coach' : tab}</span>
-                <div className="flex items-center gap-1.5">
-                    <button
-                        type="button"
-                        onClick={() => onUndoTab(tab)}
-                        disabled={undoCounts[tab] === 0}
-                        title={`Undo ${tab} change`}
-                        className="flex items-center gap-1 rounded-md border border-neutral-700 px-2 py-1.5 text-[11px] text-neutral-300 transition-colors hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-40">
-                        <Undo2 className="h-3.5 w-3.5" /> Undo
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => onResetTab(tab)}
-                        disabled={!activeTabIsDirty}
-                        title={`Reset ${tab} tab`}
-                        className="flex items-center gap-1 rounded-md border border-neutral-700 px-2 py-1.5 text-[11px] text-neutral-300 transition-colors hover:border-red-900/60 hover:bg-red-950/30 hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-40">
-                        <RotateCcw className="h-3.5 w-3.5" /> Reset
-                    </button>
+            <div className={`${panelOpen ? 'flex' : 'hidden'} max-h-[42dvh] flex-col overflow-y-auto overscroll-contain border-t border-[#14121F]/10 p-4 md:block md:max-h-none md:overflow-visible md:border-0 md:p-0`}>
+                <div className="mb-4 flex items-center justify-between gap-2">
+                    <span className="text-xs font-bold uppercase tracking-wider text-[#14121F]/70">{tab === 'text' ? 'Text + Hook builder' : tab === 'style' ? 'One-click style' : tab === 'clip' ? 'Video clip' : tab === 'coach' ? 'Delivery coach' : tab}</span>
+                    <div className="flex items-center gap-1.5">
+                        <button
+                            type="button"
+                            onClick={() => onUndoTab(tab)}
+                            disabled={undoCounts[tab] === 0}
+                            title={`Undo ${tab} change`}
+                            className="flex items-center gap-1 rounded-xl border border-[#14121F]/15 bg-[#F7F6FB] px-2.5 py-1.5 text-xs font-semibold text-[#14121F] transition-colors hover:bg-[#14121F] hover:text-white disabled:cursor-not-allowed disabled:opacity-40">
+                            <Undo2 className="h-3.5 w-3.5" /> Undo
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => onResetTab(tab)}
+                            disabled={!activeTabIsDirty}
+                            title={`Reset ${tab} tab`}
+                            className="flex items-center gap-1 rounded-xl border border-[#14121F]/15 bg-[#F7F6FB] px-2.5 py-1.5 text-xs font-semibold text-[#14121F] transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40">
+                            <RotateCcw className="h-3.5 w-3.5" /> Reset
+                        </button>
+                    </div>
                 </div>
-            </div>
 
-            {tab === 'color' && (
-                <ColorGradePanel colorGrade={project.colorGrade} onChange={onColorGradeChange} />
-            )}
-            {tab === 'style' && <StylePresetsPanel onApply={onApplyStylePreset} />}
-            {tab === 'clip' && (
-                <div className="space-y-3 text-xs leading-relaxed text-neutral-400">
-                    <p>Trim the blue handles or split at the playhead using the video lane below the preview.</p>
-                    <p>Trim in: <span className="font-mono text-neutral-200">{(project.videoEdit.trimStartMs / 1000).toFixed(2)}s</span></p>
-                    <p>Trim out: <span className="font-mono text-neutral-200">{(project.videoEdit.trimEndMs / 1000).toFixed(2)}s</span></p>
-                    <p>Split points: <span className="font-mono text-neutral-200">{project.videoEdit.splitPointsMs.length}</span></p>
-                    <p className="border-t border-neutral-800 pt-3 text-neutral-500">Reset restores the full source clip and removes its split markers. Other tabs are unchanged.</p>
-                </div>
-            )}
-            {tab === 'coach' && (
-                <DeliveryCoachPanel
-                    captions={project.tracks.captions}
-                    durationMs={project.durationMs}
-                    trimStartMs={project.videoEdit.trimStartMs}
-                    trimEndMs={project.videoEdit.trimEndMs}
-                    onTighten={onTightenToSpeech}
-                />
-            )}
-            {tab === 'text' && (
-                <TextOverlayPanel
-                    overlays={project.tracks.overlays}
-                    durationMs={project.durationMs}
-                    playheadMs={playheadMs}
-                    onAdd={onAddOverlay}
-                    onUpdate={onUpdateOverlay}
-                    onRemove={onRemoveOverlay}
-                />
-            )}
-            {tab === 'captions' && (
-                <CaptionsPanel
-                    captions={project.tracks.captions}
-                    durationMs={project.durationMs}
-                    playheadMs={playheadMs}
-                    captionStyle={project.captionStyle}
-                    isTranscribing={isTranscribing}
-                    transcriptionProgress={transcriptionProgress}
-                    error={transcriptionError}
-                    onStyleChange={onCaptionStyleChange}
-                    onAdd={onAddCaption}
-                    onUpdate={onUpdateCaption}
-                    onRemove={onRemoveCaption}
-                    onSeek={onSeek}
-                    onGenerate={onGenerateCaptions}
-                />
-            )}
-            {tab === 'music' && (
-                <MusicPanel
-                    audioTracks={project.tracks.audio}
-                    durationMs={project.durationMs}
-                    scriptText={project.teleprompterScript}
-                    isSourceMuted={isSourceMuted}
-                    onMuteSourceAudio={onMuteSourceAudio}
-                    onSet={onSetAudioTracks}
-                />
-            )}
-            {tab === 'zoom' && (
-                <ZoomPanel
-                    keyframes={project.tracks.zoom}
-                    playheadMs={playheadMs}
-                    onAdd={onAddZoomKeyframe}
-                    onUpdate={onUpdateZoomKeyframe}
-                    onRemove={onRemoveZoomKeyframe}
-                />
-            )}
-            {tab === 'speed' && (
-                <SpeedPanel
-                    segments={project.tracks.speed}
-                    durationMs={project.durationMs}
-                    playheadMs={playheadMs}
-                    onAdd={onAddSpeedSegment}
-                    onUpdate={onUpdateSpeedSegment}
-                    onRemove={onRemoveSpeedSegment}
-                />
-            )}
+                {tab === 'color' && (
+                    <ColorGradePanel colorGrade={project.colorGrade} onChange={onColorGradeChange} />
+                )}
+                {tab === 'style' && <StylePresetsPanel onApply={onApplyStylePreset} />}
+                {tab === 'clip' && (
+                    <div className="space-y-3 text-xs leading-relaxed text-[#14121F]/70 bg-[#F7F6FB] p-4 rounded-2xl border border-[#14121F]/10">
+                        <p>Trim the blue handles or split at the playhead using the video lane below the preview.</p>
+                        <p>Trim in: <span className="font-mono font-semibold text-[#14121F]">{(project.videoEdit.trimStartMs / 1000).toFixed(2)}s</span></p>
+                        <p>Trim out: <span className="font-mono font-semibold text-[#14121F]">{(project.videoEdit.trimEndMs / 1000).toFixed(2)}s</span></p>
+                        <p>Split points: <span className="font-mono font-semibold text-[#14121F]">{project.videoEdit.splitPointsMs.length}</span></p>
+                        <p className="border-t border-[#14121F]/10 pt-3 text-[#14121F]/50">Reset restores the full source clip and removes its split markers. Other tabs are unchanged.</p>
+                    </div>
+                )}
+                {tab === 'coach' && (
+                    <DeliveryCoachPanel
+                        captions={project.tracks.captions}
+                        durationMs={project.durationMs}
+                        trimStartMs={project.videoEdit.trimStartMs}
+                        trimEndMs={project.videoEdit.trimEndMs}
+                        onTighten={onTightenToSpeech}
+                    />
+                )}
+                {tab === 'text' && (
+                    <TextOverlayPanel
+                        overlays={project.tracks.overlays}
+                        durationMs={project.durationMs}
+                        playheadMs={playheadMs}
+                        onAdd={onAddOverlay}
+                        onUpdate={onUpdateOverlay}
+                        onRemove={onRemoveOverlay}
+                    />
+                )}
+                {tab === 'captions' && (
+                    <CaptionsPanel
+                        captions={project.tracks.captions}
+                        durationMs={project.durationMs}
+                        playheadMs={playheadMs}
+                        captionStyle={project.captionStyle}
+                        isTranscribing={isTranscribing}
+                        transcriptionProgress={transcriptionProgress}
+                        error={transcriptionError}
+                        onStyleChange={onCaptionStyleChange}
+                        onAdd={onAddCaption}
+                        onUpdate={onUpdateCaption}
+                        onRemove={onRemoveCaption}
+                        onSeek={onSeek}
+                        onGenerate={onGenerateCaptions}
+                    />
+                )}
+                {tab === 'music' && (
+                    <MusicPanel
+                        audioTracks={project.tracks.audio}
+                        durationMs={project.durationMs}
+                        scriptText={project.teleprompterScript}
+                        isSourceMuted={isSourceMuted}
+                        onMuteSourceAudio={onMuteSourceAudio}
+                        onSet={onSetAudioTracks}
+                    />
+                )}
+                {tab === 'zoom' && (
+                    <ZoomPanel
+                        keyframes={project.tracks.zoom}
+                        playheadMs={playheadMs}
+                        onAdd={onAddZoomKeyframe}
+                        onUpdate={onUpdateZoomKeyframe}
+                        onRemove={onRemoveZoomKeyframe}
+                    />
+                )}
+                {tab === 'speed' && (
+                    <SpeedPanel
+                        segments={project.tracks.speed}
+                        durationMs={project.durationMs}
+                        playheadMs={playheadMs}
+                        onAdd={onAddSpeedSegment}
+                        onUpdate={onUpdateSpeedSegment}
+                        onRemove={onRemoveSpeedSegment}
+                    />
+                )}
             </div>
         </aside>
     );
