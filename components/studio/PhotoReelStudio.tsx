@@ -42,6 +42,7 @@ interface ReelImage {
     badgeText?: string;                    // sticker such as "NEW" or "₹999"
     badgeColor?: string;
     badgeCorner?: Corner;
+    autoCaption?: boolean;                 // caption came from the template (safe to replace)
     scale?: number;                        // image zoom (0.5 – 2.5)
     motion: 'none' | 'zoom-in' | 'zoom-out' | 'pan-left' | 'pan-right' | DepthMotion;
     transition: 'cut' | 'fade' | 'slide' | 'zoom';
@@ -172,6 +173,126 @@ function drawProductEffects(ctx: CanvasRenderingContext2D, clip: ReelImage, widt
         ctx.drawImage(logo.image, x, y, logoW, logoH);
     }
 }
+
+/* -------------------------------------------------------------------------- */
+/* Product templates: pick a category, add photos, done                       */
+/* -------------------------------------------------------------------------- */
+
+interface ProductTemplate {
+    id: string;
+    label: string;
+    emoji: string;
+    blurb: string;
+    spec: string; // recommended upload
+    aspect: PlatformAspect;
+    backgroundColor: string;
+    secondsPerImage: number;
+    gradient: GradientPreset;
+    gradientStrength: number;
+    brightness: number;
+    saturation: number;
+    transition: ReelImage['transition'];
+    motions: ReelImage['motion'][]; // cycled per photo
+    textStyle: TextOverlayStyle;
+    textPosition: TextPosition;
+    fontFamily: FontKey;
+    textColor?: string;
+    textSize?: number;
+    shine: boolean;
+    vignette: number;
+    shots: Array<{ title: string; tip: string; caption: string }>;
+}
+
+const PRODUCT_TEMPLATES: ProductTemplate[] = [
+    {
+        id: 'shoes', label: 'Shoes & sneakers', emoji: '👟', blurb: '3D orbit, shine, bold captions',
+        spec: 'Square or 4:5 photos, 1080 px or larger, plain light background, whole shoe in frame.',
+        aspect: '9:16', backgroundColor: '#ffffff', secondsPerImage: 2, gradient: 'warm', gradientStrength: 22, brightness: 106, saturation: 112,
+        transition: 'slide', motions: ['depth-dolly', 'depth-orbit', 'depth-sway', 'zoom-in'],
+        textStyle: 'banner', textPosition: 'bottom', fontFamily: 'sans', shine: true, vignette: 10,
+        shots: [
+            { title: 'Hero shot', tip: 'Whole shoe, side-on, plain background', caption: 'Meet your new everyday favorite.' },
+            { title: 'Angle view', tip: 'Three-quarter angle showing toe and side', caption: 'Designed to stand out.' },
+            { title: 'Detail close-up', tip: 'Sole, stitching or material texture', caption: 'Premium quality, built to last.' },
+            { title: 'On-foot or lifestyle', tip: 'Worn outdoors or on a model', caption: 'Comfort that goes the distance.' },
+            { title: 'Final shot', tip: 'Hero shot again, or the box and logo', caption: 'Available now. Link in bio.' },
+        ],
+    },
+    {
+        id: 'clothing', label: 'Clothing & fashion', emoji: '👗', blurb: 'Soft fades, serif captions',
+        spec: 'Portrait 4:5 or 9:16 photos, 1080 px wide or larger, even lighting, flat-lay or on a model.',
+        aspect: '9:16', backgroundColor: '#f3ede6', secondsPerImage: 2.5, gradient: 'sunset', gradientStrength: 14, brightness: 104, saturation: 104,
+        transition: 'fade', motions: ['zoom-in', 'pan-left', 'zoom-out', 'pan-right'],
+        textStyle: 'classic', textPosition: 'bottom', fontFamily: 'serif', textColor: '#ffffff', shine: false, vignette: 12,
+        shots: [
+            { title: 'Full look', tip: 'Head-to-toe on a model or mannequin', caption: 'The new season edit.' },
+            { title: 'Fabric close-up', tip: 'Texture, weave or print up close', caption: 'Soft to touch. Made to last.' },
+            { title: 'Fit and cut', tip: 'Back or side view showing the fit', caption: 'Cut for the way you move.' },
+            { title: 'Styled outfit', tip: 'Paired with accessories or layers', caption: 'Style it your way.' },
+            { title: 'Final look', tip: 'Best photo, or the brand tag', caption: 'Shop the collection.' },
+        ],
+    },
+    {
+        id: 'jewelry', label: 'Jewelry & necklaces', emoji: '💎', blurb: 'Dark luxe, gold text, sparkle',
+        spec: 'Square close-ups, 1200 px or larger, dark or neutral background, piece centered with space around it.',
+        aspect: '9:16', backgroundColor: '#0f0d14', secondsPerImage: 2.5, gradient: 'violet', gradientStrength: 18, brightness: 104, saturation: 108,
+        transition: 'fade', motions: ['zoom-in', 'zoom-in', 'pan-left', 'zoom-out'],
+        textStyle: 'classic', textPosition: 'bottom', fontFamily: 'serif', textColor: '#f5d38a', textSize: 1.05, shine: true, vignette: 32,
+        shots: [
+            { title: 'Hero piece', tip: 'Close-up, centered, clean background', caption: 'Crafted to be treasured.' },
+            { title: 'Worn', tip: 'On the neck or wrist', caption: 'Made to be worn every day.' },
+            { title: 'Detail', tip: 'Clasp, stone or engraving', caption: 'Every detail, perfected.' },
+            { title: 'Gift ready', tip: 'In its box or packaging', caption: 'The perfect gift.' },
+            { title: 'Final shot', tip: 'Best photo of the piece', caption: 'Shop now. Link in bio.' },
+        ],
+    },
+    {
+        id: 'saas', label: 'SaaS & dashboards', emoji: '📊', blurb: 'Screenshot walkthrough, 16:9',
+        spec: '16:9 screenshots (1920×1080), PNG. Hide personal data and show one key screen per clip.',
+        aspect: '16:9', backgroundColor: '#0b1020', secondsPerImage: 3, gradient: 'ocean', gradientStrength: 12, brightness: 100, saturation: 105,
+        transition: 'slide', motions: ['zoom-in', 'pan-left', 'zoom-in', 'pan-right'],
+        textStyle: 'banner', textPosition: 'bottom', fontFamily: 'sans', shine: false, vignette: 0,
+        shots: [
+            { title: 'Dashboard overview', tip: 'The main screen users see first', caption: 'All your numbers in one dashboard.' },
+            { title: 'Key feature 1', tip: 'Your most valuable feature', caption: 'Track every metric in real time.' },
+            { title: 'Key feature 2', tip: 'Another strong screen or chart', caption: 'Spot trends before they happen.' },
+            { title: 'Reports or integrations', tip: 'Sharing, exports or connected tools', caption: 'Share reports in one click.' },
+            { title: 'Call to action', tip: 'Pricing, signup or logo screen', caption: 'Start your free trial today.' },
+        ],
+    },
+    {
+        id: 'general', label: 'Any product', emoji: '📦', blurb: 'Clean 3D showcase for anything else',
+        spec: 'Square or 4:5 photos, 1080 px or larger, product centered with some margin.',
+        aspect: '9:16', backgroundColor: '#f6f6f6', secondsPerImage: 2, gradient: 'warm', gradientStrength: 28, brightness: 108, saturation: 112,
+        transition: 'cut', motions: ['depth-dolly', 'zoom-in'],
+        textStyle: 'banner', textPosition: 'bottom', fontFamily: 'sans', shine: true, vignette: 14,
+        shots: [
+            { title: 'Hero shot', tip: 'The product, centered and clear', caption: 'Meet your new favorite.' },
+            { title: 'Key feature', tip: 'What makes it special', caption: 'Built different.' },
+            { title: 'Detail', tip: 'A close-up of quality', caption: 'Quality you can feel.' },
+            { title: 'In use', tip: 'The product being used', caption: 'Made for everyday life.' },
+            { title: 'Call to action', tip: 'Best photo or the logo', caption: 'Get yours today.' },
+        ],
+    },
+];
+
+const getTemplateClipStyle = (template: ProductTemplate, index: number, type: ReelImage['type']): Partial<ReelImage> => {
+    const caption = template.shots[index]?.caption ?? '';
+    return {
+        transition: template.transition,
+        motion: type === 'image' ? template.motions[index % template.motions.length] : 'none',
+        textStyle: template.textStyle,
+        textPosition: template.textPosition,
+        textOffset: { x: 0, y: 0 },
+        textSize: template.textSize ?? 1,
+        textColor: template.textColor,
+        fontFamily: template.fontFamily,
+        shine: template.shine,
+        vignette: template.vignette,
+        overlayText: caption,
+        autoCaption: Boolean(caption),
+    };
+};
 
 const MAX_IMAGES = 20;
 const MAX_IMAGE_BYTES = 12 * 1024 * 1024;
@@ -377,6 +498,11 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
     const [isSavingDraft, setIsSavingDraft] = useState(false);
     const [isLoadingDraft, setIsLoadingDraft] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [notice, setNotice] = useState<string | null>(null);
+
+    /* ---- product templates ---- */
+    const [productTemplateId, setProductTemplateId] = useState<string | null>(null);
+    const [showAdvanced, setShowAdvanced] = useState(false);
 
     /* ---- depth ---- */
     const [depthStatus, setDepthStatus] = useState<Record<string, 'ready' | 'failed'>>({});
@@ -422,6 +548,7 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
     const activeImage = images[safePreviewIndex] ?? null;
     const activeClipStartMs = getStartAtIndex(safePreviewIndex);
     const selectedImage = images.find((image) => image.id === selectedImageId) ?? null;
+    const productTemplate = PRODUCT_TEMPLATES.find((item) => item.id === productTemplateId) ?? null;
     const durationLabel = useMemo(() => `${(durationMs / 1000).toFixed(0)} sec`, [durationMs]);
 
     const updateClip = (id: string, patch: Partial<ReelImage>) =>
@@ -622,10 +749,10 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
         const accepted = validFiles.slice(0, Math.max(0, MAX_IMAGES - images.length));
         if (accepted.length < validFiles.length) setError(`A reel can contain up to ${MAX_IMAGES} photos and video clips combined.`);
 
-        const nextImages = accepted.map((file): ReelImage => {
+        const nextImages = accepted.map((file, fileIndex): ReelImage => {
             const type: ReelImage['type'] = file.type.startsWith('video/') ? 'video' : 'image';
             const url = URL.createObjectURL(file);
-            const clip: ReelImage = {
+            const baseClip: ReelImage = {
                 id: makeId(),
                 type,
                 file,
@@ -642,6 +769,9 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
                 motion: type === 'image' ? 'zoom-in' : 'none',
                 transition: 'fade',
             };
+            const clip: ReelImage = productTemplate
+                ? { ...baseClip, ...getTemplateClipStyle(productTemplate, images.length + fileIndex, type) }
+                : baseClip;
             if (type === 'video') {
                 const video = document.createElement('video');
                 video.preload = 'metadata';
@@ -659,6 +789,7 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
         });
 
         setImages((current) => [...current, ...nextImages]);
+        void checkResolution(accepted);
         if (!selectedImageId && nextImages[0]) setSelectedImageId(nextImages[0].id);
         if (images.length === 0 && nextImages.length > 0) seekPreview(0);
         setIsPreviewPlaying(false);
@@ -705,6 +836,46 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
         if (music) URL.revokeObjectURL(music.url);
         setMusic({ file, url: URL.createObjectURL(file) });
         setError(null);
+    };
+
+    /** Non-blocking quality check: warn about small photos instead of rejecting them. */
+    const checkResolution = async (files: File[]) => {
+        const low: string[] = [];
+        for (const file of files) {
+            if (!file.type.startsWith('image/')) continue;
+            try {
+                const bitmap = await createImageBitmap(file);
+                if (Math.min(bitmap.width, bitmap.height) < 720) low.push(`${file.name} (${bitmap.width}×${bitmap.height})`);
+                bitmap.close();
+            } catch {
+                /* ignore unreadable files, the normal decode path reports them */
+            }
+        }
+        setNotice(low.length ? `Low resolution, so it may look soft in the reel: ${low.join(', ')}. Use photos 1080 px or larger.` : null);
+    };
+
+    const applyProductTemplate = (id: string | null) => {
+        setProductTemplateId(id);
+        setTemplate('custom');
+        const tpl = PRODUCT_TEMPLATES.find((item) => item.id === id);
+        if (!tpl) return;
+        setAspectRatio(tpl.aspect);
+        setBackgroundColor(tpl.backgroundColor);
+        setSecondsPerImage(tpl.secondsPerImage);
+        setGradient(tpl.gradient);
+        setGradientStrength(tpl.gradientStrength);
+        setBrightness(tpl.brightness);
+        setSaturation(tpl.saturation);
+        setImages((current) => current.map((clip, index) => {
+            const style = getTemplateClipStyle(tpl, index, clip.type);
+            const keepCaption = clip.overlayText.trim() !== '' && !clip.autoCaption;
+            return {
+                ...clip,
+                ...style,
+                overlayText: keepCaption ? clip.overlayText : style.overlayText ?? '',
+                autoCaption: keepCaption ? false : style.autoCaption,
+            };
+        }));
     };
 
     const setLogoFile = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -1049,6 +1220,7 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
                 saturation,
                 musicVolume,
                 template,
+                productTemplateId,
                 narrationText,
                 narrationLanguage,
                 narrationVoiceGender,
@@ -1071,6 +1243,7 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
                     shine: clip.shine,
                     vignette: clip.vignette,
                     softEdges: clip.softEdges,
+                    autoCaption: clip.autoCaption,
                     badgeText: clip.badgeText,
                     badgeColor: clip.badgeColor,
                     badgeCorner: clip.badgeCorner,
@@ -1164,6 +1337,7 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
             setSaturation(saved.saturation);
             setMusicVolume(saved.musicVolume);
             setTemplate(saved.template ?? 'custom');
+            setProductTemplateId(saved.productTemplateId ?? null);
             setNarrationText(saved.narrationText ?? '');
             setNarrationLanguage(saved.narrationLanguage ?? 'en');
             setNarrationVoiceGender(saved.narrationVoiceGender ?? 'female');
@@ -1482,6 +1656,38 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
                     <p className="mt-1 text-xs leading-relaxed text-[#14121F]/60">Create cinematic orbits, custom backgrounds, and platform-optimized formats.</p>
                 </header>
 
+                {/* ---------------- Templates ---------------- */}
+                <section className={CARD_CLASS}>
+                    <div className="flex items-center justify-between">
+                        <h2 className="text-xs font-bold uppercase tracking-wider text-[#14121F]/70">Start from a template</h2>
+                        {productTemplate && <button type="button" onClick={() => applyProductTemplate(null)} className="text-xs font-semibold text-[#14121F]/50 hover:text-red-600">Clear</button>}
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                        {PRODUCT_TEMPLATES.map((item) => (
+                            <button
+                                key={item.id}
+                                type="button"
+                                onClick={() => { applyProductTemplate(item.id); setShowAdvanced(false); }}
+                                className={`rounded-xl border p-3 text-left transition ${productTemplateId === item.id ? 'border-[#6A4CFF] bg-[#6A4CFF]/5' : 'border-[#14121F]/10 bg-[#F7F6FB] hover:border-[#6A4CFF]/50'}`}
+                            >
+                                <span className="block text-lg">{item.emoji}</span>
+                                <span className="mt-1 block text-xs font-bold text-[#14121F]">{item.label}</span>
+                                <span className="mt-0.5 block text-[10px] font-medium leading-snug text-[#14121F]/55">{item.blurb}</span>
+                            </button>
+                        ))}
+                    </div>
+                    {productTemplate ? (
+                        <>
+                            <p className="text-[11px] leading-relaxed text-[#14121F]/60"><span className="font-semibold text-[#14121F]/80">Best upload:</span> {productTemplate.spec}</p>
+                            <button type="button" onClick={() => setShowAdvanced((value) => !value)} className="w-full rounded-xl border border-[#14121F]/15 bg-[#F7F6FB] px-3 py-2 text-xs font-semibold text-[#14121F]/80 transition hover:border-[#6A4CFF]">
+                                {showAdvanced ? 'Hide advanced controls' : 'Show advanced controls'}
+                            </button>
+                        </>
+                    ) : (
+                        <p className="text-[11px] leading-relaxed text-[#14121F]/60">Pick a category, then add your photos. Format, motion, colors and captions are set for you.</p>
+                    )}
+                </section>
+
                 {/* ---------------- Clips & drafts ---------------- */}
                 <section className={CARD_CLASS}>
                     <div className="flex items-center justify-between">
@@ -1518,6 +1724,32 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
                         <ImagePlus className="h-4 w-4" /> Add photos or videos
                     </button>
 
+                    {productTemplate && (
+                        <div className="space-y-1.5">
+                            <p className="text-[10px] font-bold uppercase tracking-wider text-[#14121F]/50">Shot list</p>
+                            {productTemplate.shots.map((shot, index) => {
+                                const filled = images[index];
+                                return (
+                                    <button
+                                        key={shot.title}
+                                        type="button"
+                                        onClick={() => {
+                                            if (filled) { setSelectedImageId(filled.id); setIsPreviewPlaying(false); seekPreview(getStartAtIndex(index)); }
+                                            else imageInputRef.current?.click();
+                                        }}
+                                        className="flex w-full items-start gap-2 rounded-lg border border-[#14121F]/10 bg-[#F7F6FB] px-2.5 py-2 text-left transition hover:border-[#6A4CFF]/50"
+                                    >
+                                        <span className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[9px] font-bold ${filled ? 'bg-[#6A4CFF] text-white' : 'bg-[#14121F]/10 text-[#14121F]/50'}`}>{filled ? '✓' : index + 1}</span>
+                                        <span className="min-w-0">
+                                            <span className="block text-xs font-semibold text-[#14121F]">{shot.title}</span>
+                                            <span className="block text-[10px] text-[#14121F]/50">{shot.tip}</span>
+                                        </span>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    )}
+
                     <div className="space-y-2">
                         {images.map((image, index) => (
                             <div key={image.id} className={`flex items-center gap-2 rounded-xl border p-2.5 shadow-xs ${selectedImageId === image.id ? 'border-[#6A4CFF]/60 bg-[#6A4CFF]/5' : 'border-[#14121F]/10 bg-white'}`}>
@@ -1543,7 +1775,7 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
                 </section>
 
                 {/* ---------------- Image look ---------------- */}
-                <section className={CARD_CLASS}>
+                <section className={`${CARD_CLASS} ${productTemplate && !showAdvanced ? 'hidden' : ''}`}>
                     <h2 className="text-xs font-bold uppercase tracking-wider text-[#14121F]/70">Image Look</h2>
 
                     <SelectField label="Reel template" value={template} onChange={(value) => applyTemplate(value as ReelTemplate)}>
@@ -1642,7 +1874,7 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
                             <textarea
                                 aria-label="Text overlay"
                                 value={selectedImage.overlayText}
-                                onChange={(event) => updateSelected({ overlayText: event.target.value.slice(0, 120) })}
+                                onChange={(event) => updateSelected({ overlayText: event.target.value.slice(0, 120), autoCaption: false })}
                                 maxLength={120}
                                 rows={2}
                                 placeholder="Type product highlight text…"
@@ -1702,7 +1934,7 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
                 </section>
 
                 {/* ---------------- Product effects ---------------- */}
-                <section className={CARD_CLASS}>
+                <section className={`${CARD_CLASS} ${productTemplate && !showAdvanced ? 'hidden' : ''}`}>
                     <h2 className="text-xs font-bold uppercase tracking-wider text-[#14121F]/70">Product effects</h2>
                     {selectedImage ? (
                         <>
@@ -1856,6 +2088,7 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
                 </div>
 
                 {isExporting && exportStatus && <p className="w-full max-w-4xl text-xs font-medium text-white/70">{exportStatus}</p>}
+                {notice && <p role="status" className="w-full max-w-4xl rounded-2xl border border-amber-200 bg-amber-50 p-3.5 text-xs font-medium text-amber-800 shadow-xs">{notice}</p>}
                 {error && <p role="alert" className="w-full max-w-4xl rounded-2xl border border-red-200 bg-red-50 p-3.5 text-xs font-medium text-red-600 shadow-xs">{error}</p>}
                 <canvas ref={canvasRef} className="hidden" />
             </section>
