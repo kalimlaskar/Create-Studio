@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, ArrowDown, ArrowUp, Download, FolderOpen, ImagePlus, Loader2, Music2, Play, Save, Sparkles, Trash2, ChevronDown } from 'lucide-react';
+import { ArrowLeft, ArrowDown, ArrowUp, Download, FolderOpen, ImagePlus, Loader2, Music2, Play, Save, Trash2, ChevronDown, ZoomIn, ZoomOut } from 'lucide-react';
 import { AspectRatioType } from '@/types/studio';
 import { createExportRecorder, getExportDimensions, RECORDING_FRAME_RATE } from '@/components/recordingQuality';
 import { drawFreeTierWatermark, FREE_VIDEO_LIMIT_MS } from '@/components/freeTier';
@@ -9,6 +9,17 @@ import { TextOverlayStyle } from '@/types/editor';
 import { DepthMotion, getDepthMap, getPhotoCacheKey, isDepthMotion } from './depthEstimator';
 import { getDepthRenderer } from './depthRenderer';
 import { deletePhotoReelDraft, listPhotoReelDrafts, loadPhotoReelDraft, PhotoReelDraftSummary, savePhotoReelDraft } from './photoReelDrafts';
+
+/* -------------------------------------------------------------------------- */
+/* Types & constants                                                          */
+/* -------------------------------------------------------------------------- */
+
+type FontKey = 'sans' | 'serif' | 'mono' | 'display';
+type GradientPreset = 'none' | 'sunset' | 'violet' | 'ocean' | 'warm';
+type ReelTemplate = 'custom' | 'travel' | 'birthday' | 'product' | 'festival' | 'product-demo';
+type PlatformAspect = '9:16' | '1:1' | '16:9' | '4:5';
+type TextPosition = 'top' | 'center' | 'bottom';
+type Corner = 'tl' | 'tr' | 'bl' | 'br';
 
 interface ReelImage {
     id: string;
@@ -20,13 +31,28 @@ interface ReelImage {
     overlayText: string;
     description: string;
     textStyle: TextOverlayStyle;
-    textPosition: 'top' | 'center' | 'bottom';
+    textPosition: TextPosition;
+    textOffset?: { x: number; y: number }; // caption offset, % of frame
+    textSize?: number;                     // caption size multiplier (0.5 – 2.5)
+    textColor?: string;                    // caption color (hex)
+    fontFamily?: FontKey;                  // caption font
+    shine?: boolean;                       // light sweep across the product
+    vignette?: number;                     // 0 – 60 (% darkness at the edges)
+    softEdges?: boolean;                   // fade photo edges when zoomed out (3D clips)
+    badgeText?: string;                    // sticker such as "NEW" or "₹999"
+    badgeColor?: string;
+    badgeCorner?: Corner;
+    scale?: number;                        // image zoom (0.5 – 2.5)
     motion: 'none' | 'zoom-in' | 'zoom-out' | 'pan-left' | 'pan-right' | DepthMotion;
     transition: 'cut' | 'fade' | 'slide' | 'zoom';
 }
 
-type GradientPreset = 'none' | 'sunset' | 'violet' | 'ocean' | 'warm';
-type ReelTemplate = 'custom' | 'travel' | 'birthday' | 'product' | 'festival';
+const FONT_FAMILIES: Record<FontKey, string> = {
+    sans: 'sans-serif',
+    serif: 'Georgia, serif',
+    mono: 'ui-monospace, Menlo, monospace',
+    display: 'Impact, "Arial Black", sans-serif',
+};
 
 const GRADIENTS: Array<{ id: GradientPreset; label: string; colors: [string, string] }> = [
     { id: 'none', label: 'None', colors: ['0,0,0', '0,0,0'] },
@@ -36,68 +62,328 @@ const GRADIENTS: Array<{ id: GradientPreset; label: string; colors: [string, str
     { id: 'warm', label: 'Warm', colors: ['234,179,8', '220,38,38'] },
 ];
 
+const TEXT_BASE_Y: Record<TextPosition, number> = { top: 15, center: 50, bottom: 82 }; // % of frame height
+
+const getCanvasSize = (aspect: PlatformAspect) => ({
+    width: aspect === '16:9' ? 960 : 540,
+    height: aspect === '9:16' ? 960 : aspect === '4:5' ? 675 : 540,
+});
+
+const getReadableTextColor = (hex: string) => {
+    const raw = hex.replace('#', '');
+    const full = raw.length === 3 ? raw.split('').map((c) => c + c).join('') : raw;
+    const r = parseInt(full.slice(0, 2), 16) || 0;
+    const g = parseInt(full.slice(2, 4), 16) || 0;
+    const b = parseInt(full.slice(4, 6), 16) || 0;
+    return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.6 ? '#111111' : '#ffffff';
+};
+
+const getCornerPosition = (corner: Corner, boxW: number, boxH: number, width: number, height: number, margin: number) => ({
+    x: corner === 'tl' || corner === 'bl' ? margin : width - boxW - margin,
+    y: corner === 'tl' || corner === 'tr' ? margin * 1.6 : height - boxH - margin * 1.6,
+});
+
+/** Fades the edges of a drawn rectangle so a zoomed-out photo does not look like a hard-edged card. */
+let softEdgeScratch: HTMLCanvasElement | null = null;
+function drawSoftEdged(ctx: CanvasRenderingContext2D, source: CanvasImageSource, x: number, y: number, w: number, h: number, canvasW: number, canvasH: number, feather: number) {
+    if (!softEdgeScratch) softEdgeScratch = document.createElement('canvas');
+    if (softEdgeScratch.width !== canvasW || softEdgeScratch.height !== canvasH) {
+        softEdgeScratch.width = canvasW;
+        softEdgeScratch.height = canvasH;
+    }
+    const scratch = softEdgeScratch.getContext('2d');
+    if (!scratch) {
+        ctx.drawImage(source, x, y, w, h);
+        return;
+    }
+    scratch.globalCompositeOperation = 'source-over';
+    scratch.clearRect(0, 0, canvasW, canvasH);
+    scratch.drawImage(source, x, y, w, h);
+    scratch.globalCompositeOperation = 'destination-out';
+    const f = Math.max(1, Math.min(feather, w / 2, h / 2));
+    const fade = (x0: number, y0: number, x1: number, y1: number, rx: number, ry: number, rw: number, rh: number) => {
+        const gradient = scratch.createLinearGradient(x0, y0, x1, y1);
+        gradient.addColorStop(0, 'rgba(0,0,0,1)');
+        gradient.addColorStop(1, 'rgba(0,0,0,0)');
+        scratch.fillStyle = gradient;
+        scratch.fillRect(rx, ry, rw, rh);
+    };
+    fade(x, 0, x + f, 0, x, y, f, h);
+    fade(x + w, 0, x + w - f, 0, x + w - f, y, f, h);
+    fade(0, y, 0, y + f, x, y, w, f);
+    fade(0, y + h, 0, y + h - f, x, y + h - f, w, f);
+    scratch.globalCompositeOperation = 'source-over';
+    ctx.drawImage(softEdgeScratch, 0, 0);
+}
+
+/** Vignette, shine sweep, badge sticker and brand logo. Shared by the live preview and the export. */
+function drawProductEffects(ctx: CanvasRenderingContext2D, clip: ReelImage, width: number, height: number, t: number, logo: { image: HTMLImageElement | null; corner: Corner; sizePct: number }) {
+    const vignette = clip.vignette ?? 0;
+    if (vignette > 0) {
+        const gradient = ctx.createRadialGradient(width / 2, height / 2, Math.min(width, height) * 0.35, width / 2, height / 2, Math.max(width, height) * 0.75);
+        gradient.addColorStop(0, 'rgba(0,0,0,0)');
+        gradient.addColorStop(1, `rgba(0,0,0,${(vignette / 100) * 0.7})`);
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, width, height);
+    }
+
+    if (clip.shine) {
+        const sweep = clamp((t - 0.2) / 0.5, 0, 1);
+        if (sweep > 0 && sweep < 1) {
+            const bandW = width * 0.28;
+            const slant = 0.35;
+            const x = -bandW + sweep * (width + bandW * 2 + slant * height);
+            ctx.save();
+            ctx.transform(1, 0, -slant, 1, 0, 0);
+            const gradient = ctx.createLinearGradient(x, 0, x + bandW, 0);
+            gradient.addColorStop(0, 'rgba(255,255,255,0)');
+            gradient.addColorStop(0.5, 'rgba(255,255,255,0.38)');
+            gradient.addColorStop(1, 'rgba(255,255,255,0)');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(x, 0, bandW, height);
+            ctx.restore();
+        }
+    }
+
+    const badge = clip.badgeText?.trim();
+    if (badge) {
+        const fontSize = Math.round(width * 0.045);
+        ctx.save();
+        ctx.font = `800 ${fontSize}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        const boxW = ctx.measureText(badge).width + fontSize * 1.4;
+        const boxH = fontSize * 1.9;
+        const { x, y } = getCornerPosition(clip.badgeCorner ?? 'tl', boxW, boxH, width, height, width * 0.05);
+        const color = clip.badgeColor ?? '#ef4444';
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.roundRect(x, y, boxW, boxH, boxH / 2);
+        ctx.fill();
+        ctx.fillStyle = getReadableTextColor(color);
+        ctx.fillText(badge, x + boxW / 2, y + boxH / 2 + fontSize * 0.04);
+        ctx.restore();
+    }
+
+    if (logo.image && logo.image.complete && logo.image.naturalWidth > 0) {
+        const logoW = width * (logo.sizePct / 100);
+        const logoH = logoW * (logo.image.naturalHeight / logo.image.naturalWidth);
+        const { x, y } = getCornerPosition(logo.corner, logoW, logoH, width, height, width * 0.05);
+        ctx.drawImage(logo.image, x, y, logoW, logoH);
+    }
+}
+
 const MAX_IMAGES = 20;
 const MAX_IMAGE_BYTES = 12 * 1024 * 1024;
 const MAX_VIDEO_BYTES = 100 * 1024 * 1024;
 const DEFAULT_VIDEO_CLIP_MS = 5000;
+const TRANSITION_MS = 450;
 
-function DepthPreview({ clip, depth, progress, aspectRatio, filter }: { clip: ReelImage; depth: HTMLCanvasElement; progress: number; aspectRatio: AspectRatioType; filter: string }) {
+const SELECT_CLASS = 'w-full appearance-none rounded-xl border border-[#14121F]/15 bg-[#F7F6FB] px-3 py-2 pr-8 text-xs font-medium text-[#14121F] focus:border-[#6A4CFF] focus:outline-none cursor-pointer shadow-xs';
+const RANGE_CLASS = 'mt-2 w-full accent-[#6A4CFF] bg-[#14121F]/10 h-1.5 rounded-full';
+const CARD_CLASS = 'space-y-3 rounded-2xl border border-[#14121F]/10 bg-white p-4 shadow-xs';
+
+const makeId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
+const getDefaultTextColor = (style: TextOverlayStyle) => (style === 'highlight' ? '#111111' : '#ffffff');
+
+/* -------------------------------------------------------------------------- */
+/* Small reusable UI pieces                                                   */
+/* -------------------------------------------------------------------------- */
+
+function SelectField({ label, value, onChange, children }: { label: string; value: string; onChange: (value: string) => void; children: React.ReactNode }) {
+    return (
+        <label className="block text-xs font-semibold text-[#14121F]">
+            {label}
+            <div className="relative mt-1.5">
+                <select value={value} onChange={(event) => onChange(event.target.value)} className={SELECT_CLASS}>{children}</select>
+                <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#14121F]/50" />
+            </div>
+        </label>
+    );
+}
+
+function RangeField({ label, display, min, max, step, value, onChange }: { label: string; display: string; min: number; max: number; step?: number; value: number; onChange: (value: number) => void }) {
+    return (
+        <label className="block text-xs font-semibold text-[#14121F]">
+            {label} · {display}
+            <input type="range" min={min} max={max} step={step} value={value} onChange={(event) => onChange(Number(event.target.value))} className={RANGE_CLASS} />
+        </label>
+    );
+}
+
+function DepthPreview({ clip, depth, progress, aspectRatio, filter, backgroundColor, scale, softEdges }: {
+    clip: ReelImage;
+    depth: HTMLCanvasElement;
+    progress: number;
+    aspectRatio: PlatformAspect;
+    filter: string;
+    backgroundColor: string;
+    scale: number;
+    softEdges: boolean;
+}) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
-    const width = aspectRatio === '16:9' ? 960 : 540;
-    const height = aspectRatio === '9:16' ? 960 : 540;
+    const { width, height } = getCanvasSize(aspectRatio);
     const [image, setImage] = useState<HTMLImageElement | null>(null);
+
     useEffect(() => {
         const element = new Image();
         element.onload = () => setImage(element);
         element.src = clip.url;
     }, [clip.url]);
+
     useEffect(() => {
         const canvas = canvasRef.current;
         const renderer = getDepthRenderer();
-        if (!canvas || !renderer || !image || !image.naturalWidth || !image.naturalWidth || !isDepthMotion(clip.motion)) return;
+        if (!canvas || !renderer || !image || !image.naturalWidth || !isDepthMotion(clip.motion)) return;
+
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+
+        // Zoom is drawn into the canvas itself (same math as the export), not via CSS.
+        const scaledW = width * scale;
+        const scaledH = height * scale;
+        const dx = (width - scaledW) / 2;
+        const dy = (height - scaledH) / 2;
+
+        ctx.clearRect(0, 0, width, height);
+        ctx.fillStyle = backgroundColor;
+        ctx.fillRect(0, 0, width, height);
         try {
             const frame = renderer.render({ key: getPhotoCacheKey(clip.file), photo: image, depth, width, height, motion: clip.motion, progress });
-            canvas.getContext('2d')?.drawImage(frame, 0, 0, width, height);
+            if (softEdges && scale < 0.98) drawSoftEdged(ctx, frame, dx, dy, scaledW, scaledH, width, height, Math.min(width, height) * 0.08);
+            else ctx.drawImage(frame, dx, dy, scaledW, scaledH);
         } catch {
-            // The export path falls back to a zoom if the renderer fails.
+            ctx.drawImage(image, dx, dy, scaledW, scaledH);
         }
-    }, [clip, depth, image, progress, width, height]);
-    return <canvas ref={canvasRef} width={width} height={height} className="h-full w-full object-cover" style={{ filter }} />;
+    }, [clip, depth, image, progress, width, height, backgroundColor, scale, softEdges]);
+
+    return (
+        <canvas
+            ref={canvasRef}
+            width={width}
+            height={height}
+            className="h-full w-full object-contain"
+            style={{ filter, backgroundColor }}
+        />
+    );
 }
 
+/** Live preview of vignette, shine, badge and logo (same drawing code as the export). */
+function EffectsOverlay({ clip, progress, aspectRatio, logoImage, logoCorner, logoSize }: {
+    clip: ReelImage;
+    progress: number;
+    aspectRatio: PlatformAspect;
+    logoImage: HTMLImageElement | null;
+    logoCorner: Corner;
+    logoSize: number;
+}) {
+    const canvasRef = useRef<HTMLCanvasElement>(null);
+    const { width, height } = getCanvasSize(aspectRatio);
+
+    useEffect(() => {
+        const ctx = canvasRef.current?.getContext('2d');
+        if (!ctx) return;
+        ctx.clearRect(0, 0, width, height);
+        drawProductEffects(ctx, clip, width, height, progress, { image: logoImage, corner: logoCorner, sizePct: logoSize });
+    }, [clip, progress, width, height, logoImage, logoCorner, logoSize]);
+
+    return <canvas ref={canvasRef} width={width} height={height} className="pointer-events-none absolute inset-0 h-full w-full" />;
+}
+
+/** Draggable caption shown over the preview. Uses the same % + font math as the canvas export. */
+function CaptionOverlay({ clip, onPointerDown, onPointerMove, onPointerUp }: {
+    clip: ReelImage;
+    onPointerDown: (event: React.PointerEvent<HTMLDivElement>) => void;
+    onPointerMove: (event: React.PointerEvent<HTMLDivElement>) => void;
+    onPointerUp: (event: React.PointerEvent<HTMLDivElement>) => void;
+}) {
+    const color = clip.textColor ?? getDefaultTextColor(clip.textStyle);
+    const isOutline = clip.textStyle === 'outline';
+    const boxClass = clip.textStyle === 'banner' ? 'rounded-lg bg-black/80' : clip.textStyle === 'highlight' ? 'rounded-lg bg-yellow-400/95' : '';
+
+    return (
+        <div
+            onPointerDown={onPointerDown}
+            onPointerMove={onPointerMove}
+            onPointerUp={onPointerUp}
+            onPointerCancel={onPointerUp}
+            className={`absolute cursor-move text-center font-bold leading-tight ${boxClass}`}
+            style={{
+                left: `${50 + (clip.textOffset?.x ?? 0)}%`,
+                top: `${TEXT_BASE_Y[clip.textPosition] + (clip.textOffset?.y ?? 0)}%`,
+                transform: 'translate(-50%, -50%)',
+                width: 'max-content',
+                maxWidth: '82%',
+                fontSize: `${6.5 * (clip.textSize ?? 1)}cqw`,
+                fontFamily: FONT_FAMILIES[clip.fontFamily ?? 'sans'],
+                padding: '0.3em 0.42em',
+                color: isOutline ? 'transparent' : color,
+                WebkitTextStroke: isOutline ? `0.07em ${color}` : undefined,
+                textShadow: clip.textStyle === 'classic' ? '0 0 0.1em rgba(0,0,0,.9), 0 0 0.2em rgba(0,0,0,.6)' : undefined,
+                touchAction: 'none',
+            }}
+        >
+            {clip.overlayText}
+        </div>
+    );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Main component                                                             */
+/* -------------------------------------------------------------------------- */
+
 export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
+    /* ---- clips & look ---- */
     const [images, setImages] = useState<ReelImage[]>([]);
     const [selectedImageId, setSelectedImageId] = useState<string | null>(null);
-    const [aspectRatio, setAspectRatio] = useState<AspectRatioType>('9:16');
+    const [aspectRatio, setAspectRatio] = useState<PlatformAspect>('9:16');
+    const [backgroundColor, setBackgroundColor] = useState<string>('#f6f6f6');
     const [secondsPerImage, setSecondsPerImage] = useState(3);
     const [gradient, setGradient] = useState<GradientPreset>('sunset');
     const [gradientStrength, setGradientStrength] = useState(35);
     const [brightness, setBrightness] = useState(100);
     const [saturation, setSaturation] = useState(100);
     const [template, setTemplate] = useState<ReelTemplate>('custom');
-    const [captionLanguage, setCaptionLanguage] = useState('en');
-    const [isGeneratingCaption, setIsGeneratingCaption] = useState(false);
-    const [isAnalyzingBeats, setIsAnalyzingBeats] = useState(false);
-    const [beatSyncMessage, setBeatSyncMessage] = useState<string | null>(null);
-    const [isSortingPhotos, setIsSortingPhotos] = useState(false);
+
+    /* ---- audio ---- */
     const [music, setMusic] = useState<{ file: File; url: string } | null>(null);
     const [musicVolume, setMusicVolume] = useState(70);
     const [narrationText, setNarrationText] = useState('');
     const [narrationLanguage, setNarrationLanguage] = useState<'en' | 'hi' | 'bn' | 'ta' | 'te'>('en');
     const [narrationVoiceGender, setNarrationVoiceGender] = useState<'female' | 'male'>('female');
     const [voiceover, setVoiceover] = useState<{ file: File; url: string } | null>(null);
-    const [isGeneratingVoiceover, setIsGeneratingVoiceover] = useState(false);
+
+    /* ---- brand logo ---- */
+    const [logo, setLogo] = useState<{ file: File; url: string } | null>(null);
+    const [logoImage, setLogoImage] = useState<HTMLImageElement | null>(null);
+    const [logoCorner, setLogoCorner] = useState<Corner>('tr');
+    const [logoSize, setLogoSize] = useState(18);
+
+    /* ---- preview ---- */
     const [isPreviewPlaying, setIsPreviewPlaying] = useState(false);
     const [previewTimeMs, setPreviewTimeMs] = useState(0);
+    const [isDraggingCaption, setIsDraggingCaption] = useState(false);
+
+    /* ---- export ---- */
     const [isExporting, setIsExporting] = useState(false);
     const [exportProgress, setExportProgress] = useState(0);
     const [exportStatus, setExportStatus] = useState<string | null>(null);
     const [completedExportUrl, setCompletedExportUrl] = useState<string | null>(null);
+
+    /* ---- drafts & errors ---- */
     const [drafts, setDrafts] = useState<PhotoReelDraftSummary[]>([]);
     const [currentDraftId, setCurrentDraftId] = useState<string | null>(null);
     const [isSavingDraft, setIsSavingDraft] = useState(false);
     const [isLoadingDraft, setIsLoadingDraft] = useState(false);
     const [error, setError] = useState<string | null>(null);
+
+    /* ---- depth ---- */
+    const [depthStatus, setDepthStatus] = useState<Record<string, 'ready' | 'failed'>>({});
+    const [depthMaps, setDepthMaps] = useState<Record<string, HTMLCanvasElement>>({});
+
+    /* ---- refs ---- */
+    const frameRef = useRef<HTMLDivElement>(null);
     const imageInputRef = useRef<HTMLInputElement>(null);
     const musicInputRef = useRef<HTMLInputElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -112,41 +398,72 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
     const videoPosterFramesRef = useRef(new Map<string, HTMLCanvasElement>());
     const depthMapsRef = useRef(new Map<string, HTMLCanvasElement>());
     const depthJobsRef = useRef(new Map<string, string>());
-    const [depthStatus, setDepthStatus] = useState<Record<string, 'ready' | 'failed'>>({});
-    const [depthMaps, setDepthMaps] = useState<Record<string, HTMLCanvasElement>>({});
     const imagesRef = useRef(images);
     const musicRef = useRef(music);
     const voiceoverRef = useRef(voiceover);
+    const logoRef = useRef(logo);
+    const logoInputRef = useRef<HTMLInputElement>(null);
     const previewTimeRef = useRef(0);
-    const getClipDurationMs = (clip: ReelImage) => clip.type === 'image' ? secondsPerImage * 1000 : clip.durationMs;
+
+    /* ---- derived ---- */
+    const getClipDurationMs = (clip: ReelImage) => (clip.type === 'image' ? secondsPerImage * 1000 : clip.durationMs);
     const durationMs = images.reduce((total, clip) => total + getClipDurationMs(clip), 0);
-    const resolvedPreviewIndex = images.findIndex((clip, index) => {
-        const clipEndMs = images.slice(0, index + 1).reduce((total, item) => total + getClipDurationMs(item), 0);
-        return previewTimeMs < clipEndMs;
-    });
-    const safePreviewIndex = resolvedPreviewIndex < 0 ? Math.max(0, images.length - 1) : resolvedPreviewIndex;
+    const getStartAtIndex = (targetIndex: number) => images.slice(0, targetIndex).reduce((total, clip) => total + getClipDurationMs(clip), 0);
+    const getIndexAtTime = (timeMs: number) => {
+        let elapsedMs = 0;
+        for (let index = 0; index < images.length; index += 1) {
+            elapsedMs += getClipDurationMs(images[index]);
+            if (timeMs < elapsedMs) return index;
+        }
+        return Math.max(0, images.length - 1);
+    };
+
+    const safePreviewIndex = getIndexAtTime(previewTimeMs);
     const activeImage = images[safePreviewIndex] ?? null;
-    const activeClipStartMs = images.slice(0, safePreviewIndex).reduce((total, clip) => total + getClipDurationMs(clip), 0);
+    const activeClipStartMs = getStartAtIndex(safePreviewIndex);
     const selectedImage = images.find((image) => image.id === selectedImageId) ?? null;
     const durationLabel = useMemo(() => `${(durationMs / 1000).toFixed(0)} sec`, [durationMs]);
+
+    const updateClip = (id: string, patch: Partial<ReelImage>) =>
+        setImages((current) => current.map((clip) => (clip.id === id ? { ...clip, ...patch } : clip)));
+    const updateSelected = (patch: Partial<ReelImage>) => {
+        if (selectedImageId) updateClip(selectedImageId, patch);
+    };
+
+    /* ---------------------------------------------------------------------- */
+    /* Effects                                                                */
+    /* ---------------------------------------------------------------------- */
 
     useEffect(() => {
         imagesRef.current = images;
         musicRef.current = music;
         voiceoverRef.current = voiceover;
-    }, [images, music, voiceover]);
+        logoRef.current = logo;
+    }, [images, music, voiceover, logo]);
+
+    useEffect(() => {
+        if (!logo) {
+            setLogoImage(null);
+            return;
+        }
+        const element = new Image();
+        element.onload = () => setLogoImage(element);
+        element.src = logo.url;
+    }, [logo]);
 
     const ensureDepth = (clip: ReelImage): Promise<void> => {
         const cacheKey = getPhotoCacheKey(clip.file);
         if (depthJobsRef.current.get(clip.id) === cacheKey) return Promise.resolve();
         depthJobsRef.current.set(clip.id, cacheKey);
-        return getDepthMap(clip.file).then((depth) => {
-            depthMapsRef.current.set(clip.id, depth);
-            setDepthMaps((current) => ({ ...current, [clip.id]: depth }));
-            setDepthStatus((current) => ({ ...current, [clip.id]: 'ready' }));
-        }).catch(() => {
-            setDepthStatus((current) => ({ ...current, [clip.id]: 'failed' }));
-        });
+        return getDepthMap(clip.file)
+            .then((depth) => {
+                depthMapsRef.current.set(clip.id, depth);
+                setDepthMaps((current) => ({ ...current, [clip.id]: depth }));
+                setDepthStatus((current) => ({ ...current, [clip.id]: 'ready' }));
+            })
+            .catch(() => {
+                setDepthStatus((current) => ({ ...current, [clip.id]: 'failed' }));
+            });
     };
 
     useEffect(() => {
@@ -158,7 +475,8 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
 
     useEffect(() => {
         let cancelled = false;
-        listPhotoReelDrafts().then((items) => { if (!cancelled) setDrafts(items); })
+        listPhotoReelDrafts()
+            .then((items) => { if (!cancelled) setDrafts(items); })
             .catch(() => { if (!cancelled) setError('Could not load saved reel drafts.'); });
         return () => { cancelled = true; };
     }, []);
@@ -167,6 +485,7 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
         imagesRef.current.forEach((image) => URL.revokeObjectURL(image.url));
         if (musicRef.current) URL.revokeObjectURL(musicRef.current.url);
         if (voiceoverRef.current) URL.revokeObjectURL(voiceoverRef.current.url);
+        if (logoRef.current) URL.revokeObjectURL(logoRef.current.url);
         audioRef.current?.pause();
         exportVoiceoverRef.current?.pause();
         previewAudioRef.current?.pause();
@@ -179,8 +498,12 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
         if (completedExportUrl) URL.revokeObjectURL(completedExportUrl);
     }, [completedExportUrl]);
 
+    /* ---------------------------------------------------------------------- */
+    /* Preview playback                                                       */
+    /* ---------------------------------------------------------------------- */
+
     const seekPreview = (timeMs: number) => {
-        const nextTime = Math.max(0, Math.min(durationMs, timeMs));
+        const nextTime = clamp(timeMs, 0, durationMs);
         previewTimeRef.current = nextTime;
         setPreviewTimeMs(nextTime);
         const audio = previewAudioRef.current;
@@ -216,7 +539,7 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
         const voice = previewVoiceoverRef.current;
         if (audio && Number.isFinite(audio.duration) && audio.duration > 0) {
             audio.currentTime = (previewTimeRef.current / 1000) % audio.duration;
-            audio.play().catch(() => setError('The music preview could not start. Try the music player controls below.'));
+            audio.play().catch(() => setError('The music preview could not start.'));
         }
         if (voice && Number.isFinite(voice.duration) && voice.duration > 0 && previewTimeRef.current < voice.duration * 1000) {
             voice.currentTime = previewTimeRef.current / 1000;
@@ -228,16 +551,19 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
             const nextTime = Math.min(durationMs, previewTimeRef.current + elapsed);
             previewTimeRef.current = nextTime;
             setPreviewTimeMs(nextTime);
+
             const activeAudio = previewAudioRef.current;
             if (activeAudio && !activeAudio.paused && Number.isFinite(activeAudio.duration) && activeAudio.duration > 0) {
-                const expectedAudioTime = (nextTime / 1000) % activeAudio.duration;
-                if (Math.abs(activeAudio.currentTime - expectedAudioTime) > 0.4) activeAudio.currentTime = expectedAudioTime;
+                const expected = (nextTime / 1000) % activeAudio.duration;
+                if (Math.abs(activeAudio.currentTime - expected) > 0.4) activeAudio.currentTime = expected;
             }
             const activeVoice = previewVoiceoverRef.current;
-            if (activeVoice && !activeVoice.paused && Number.isFinite(activeVoice.duration) && activeVoice.duration > 0 && nextTime < activeVoice.duration * 1000) {
-                if (Math.abs(activeVoice.currentTime - nextTime / 1000) > 0.4) activeVoice.currentTime = nextTime / 1000;
-            } else if (activeVoice && !activeVoice.paused && nextTime >= activeVoice.duration * 1000) {
-                activeVoice.pause();
+            if (activeVoice && !activeVoice.paused && Number.isFinite(activeVoice.duration) && activeVoice.duration > 0) {
+                if (nextTime < activeVoice.duration * 1000) {
+                    if (Math.abs(activeVoice.currentTime - nextTime / 1000) > 0.4) activeVoice.currentTime = nextTime / 1000;
+                } else {
+                    activeVoice.pause();
+                }
             }
             if (nextTime >= durationMs) {
                 setIsPreviewPlaying(false);
@@ -255,10 +581,11 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
 
     useEffect(() => {
         const audio = previewAudioRef.current;
-        if (!audio) return;
-        audio.volume = musicVolume / 100;
-        audio.loop = true;
-        if (!music) audio.pause();
+        if (audio) {
+            audio.volume = musicVolume / 100;
+            audio.loop = true;
+            if (!music) audio.pause();
+        }
         const voice = previewVoiceoverRef.current;
         if (voice) voice.volume = 1;
     }, [music, musicVolume]);
@@ -275,21 +602,46 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
         if (isPreviewPlaying) video.play().catch(() => setError('This video clip could not play in the preview.'));
         else video.pause();
         return () => video.pause();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [activeImage?.id, activeImage?.type, activeClipStartMs, isPreviewPlaying]);
+
+    /* ---------------------------------------------------------------------- */
+    /* Clip management                                                        */
+    /* ---------------------------------------------------------------------- */
 
     const addImages = (event: React.ChangeEvent<HTMLInputElement>) => {
         const files = Array.from(event.target.files ?? []);
         event.target.value = '';
         setError(null);
-        const validFiles = files.filter((file) => (file.type.startsWith('image/') && file.size <= MAX_IMAGE_BYTES)
-            || (file.type.startsWith('video/') && file.size <= MAX_VIDEO_BYTES));
+
+        const validFiles = files.filter((file) =>
+            (file.type.startsWith('image/') && file.size <= MAX_IMAGE_BYTES) ||
+            (file.type.startsWith('video/') && file.size <= MAX_VIDEO_BYTES));
         if (validFiles.length !== files.length) setError('Some files were skipped. Use images under 12 MB and videos under 100 MB.');
+
         const accepted = validFiles.slice(0, Math.max(0, MAX_IMAGES - images.length));
         if (accepted.length < validFiles.length) setError(`A reel can contain up to ${MAX_IMAGES} photos and video clips combined.`);
+
         const nextImages = accepted.map((file): ReelImage => {
             const type: ReelImage['type'] = file.type.startsWith('video/') ? 'video' : 'image';
             const url = URL.createObjectURL(file);
-            const clip: ReelImage = { id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, type, file, url, durationMs: type === 'image' ? secondsPerImage * 1000 : DEFAULT_VIDEO_CLIP_MS, overlayText: '', description: '', textStyle: 'banner', textPosition: 'bottom', motion: type === 'image' ? 'zoom-in' : 'none', transition: 'fade' };
+            const clip: ReelImage = {
+                id: makeId(),
+                type,
+                file,
+                url,
+                durationMs: type === 'image' ? secondsPerImage * 1000 : DEFAULT_VIDEO_CLIP_MS,
+                overlayText: '',
+                description: '',
+                textStyle: 'banner',
+                textPosition: 'bottom',
+                textOffset: { x: 0, y: 0 },
+                textSize: 1,
+                fontFamily: 'sans',
+                scale: 1,
+                motion: type === 'image' ? 'zoom-in' : 'none',
+                transition: 'fade',
+            };
             if (type === 'video') {
                 const video = document.createElement('video');
                 video.preload = 'metadata';
@@ -298,15 +650,14 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
                 videoCacheRef.current.set(clip.id, video);
                 video.onloadedmetadata = () => {
                     const sourceDurationMs = Number.isFinite(video.duration) ? video.duration * 1000 : DEFAULT_VIDEO_CLIP_MS;
-                    setImages((current) => current.map((item) => item.id === clip.id
-                        ? { ...item, sourceDurationMs, durationMs: Math.min(DEFAULT_VIDEO_CLIP_MS, sourceDurationMs) }
-                        : item));
+                    updateClip(clip.id, { sourceDurationMs, durationMs: Math.min(DEFAULT_VIDEO_CLIP_MS, sourceDurationMs) });
                 };
                 video.onerror = () => setError(`Could not load video clip ${file.name}. Try an MP4 or WebM file.`);
                 video.src = url;
             }
             return clip;
         });
+
         setImages((current) => [...current, ...nextImages]);
         if (!selectedImageId && nextImages[0]) setSelectedImageId(nextImages[0].id);
         if (images.length === 0 && nextImages.length > 0) seekPreview(0);
@@ -356,15 +707,54 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
         setError(null);
     };
 
+    const setLogoFile = (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        event.target.value = '';
+        if (!file) return;
+        if (!file.type.startsWith('image/')) {
+            setError('Choose an image file (PNG with a transparent background works best) for the logo.');
+            return;
+        }
+        if (logo) URL.revokeObjectURL(logo.url);
+        setLogo({ file, url: URL.createObjectURL(file) });
+        setError(null);
+    };
+
+    /** Samples the top-left pixel of the selected photo and uses it as the reel background. */
+    const matchBackgroundToPhoto = () => {
+        if (!selectedImage || selectedImage.type !== 'image') return;
+        const element = getImage(selectedImage);
+        if (!element.naturalWidth) return;
+        try {
+            const probe = document.createElement('canvas');
+            probe.width = 4;
+            probe.height = 4;
+            const probeCtx = probe.getContext('2d', { willReadFrequently: true });
+            if (!probeCtx) return;
+            probeCtx.drawImage(element, 0, 0, 4, 4);
+            const [r, g, b] = probeCtx.getImageData(0, 0, 1, 1).data;
+            setBackgroundColor(`#${[r, g, b].map((value) => value.toString(16).padStart(2, '0')).join('')}`);
+        } catch {
+            setError('Could not read the background color from this photo.');
+        }
+    };
+
     const applyTemplate = (nextTemplate: ReelTemplate) => {
         setTemplate(nextTemplate);
-        const config: Record<Exclude<ReelTemplate, 'custom'>, { gradient: GradientPreset; strength: number; brightness: number; saturation: number; transition: ReelImage['transition']; motion: ReelImage['motion']; style: TextOverlayStyle; position: ReelImage['textPosition']; seconds: number; caption: string }> = {
+        if (nextTemplate === 'custom') return;
+
+        const config: Record<Exclude<ReelTemplate, 'custom'>, {
+            gradient: GradientPreset; strength: number; brightness: number; saturation: number;
+            transition: ReelImage['transition']; motion: ReelImage['motion'];
+            style: TextOverlayStyle; position: TextPosition; seconds: number; caption: string;
+        }> = {
             travel: { gradient: 'ocean', strength: 30, brightness: 108, saturation: 112, transition: 'fade', motion: 'pan-left', style: 'classic', position: 'bottom', seconds: 4, caption: 'A little moment from the journey ✨' },
             birthday: { gradient: 'violet', strength: 42, brightness: 105, saturation: 118, transition: 'zoom', motion: 'zoom-in', style: 'highlight', position: 'center', seconds: 3, caption: 'Celebrating a day as special as you 🎂' },
             product: { gradient: 'warm', strength: 28, brightness: 105, saturation: 108, transition: 'slide', motion: 'zoom-in', style: 'banner', position: 'bottom', seconds: 3, caption: 'Meet your new everyday favorite.' },
             festival: { gradient: 'sunset', strength: 40, brightness: 108, saturation: 120, transition: 'fade', motion: 'zoom-in', style: 'highlight', position: 'center', seconds: 3, caption: 'Wishing you joy, light, and togetherness ✨' },
+            'product-demo': { gradient: 'warm', strength: 28, brightness: 108, saturation: 112, transition: 'cut', motion: 'depth-dolly', style: 'banner', position: 'bottom', seconds: 1.5, caption: '✨ Premium quality, built to last.' },
         };
-        if (nextTemplate === 'custom') return;
+
         const preset = config[nextTemplate];
         setGradient(preset.gradient);
         setGradientStrength(preset.strength);
@@ -378,175 +768,280 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
             textStyle: preset.style,
             textPosition: preset.position,
             overlayText: clip.overlayText.trim() ? clip.overlayText : preset.caption,
+            shine: nextTemplate === 'product-demo' || nextTemplate === 'product' ? true : clip.shine,
+            vignette: nextTemplate === 'product-demo' ? clip.vignette ?? 14 : clip.vignette,
         })));
     };
 
-    const generateCaption = async (clip: ReelImage) => {
-        if (clip.description.trim().length < 3) {
-            setError('Add a short description of this photo or clip before generating its caption.');
-            return;
+    /* ---------------------------------------------------------------------- */
+    /* Caption dragging                                                       */
+    /* ---------------------------------------------------------------------- */
+
+    const handleCaptionPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+        if (!activeImage) return;
+        event.stopPropagation();
+        event.currentTarget.setPointerCapture(event.pointerId);
+        setSelectedImageId(activeImage.id);
+        setIsDraggingCaption(true);
+    };
+
+    const handleCaptionPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+        if (!isDraggingCaption || !activeImage || !frameRef.current) return;
+        const rect = frameRef.current.getBoundingClientRect();
+        if (!rect.width || !rect.height) return;
+        const dx = (event.movementX / rect.width) * 100;
+        const dy = (event.movementY / rect.height) * 100;
+        const current = activeImage.textOffset ?? { x: 0, y: 0 };
+        updateClip(activeImage.id, {
+            textOffset: { x: clamp(current.x + dx, -45, 45), y: clamp(current.y + dy, -50, 50) },
+        });
+    };
+
+    const handleCaptionPointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
+        if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+        setIsDraggingCaption(false);
+    };
+
+    /* ---------------------------------------------------------------------- */
+    /* Media helpers                                                          */
+    /* ---------------------------------------------------------------------- */
+
+    const getImage = (image: ReelImage) => {
+        let element = imageCacheRef.current.get(image.id);
+        if (!element) {
+            element = new Image();
+            element.src = image.url;
+            imageCacheRef.current.set(image.id, element);
         }
-        setIsGeneratingCaption(true);
-        setError(null);
+        return element;
+    };
+
+    const getVideo = (clip: ReelImage) => {
+        let element = videoCacheRef.current.get(clip.id);
+        if (!element) {
+            element = document.createElement('video');
+            element.src = clip.url;
+            element.preload = 'auto';
+            element.muted = true;
+            element.playsInline = true;
+            videoCacheRef.current.set(clip.id, element);
+        }
+        return element;
+    };
+
+    const waitForImageDecode = async (image: HTMLImageElement, fileName: string) => {
         try {
-            const response = await fetch('/api/generate-reel-caption', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ description: clip.description, language: captionLanguage, template }),
-            });
-            if (!response.ok) {
-                const payload = await response.json().catch(() => null) as { error?: string } | null;
-                throw new Error(payload?.error ?? 'Could not generate a caption.');
+            if (!image.complete || image.naturalWidth === 0) {
+                await new Promise<void>((resolve, reject) => {
+                    const timeout = window.setTimeout(() => reject(new Error(`Photo ${fileName} took too long to load.`)), 10000);
+                    image.onload = () => { window.clearTimeout(timeout); resolve(); };
+                    image.onerror = () => { window.clearTimeout(timeout); reject(new Error(`Could not decode photo ${fileName}.`)); };
+                });
             }
-            const payload = await response.json() as { caption?: string };
-            if (!payload.caption) throw new Error('The caption service returned no text.');
-            setImages((current) => current.map((item) => item.id === clip.id ? { ...item, overlayText: payload.caption!.slice(0, 120) } : item));
+            if (typeof image.decode === 'function') await image.decode();
+            if (image.naturalWidth === 0 || image.naturalHeight === 0) throw new Error(`Could not decode photo ${fileName}.`);
         } catch (cause) {
-            setError(cause instanceof Error ? cause.message : 'Could not generate a caption.');
-        } finally {
-            setIsGeneratingCaption(false);
+            throw cause instanceof Error ? cause : new Error(`Could not decode photo ${fileName}.`);
         }
     };
 
-    const generateVoiceover = async () => {
-        const narration = narrationText.trim() || images.map((clip) => clip.overlayText.trim()).filter(Boolean).join('. ');
-        if (narration.length < 3) {
-            setError('Write a narration script or add captions to your slides first.');
+    const waitForVideoFrame = (video: HTMLVideoElement, fileName: string, timeoutMs = 10000) => new Promise<boolean>((resolve, reject) => {
+        const hasFrame = () => video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && video.videoWidth > 0;
+        if (hasFrame()) {
+            resolve(true);
             return;
         }
-        setIsGeneratingVoiceover(true);
-        setError(null);
-        try {
-            const response = await fetch('/api/dub', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ text: narration, sourceLanguage: narrationLanguage, targetLanguage: narrationLanguage, voiceGender: narrationVoiceGender }),
-            });
-            if (!response.ok) {
-                const payload = await response.json().catch(() => null) as { error?: string } | null;
-                throw new Error(payload?.error ?? 'Could not generate narration.');
+        const events = ['loadeddata', 'canplay', 'seeked', 'playing', 'timeupdate'] as const;
+        const cleanup = () => {
+            window.clearTimeout(timeout);
+            events.forEach((name) => video.removeEventListener(name, checkReady));
+            video.removeEventListener('error', handleError);
+        };
+        const checkReady = () => {
+            if (hasFrame()) {
+                cleanup();
+                resolve(true);
             }
-            const file = new File([await response.blob()], `reel-narration-${narrationLanguage}.wav`, { type: 'audio/wav' });
-            if (voiceover) URL.revokeObjectURL(voiceover.url);
-            setVoiceover({ file, url: URL.createObjectURL(file) });
-            setNarrationText(narration);
-        } catch (cause) {
-            setError(cause instanceof Error ? cause.message : 'Could not generate narration.');
-        } finally {
-            setIsGeneratingVoiceover(false);
+        };
+        const handleError = () => {
+            cleanup();
+            reject(new Error(`Could not decode ${fileName}.`));
+        };
+        const timeout = window.setTimeout(() => {
+            cleanup();
+            resolve(false);
+        }, timeoutMs);
+        events.forEach((name) => video.addEventListener(name, checkReady));
+        video.addEventListener('error', handleError);
+        checkReady();
+    });
+
+    /* ---------------------------------------------------------------------- */
+    /* Canvas rendering (used by export)                                      */
+    /* ---------------------------------------------------------------------- */
+
+    const drawCaption = (ctx: CanvasRenderingContext2D, image: ReelImage, width: number, height: number) => {
+        if (!image.overlayText.trim()) return;
+
+        const fontSize = Math.max(14, Math.round(width * 0.065 * (image.textSize ?? 1)));
+        const padding = fontSize * 0.42;
+        const textColor = image.textColor ?? getDefaultTextColor(image.textStyle);
+        ctx.font = `700 ${fontSize}px ${FONT_FAMILIES[image.fontFamily ?? 'sans']}`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        const maxWidth = width * 0.82;
+
+        const textX = width / 2 + (image.textOffset?.x ?? 0) * (width / 100);
+        const textY = height * (TEXT_BASE_Y[image.textPosition] / 100) + (image.textOffset?.y ?? 0) * (height / 100);
+
+        const words = image.overlayText.trim().split(/\s+/);
+        const lines: string[] = [];
+        let line = '';
+        for (const word of words) {
+            const candidate = line ? `${line} ${word}` : word;
+            if (line && ctx.measureText(candidate).width > maxWidth - padding * 2) {
+                lines.push(line);
+                line = word;
+            } else line = candidate;
         }
+        if (line) lines.push(line);
+
+        const lineHeight = fontSize * 1.2;
+        const textHeight = lines.length * lineHeight;
+        const boxWidth = Math.min(maxWidth, Math.max(...lines.map((item) => ctx.measureText(item).width), 0) + padding * 2);
+
+        if (image.textStyle === 'banner' || image.textStyle === 'highlight') {
+            ctx.fillStyle = image.textStyle === 'banner' ? 'rgba(10,10,10,0.78)' : 'rgba(250,204,21,0.92)';
+            ctx.beginPath();
+            ctx.roundRect(textX - boxWidth / 2, textY - textHeight / 2 - padding / 2, boxWidth, textHeight + padding, fontSize * 0.2);
+            ctx.fill();
+        }
+
+        lines.forEach((item, index) => {
+            const y = textY + (index - (lines.length - 1) / 2) * lineHeight;
+            if (image.textStyle === 'outline') {
+                ctx.strokeStyle = textColor;
+                ctx.lineWidth = Math.max(2, fontSize * 0.07);
+                ctx.strokeText(item, textX, y, maxWidth);
+                return;
+            }
+            if (image.textStyle === 'classic') {
+                ctx.strokeStyle = 'rgba(0,0,0,0.8)';
+                ctx.lineWidth = fontSize * 0.1;
+                ctx.strokeText(item, textX, y, maxWidth);
+            }
+            ctx.fillStyle = textColor;
+            ctx.fillText(item, textX, y, maxWidth);
+        });
     };
 
-    const syncToMusicBeat = async () => {
-        if (!music || isAnalyzingBeats) {
-            if (!music) setError('Add a music track before syncing slide timing to its beat.');
-            return;
-        }
-        setIsAnalyzingBeats(true);
-        setBeatSyncMessage(null);
-        setError(null);
-        try {
-            const context = new AudioContext();
-            try {
-                const buffer = await context.decodeAudioData(await music.file.arrayBuffer());
-                const channel = buffer.getChannelData(0);
-                const windowSize = Math.max(1, Math.floor(buffer.sampleRate * 0.012));
-                const energy: number[] = [];
-                for (let offset = 0; offset < channel.length; offset += windowSize) {
-                    let sum = 0;
-                    const end = Math.min(channel.length, offset + windowSize);
-                    for (let sample = offset; sample < end; sample += 1) sum += channel[sample] * channel[sample];
-                    energy.push(Math.sqrt(sum / Math.max(1, end - offset)));
+    const drawSlide = (ctx: CanvasRenderingContext2D, image: ReelImage, width: number, height: number, progress = 0, motionProgress = progress) => {
+        ctx.fillStyle = backgroundColor;
+        ctx.fillRect(0, 0, width, height);
+
+        const liveVideo = image.type === 'video' ? getVideo(image) : null;
+        const videoHasFrame = Boolean(liveVideo && liveVideo.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && liveVideo.videoWidth > 0);
+        const element: CanvasImageSource = image.type === 'image'
+            ? getImage(image)
+            : videoHasFrame ? liveVideo! : videoPosterFramesRef.current.get(image.id) ?? liveVideo!;
+
+        const sourceWidth = element instanceof HTMLImageElement ? element.naturalWidth
+            : element instanceof HTMLVideoElement ? element.videoWidth
+                : element instanceof HTMLCanvasElement ? element.width : 0;
+        const sourceHeight = element instanceof HTMLImageElement ? element.naturalHeight
+            : element instanceof HTMLVideoElement ? element.videoHeight
+                : element instanceof HTMLCanvasElement ? element.height : 0;
+        if (sourceWidth === 0 || sourceHeight === 0) return;
+
+        const progressClamped = clamp(progress, 0, 1);
+        const motionT = clamp(motionProgress, 0, 1);
+        const requestedMotion = image.type === 'image' ? image.motion ?? 'zoom-in' : 'none';
+        const userScale = image.scale ?? 1;
+
+        // 3D depth frame (if the clip uses a depth motion and the map is ready)
+        let depthFrame: HTMLCanvasElement | null = null;
+        if (isDepthMotion(requestedMotion) && element instanceof HTMLImageElement) {
+            const depthMap = depthMapsRef.current.get(image.id);
+            const renderer = depthMap ? getDepthRenderer() : null;
+            if (depthMap && renderer) {
+                try {
+                    depthFrame = renderer.render({ key: getPhotoCacheKey(image.file), photo: element, depth: depthMap, width, height, motion: requestedMotion, progress: motionT });
+                } catch {
+                    depthFrame = null;
                 }
-                const sorted = [...energy].sort((a, b) => a - b);
-                const threshold = (sorted[Math.floor(sorted.length * 0.55)] ?? 0) * 1.65;
-                const peaks: number[] = [];
-                const minGap = Math.ceil(0.25 / 0.012);
-                for (let index = 2; index < energy.length - 2; index += 1) {
-                    if (energy[index] < threshold || energy[index] < energy[index - 1] || energy[index] < energy[index + 1]) continue;
-                    if (peaks.length && index - peaks[peaks.length - 1] < minGap) continue;
-                    peaks.push(index);
-                }
-                const intervals = peaks.slice(1).map((peak, index) => (peak - peaks[index]) * 0.012).filter((interval) => interval >= 0.3 && interval <= 1.2);
-                if (intervals.length < 3) throw new Error('Could not find a steady beat in this music. Choose a clearer, steady-tempo track.');
-                intervals.sort((a, b) => a - b);
-                const beatSeconds = intervals[Math.floor(intervals.length / 2)];
-                const secondsPerTwoBeats = Math.max(1, Math.min(8, Math.round(beatSeconds * 2)));
-                setSecondsPerImage(secondsPerTwoBeats);
-                setBeatSyncMessage(`Approx. ${Math.round(60 / beatSeconds)} BPM · photos set to about every 2 beats.`);
-            } finally {
-                await context.close();
             }
-        } catch (cause) {
-            setError(cause instanceof Error ? cause.message : 'Could not analyze the music beat.');
-        } finally {
-            setIsAnalyzingBeats(false);
         }
+
+        const motion = isDepthMotion(requestedMotion) ? 'zoom-in' : requestedMotion;
+        const motionScale = (motion === 'zoom-in' || motion === 'pan-left' || motion === 'pan-right'
+            ? 1 + 0.12 * motionT
+            : motion === 'zoom-out' ? 1.12 - 0.12 * motionT : 1) * userScale;
+
+        const ratio = Math.min(width / sourceWidth, height / sourceHeight) * 0.95;
+        const drawW = sourceWidth * ratio * motionScale;
+        const drawH = sourceHeight * ratio * motionScale;
+        const drawX = (width - drawW) / 2;
+        const drawY = (height - drawH) / 2;
+
+        ctx.save();
+
+        // Entry transition
+        const transition = image.transition ?? 'fade';
+        if (transition === 'fade') ctx.globalAlpha = progressClamped;
+        else if (transition === 'slide') ctx.translate((1 - progressClamped) * width, 0);
+        else if (transition === 'zoom') {
+            const transitionScale = 1.12 - 0.12 * progressClamped;
+            ctx.translate(width / 2, height / 2);
+            ctx.scale(transitionScale, transitionScale);
+            ctx.translate(-width / 2, -height / 2);
+        }
+
+        // Media (the user zoom now applies to depth frames too)
+        ctx.filter = `brightness(${brightness}%) saturate(${saturation}%)`;
+        if (depthFrame) {
+            const depthW = width * userScale;
+            const depthH = height * userScale;
+            const depthX = (width - depthW) / 2;
+            const depthY = (height - depthH) / 2;
+            if (image.softEdges !== false && userScale < 0.98) drawSoftEdged(ctx, depthFrame, depthX, depthY, depthW, depthH, width, height, Math.min(width, height) * 0.08);
+            else ctx.drawImage(depthFrame, depthX, depthY, depthW, depthH);
+        } else {
+            ctx.drawImage(element, drawX, drawY, drawW, drawH);
+        }
+        ctx.filter = 'none';
+
+        // Gradient overlay
+        if (gradient !== 'none') {
+            const colors = GRADIENTS.find((item) => item.id === gradient)?.colors ?? ['0,0,0', '0,0,0'];
+            const overlay = ctx.createLinearGradient(0, 0, 0, height);
+            const alpha = gradientStrength / 100;
+            overlay.addColorStop(0, `rgba(${colors[0]},${alpha * 0.2})`);
+            overlay.addColorStop(0.48, `rgba(${colors[0]},${alpha * 0.52})`);
+            overlay.addColorStop(1, `rgba(${colors[1]},${alpha})`);
+            ctx.fillStyle = overlay;
+            ctx.fillRect(0, 0, width, height);
+        }
+
+        drawProductEffects(ctx, image, width, height, motionT, { image: logoImage, corner: logoCorner, sizePct: logoSize });
+        drawCaption(ctx, image, width, height);
+        ctx.restore();
     };
 
-    const autoOrderPhotos = async () => {
-        const photoClips = images.filter((clip) => clip.type === 'image');
-        if (photoClips.length < 2 || isSortingPhotos) return;
-        setIsSortingPhotos(true);
-        setError(null);
-        try {
-            const scores = await Promise.all(photoClips.map((clip) => new Promise<{ id: string; score: number }>((resolve) => {
-                const image = new Image();
-                image.onload = () => {
-                    const canvas = document.createElement('canvas');
-                    canvas.width = 96;
-                    canvas.height = 96;
-                    const ctx = canvas.getContext('2d', { willReadFrequently: true });
-                    if (!ctx) { resolve({ id: clip.id, score: 0 }); return; }
-                    const ratio = Math.max(canvas.width / image.naturalWidth, canvas.height / image.naturalHeight);
-                    ctx.drawImage(image, 0, 0, image.naturalWidth / ratio, image.naturalHeight / ratio);
-                    const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-                    const gray: number[] = [];
-                    let sum = 0;
-                    for (let index = 0; index < pixels.length; index += 4) {
-                        const value = pixels[index] * 0.299 + pixels[index + 1] * 0.587 + pixels[index + 2] * 0.114;
-                        gray.push(value);
-                        sum += value;
-                    }
-                    const mean = sum / gray.length;
-                    let variance = 0;
-                    let sharpness = 0;
-                    for (let y = 1; y < 95; y += 1) for (let x = 1; x < 95; x += 1) {
-                        const index = y * 96 + x;
-                        const value = gray[index];
-                        variance += (value - mean) ** 2;
-                        const laplacian = gray[index - 1] + gray[index + 1] + gray[index - 96] + gray[index + 96] - 4 * value;
-                        sharpness += laplacian * laplacian;
-                    }
-                    const exposureScore = Math.max(0, 1 - Math.abs(mean - 128) / 145);
-                    const detailScore = Math.min(1, Math.sqrt(sharpness / (94 * 94)) / 25);
-                    const contrastScore = Math.min(1, Math.sqrt(variance / gray.length) / 75);
-                    resolve({ id: clip.id, score: exposureScore * 0.35 + detailScore * 0.45 + contrastScore * 0.2 });
-                };
-                image.onerror = () => resolve({ id: clip.id, score: 0 });
-                image.src = clip.url;
-            })));
-            const sortedPhotoIds = scores.sort((a, b) => b.score - a.score).map((item) => item.id);
-            const rankedPhotos = sortedPhotoIds.map((id) => photoClips.find((photo) => photo.id === id)).filter((photo): photo is ReelImage => Boolean(photo));
-            let photoIndex = 0;
-            setImages(images.map((clip) => clip.type === 'image' ? rankedPhotos[photoIndex++] ?? clip : clip));
-            setBeatSyncMessage('Photos reordered by estimated clarity and exposure. Review the order before exporting.');
-        } catch {
-            setError('Could not analyze these photos. You can still reorder them manually.');
-        } finally {
-            setIsSortingPhotos(false);
-        }
-    };
+    /* ---------------------------------------------------------------------- */
+    /* Drafts                                                                 */
+    /* ---------------------------------------------------------------------- */
 
     const saveDraft = async () => {
         if (isSavingDraft) return;
         setIsSavingDraft(true);
         setError(null);
         try {
-            const id = currentDraftId ?? `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+            const id = currentDraftId ?? makeId();
             const savedAt = Date.now();
-            const data = {
-                aspectRatio,
+            const stamp = new Date(savedAt).toLocaleString();
+            const data: any = {
+                aspectRatio: aspectRatio as unknown as AspectRatioType,
+                backgroundColor,
                 secondsPerImage,
                 gradient,
                 gradientStrength,
@@ -557,7 +1052,7 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
                 narrationText,
                 narrationLanguage,
                 narrationVoiceGender,
-                clips: await Promise.all(images.map(async (clip) => ({
+                clips: images.map((clip) => ({
                     id: clip.id,
                     type: clip.type,
                     fileName: clip.file.name,
@@ -569,15 +1064,29 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
                     description: clip.description,
                     textStyle: clip.textStyle,
                     textPosition: clip.textPosition,
+                    textOffset: clip.textOffset,
+                    textSize: clip.textSize,
+                    textColor: clip.textColor,
+                    fontFamily: clip.fontFamily,
+                    shine: clip.shine,
+                    vignette: clip.vignette,
+                    softEdges: clip.softEdges,
+                    badgeText: clip.badgeText,
+                    badgeColor: clip.badgeColor,
+                    badgeCorner: clip.badgeCorner,
+                    scale: clip.scale,
                     motion: clip.motion,
                     transition: clip.transition,
-                }))),
+                })),
                 music: music ? { fileName: music.file.name, fileType: music.file.type, blob: music.file } : undefined,
                 voiceover: voiceover ? { fileName: voiceover.file.name, fileType: voiceover.file.type, blob: voiceover.file } : undefined,
+                logo: logo ? { fileName: logo.file.name, fileType: logo.file.type, blob: logo.file } : undefined,
+                logoCorner,
+                logoSize,
             };
             const summary: PhotoReelDraftSummary = {
                 id,
-                title: images.length ? `Photo + video reel · ${new Date(savedAt).toLocaleString()}` : `Untitled reel · ${new Date(savedAt).toLocaleString()}`,
+                title: images.length ? `Photo + video reel · ${stamp}` : `Untitled reel · ${stamp}`,
                 savedAt,
                 clipCount: images.length,
                 durationMs,
@@ -586,7 +1095,7 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
             setCurrentDraftId(id);
             setDrafts(await listPhotoReelDrafts());
         } catch (cause) {
-            setError(cause instanceof Error ? cause.message : 'Could not save this reel draft. Check available browser storage and try again.');
+            setError(cause instanceof Error ? cause.message : 'Could not save this reel draft.');
         } finally {
             setIsSavingDraft(false);
         }
@@ -599,6 +1108,8 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
         setIsPreviewPlaying(false);
         try {
             const draft = await loadPhotoReelDraft(id);
+            const saved = draft.data as any;
+
             imagesRef.current.forEach((clip) => URL.revokeObjectURL(clip.url));
             if (musicRef.current) URL.revokeObjectURL(musicRef.current.url);
             if (voiceoverRef.current) URL.revokeObjectURL(voiceoverRef.current.url);
@@ -606,7 +1117,12 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
             videoCacheRef.current.clear();
             imageCacheRef.current.clear();
             videoPosterFramesRef.current.clear();
-            const clips: ReelImage[] = draft.data.clips.map((clip) => {
+            depthJobsRef.current.clear();
+            depthMapsRef.current.clear();
+            setDepthMaps({});
+            setDepthStatus({});
+
+            const clips: ReelImage[] = (saved.clips as any[]).map((clip) => {
                 const file = new File([clip.blob], clip.fileName, { type: clip.fileType });
                 const url = URL.createObjectURL(file);
                 if (clip.type === 'video') {
@@ -622,31 +1138,41 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
                     file,
                     url,
                     description: clip.description ?? '',
+                    textOffset: clip.textOffset ?? { x: 0, y: 0 },
+                    textSize: clip.textSize ?? 1,
+                    fontFamily: clip.fontFamily ?? 'sans',
+                    scale: clip.scale ?? 1,
                     motion: clip.motion ?? (clip.type === 'image' ? 'zoom-in' : 'none'),
                     transition: clip.transition ?? 'fade',
                 };
             });
-            const restoredMusic = draft.data.music
-                ? new File([draft.data.music.blob], draft.data.music.fileName, { type: draft.data.music.fileType })
-                : null;
-            const restoredVoiceover = draft.data.voiceover
-                ? new File([draft.data.voiceover.blob], draft.data.voiceover.fileName, { type: draft.data.voiceover.fileType })
-                : null;
+
+            const restoreAudio = (item: any) => {
+                if (!item) return null;
+                const file = new File([item.blob], item.fileName, { type: item.fileType });
+                return { file, url: URL.createObjectURL(file) };
+            };
+
             setImages(clips);
             setSelectedImageId(clips[0]?.id ?? null);
-            setAspectRatio(draft.data.aspectRatio);
-            setSecondsPerImage(draft.data.secondsPerImage);
-            setGradient(draft.data.gradient);
-            setGradientStrength(draft.data.gradientStrength);
-            setBrightness(draft.data.brightness);
-            setSaturation(draft.data.saturation);
-            setMusicVolume(draft.data.musicVolume);
-            setTemplate(draft.data.template ?? 'custom');
-            setNarrationText(draft.data.narrationText ?? '');
-            setNarrationLanguage(draft.data.narrationLanguage ?? 'en');
-            setNarrationVoiceGender(draft.data.narrationVoiceGender ?? 'female');
-            setVoiceover(restoredVoiceover ? { file: restoredVoiceover, url: URL.createObjectURL(restoredVoiceover) } : null);
-            setMusic(restoredMusic ? { file: restoredMusic, url: URL.createObjectURL(restoredMusic) } : null);
+            setAspectRatio((saved.aspectRatio as PlatformAspect) ?? '9:16');
+            setBackgroundColor(saved.backgroundColor ?? '#f6f6f6');
+            setSecondsPerImage(saved.secondsPerImage);
+            setGradient(saved.gradient);
+            setGradientStrength(saved.gradientStrength);
+            setBrightness(saved.brightness);
+            setSaturation(saved.saturation);
+            setMusicVolume(saved.musicVolume);
+            setTemplate(saved.template ?? 'custom');
+            setNarrationText(saved.narrationText ?? '');
+            setNarrationLanguage(saved.narrationLanguage ?? 'en');
+            setNarrationVoiceGender(saved.narrationVoiceGender ?? 'female');
+            setVoiceover(restoreAudio(saved.voiceover));
+            if (logoRef.current) URL.revokeObjectURL(logoRef.current.url);
+            setLogo(restoreAudio(saved.logo));
+            setLogoCorner(saved.logoCorner ?? 'tr');
+            setLogoSize(saved.logoSize ?? 18);
+            setMusic(restoreAudio(saved.music));
             seekPreview(0);
             setCurrentDraftId(draft.id);
         } catch (cause) {
@@ -666,203 +1192,14 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
         }
     };
 
-    const getImage = (image: ReelImage) => {
-        let element = imageCacheRef.current.get(image.id);
-        if (!element) {
-            element = new Image();
-            element.src = image.url;
-            imageCacheRef.current.set(image.id, element);
-        }
-        return element;
-    };
-
-    const waitForImageDecode = async (image: HTMLImageElement, fileName: string) => {
-        try {
-            if (!image.complete || image.naturalWidth === 0) {
-                await new Promise<void>((resolve, reject) => {
-                    const timeout = window.setTimeout(() => reject(new Error(`Photo ${fileName} is taking too long to load.`)), 10000);
-                    image.onload = () => { window.clearTimeout(timeout); resolve(); };
-                    image.onerror = () => { window.clearTimeout(timeout); reject(new Error(`Could not decode photo ${fileName}. Try a JPG, PNG, or WebP image.`)); };
-                });
-            }
-            if (typeof image.decode === 'function') await image.decode();
-            if (image.naturalWidth === 0 || image.naturalHeight === 0) throw new Error(`Could not decode photo ${fileName}. Try a JPG, PNG, or WebP image.`);
-        } catch (cause) {
-            throw cause instanceof Error ? cause : new Error(`Could not decode photo ${fileName}.`);
-        }
-    };
-
-    const getVideo = (clip: ReelImage) => {
-        let element = videoCacheRef.current.get(clip.id);
-        if (!element) {
-            element = document.createElement('video');
-            element.src = clip.url;
-            element.preload = 'auto';
-            element.muted = true;
-            element.playsInline = true;
-            videoCacheRef.current.set(clip.id, element);
-        }
-        return element;
-    };
-
-    const waitForVideoFrame = (video: HTMLVideoElement, fileName: string, timeoutMs = 10000) => new Promise<boolean>((resolve, reject) => {
-        if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && video.videoWidth > 0) {
-            resolve(true);
-            return;
-        }
-        const cleanup = () => {
-            window.clearTimeout(timeout);
-            video.removeEventListener('loadeddata', checkReady);
-            video.removeEventListener('canplay', checkReady);
-            video.removeEventListener('seeked', checkReady);
-            video.removeEventListener('playing', checkReady);
-            video.removeEventListener('timeupdate', checkReady);
-            video.removeEventListener('error', handleError);
-        };
-        const checkReady = () => {
-            if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && video.videoWidth > 0) {
-                cleanup();
-                resolve(true);
-            }
-        };
-        const handleError = () => {
-            cleanup();
-            reject(new Error(`Could not decode ${fileName}. Try an MP4 or WebM video.`));
-        };
-        const timeout = window.setTimeout(() => {
-            cleanup();
-            resolve(false);
-        }, timeoutMs);
-        video.addEventListener('loadeddata', checkReady);
-        video.addEventListener('canplay', checkReady);
-        video.addEventListener('seeked', checkReady);
-        video.addEventListener('playing', checkReady);
-        video.addEventListener('timeupdate', checkReady);
-        video.addEventListener('error', handleError);
-        checkReady();
-    });
-
-    const drawSlide = (ctx: CanvasRenderingContext2D, image: ReelImage, width: number, height: number, progress = 0, motionProgress = progress) => {
-        const liveVideo = image.type === 'video' ? getVideo(image) : null;
-        const videoHasFrame = Boolean(liveVideo && liveVideo.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && liveVideo.videoWidth > 0);
-        const element: CanvasImageSource = image.type === 'image'
-            ? getImage(image)
-            : videoHasFrame
-                ? liveVideo!
-                : videoPosterFramesRef.current.get(image.id) ?? liveVideo!;
-        const sourceWidthNatural = element instanceof HTMLImageElement ? element.naturalWidth
-            : element instanceof HTMLVideoElement ? element.videoWidth
-                : element instanceof HTMLCanvasElement ? element.width : 0;
-        const sourceHeightNatural = element instanceof HTMLImageElement ? element.naturalHeight
-            : element instanceof HTMLVideoElement ? element.videoHeight
-                : element instanceof HTMLCanvasElement ? element.height : 0;
-        if (image.type === 'image' && (!(element instanceof HTMLImageElement) || !element.complete || sourceWidthNatural === 0)) {
-            throw new Error(`Photo ${image.file.name} is not decoded yet. Please try exporting again.`);
-        }
-        if (sourceWidthNatural === 0 || sourceHeightNatural === 0) {
-            throw new Error(`Could not load a preview frame for video ${image.file.name}. Try a different MP4 or WebM clip.`);
-        }
-        const progressClamped = Math.max(0, Math.min(1, progress));
-        const requestedMotion = image.type === 'image' ? image.motion ?? 'zoom-in' : 'none';
-        const motionT = Math.max(0, Math.min(1, motionProgress));
-        let depthFrame: HTMLCanvasElement | null = null;
-        if (isDepthMotion(requestedMotion) && element instanceof HTMLImageElement) {
-            const depthMap = depthMapsRef.current.get(image.id);
-            const renderer = depthMap ? getDepthRenderer() : null;
-            if (depthMap && renderer) {
-                try {
-                    depthFrame = renderer.render({ key: getPhotoCacheKey(image.file), photo: element, depth: depthMap, width, height, motion: requestedMotion, progress: motionT });
-                } catch {
-                    depthFrame = null;
-                }
-            }
-        }
-        const motion = isDepthMotion(requestedMotion) ? 'zoom-in' : requestedMotion;
-        const motionScale = motion === 'zoom-in' || motion === 'pan-left' || motion === 'pan-right'
-            ? 1 + 0.12 * motionT
-            : motion === 'zoom-out' ? 1.12 - 0.12 * motionT : 1;
-        const ratio = Math.max(width / sourceWidthNatural, height / sourceHeightNatural);
-        const sourceWidth = width / ratio / motionScale;
-        const sourceHeight = height / ratio / motionScale;
-        const extraSourceX = sourceWidthNatural - sourceWidth;
-        const sourceX = motion === 'pan-left' ? extraSourceX * motionT : motion === 'pan-right' ? extraSourceX * (1 - motionT) : extraSourceX / 2;
-        const sourceY = (sourceHeightNatural - sourceHeight) / 2;
-        ctx.save();
-        const transition = image.transition ?? 'fade';
-        if (transition === 'fade') ctx.globalAlpha = progressClamped;
-        else if (transition === 'slide') ctx.translate((1 - progressClamped) * width, 0);
-        else if (transition === 'zoom') {
-            const transitionScale = 1.12 - 0.12 * progressClamped;
-            ctx.translate(width / 2, height / 2);
-            ctx.scale(transitionScale, transitionScale);
-            ctx.translate(-width / 2, -height / 2);
-        }
-        ctx.filter = `brightness(${brightness}%) saturate(${saturation}%)`;
-        if (depthFrame) ctx.drawImage(depthFrame, 0, 0, width, height);
-        else ctx.drawImage(element, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, width, height);
-        ctx.filter = 'none';
-        if (gradient !== 'none') {
-            const colors = GRADIENTS.find((item) => item.id === gradient)?.colors ?? ['0,0,0', '0,0,0'];
-            const overlay = ctx.createLinearGradient(0, 0, 0, height);
-            const alpha = gradientStrength / 100;
-            overlay.addColorStop(0, `rgba(${colors[0]},${alpha * 0.2})`);
-            overlay.addColorStop(0.48, `rgba(${colors[0]},${alpha * 0.52})`);
-            overlay.addColorStop(1, `rgba(${colors[1]},${alpha})`);
-            ctx.fillStyle = overlay;
-            ctx.fillRect(0, 0, width, height);
-        }
-        if (image.overlayText.trim()) {
-            const fontSize = Math.max(28, Math.round(width * 0.065));
-            const padding = fontSize * 0.42;
-            ctx.font = `700 ${fontSize}px sans-serif`;
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            const maxWidth = width * 0.82;
-            const words = image.overlayText.trim().split(/\s+/);
-            const lines: string[] = [];
-            let line = '';
-            for (const word of words) {
-                const candidate = line ? `${line} ${word}` : word;
-                if (line && ctx.measureText(candidate).width > maxWidth - padding * 2) {
-                    lines.push(line);
-                    line = word;
-                } else line = candidate;
-            }
-            if (line) lines.push(line);
-            const lineHeight = fontSize * 1.2;
-            const textHeight = lines.length * lineHeight;
-            const textY = image.textPosition === 'top' ? height * 0.15 : image.textPosition === 'center' ? height * 0.5 : height * 0.82;
-            const boxWidth = Math.min(maxWidth, Math.max(...lines.map((item) => ctx.measureText(item).width), 0) + padding * 2);
-            if (image.textStyle === 'banner' || image.textStyle === 'highlight') {
-                ctx.fillStyle = image.textStyle === 'banner' ? 'rgba(10,10,10,0.78)' : 'rgba(250,204,21,0.92)';
-                ctx.beginPath();
-                ctx.roundRect(width / 2 - boxWidth / 2, textY - textHeight / 2 - padding / 2, boxWidth, textHeight + padding, fontSize * 0.2);
-                ctx.fill();
-            }
-            lines.forEach((item, index) => {
-                const y = textY + (index - (lines.length - 1) / 2) * lineHeight;
-                if (image.textStyle === 'outline') {
-                    ctx.strokeStyle = '#ffffff';
-                    ctx.lineWidth = Math.max(2, fontSize * 0.07);
-                    ctx.strokeText(item, width / 2, y, maxWidth);
-                } else {
-                    ctx.fillStyle = image.textStyle === 'highlight' ? '#111111' : '#ffffff';
-                    if (image.textStyle === 'classic') {
-                        ctx.strokeStyle = 'rgba(0,0,0,0.8)';
-                        ctx.lineWidth = fontSize * 0.1;
-                        ctx.strokeText(item, width / 2, y, maxWidth);
-                    }
-                    ctx.fillText(item, width / 2, y, maxWidth);
-                }
-            });
-        }
-        ctx.restore();
-    };
+    /* ---------------------------------------------------------------------- */
+    /* Export                                                                 */
+    /* ---------------------------------------------------------------------- */
 
     const exportReel = async () => {
         if (!images.length || isExporting) return;
         if (durationMs > FREE_VIDEO_LIMIT_MS) {
-            setError('This free-plan reel can be up to 60 seconds. Reduce the number of photos or seconds per photo.');
+            setError('This free-plan reel can be up to 60 seconds.');
             return;
         }
         setError(null);
@@ -870,58 +1207,67 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
         setExportProgress(0);
         setCompletedExportUrl(null);
         setExportStatus('Preparing your photos, clips, and audio…');
+
         const canvas = canvasRef.current;
         if (!canvas) {
             setIsExporting(false);
             return;
         }
+
         let canvasStream: MediaStream | null = null;
         let recorder: MediaRecorder | null = null;
         let audioContext: AudioContext | null = null;
         let voiceoverAudioElement: HTMLAudioElement | null = null;
         let frameId = 0;
+
         try {
-            const dimensions = getExportDimensions(aspectRatio, '1080p');
+            const dimensions = getExportDimensions(aspectRatio as unknown as AspectRatioType, '1080p');
             canvas.width = dimensions.width;
             canvas.height = dimensions.height;
             const ctx = canvas.getContext('2d');
             if (!ctx) throw new Error('Could not prepare the reel canvas.');
             const exportCanvas = canvas;
             const exportContext = ctx;
+
+            // 1. Depth maps
             const depthClips = images.filter((clip) => clip.type === 'image' && isDepthMotion(clip.motion));
             for (const [index, clip] of depthClips.entries()) {
                 setExportStatus(`Computing 3D depth map ${index + 1} of ${depthClips.length}…`);
                 await ensureDepth(clip);
             }
+
+            // 2. Decode / prepare every clip
             for (const [index, clip] of images.entries()) {
-                setExportStatus(`Preparing ${clip.type === 'image' ? 'photo' : 'video'} ${index + 1} of ${images.length}…`);
+                setExportStatus(`Preparing clip ${index + 1} of ${images.length}…`);
                 if (clip.type === 'image') {
-                    const element = getImage(clip);
-                    await waitForImageDecode(element, clip.file.name);
-                } else {
-                    const element = getVideo(clip);
-                    if (element.readyState < HTMLMediaElement.HAVE_METADATA) await new Promise<void>((resolve, reject) => {
-                        const timeout = window.setTimeout(() => reject(new Error(`Could not load video metadata for ${clip.file.name}.`)), 10000);
+                    await waitForImageDecode(getImage(clip), clip.file.name);
+                    continue;
+                }
+                const element = getVideo(clip);
+                if (element.readyState < HTMLMediaElement.HAVE_METADATA) {
+                    await new Promise<void>((resolve, reject) => {
+                        const timeout = window.setTimeout(() => reject(new Error('Video loading timeout.')), 10000);
                         element.addEventListener('loadedmetadata', () => { window.clearTimeout(timeout); resolve(); }, { once: true });
-                        element.addEventListener('error', () => { window.clearTimeout(timeout); reject(new Error(`Could not decode ${clip.file.name}. Use MP4 or WebM video.`)); }, { once: true });
                         element.load();
                     });
-                    const hasFrame = await waitForVideoFrame(element, clip.file.name);
-                    if (!hasFrame) throw new Error(`Could not decode the first frame of ${clip.file.name}. Re-save it as MP4 or WebM and try again.`);
-                    const poster = document.createElement('canvas');
-                    poster.width = element.videoWidth;
-                    poster.height = element.videoHeight;
-                    poster.getContext('2d')?.drawImage(element, 0, 0, poster.width, poster.height);
-                    videoPosterFramesRef.current.set(clip.id, poster);
-                    element.pause();
-                    element.currentTime = 0;
                 }
+                if (!(await waitForVideoFrame(element, clip.file.name))) throw new Error('Could not decode video frame.');
+                const poster = document.createElement('canvas');
+                poster.width = element.videoWidth;
+                poster.height = element.videoHeight;
+                poster.getContext('2d')?.drawImage(element, 0, 0, poster.width, poster.height);
+                videoPosterFramesRef.current.set(clip.id, poster);
+                element.pause();
+                element.currentTime = 0;
             }
 
+            // 3. First frame + streams
             drawSlide(ctx, images[0], canvas.width, canvas.height, images[0].transition === 'cut' ? 1 : 0, 0);
             drawFreeTierWatermark(ctx, canvas.width, canvas.height);
             canvasStream = canvas.captureStream(RECORDING_FRAME_RATE);
             const tracks = [...canvasStream.getVideoTracks()];
+
+            // 4. Audio graph
             let audioElement: HTMLAudioElement | null = null;
             if (music || voiceover) {
                 audioContext = new AudioContext();
@@ -929,6 +1275,7 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
                 const destination = audioContext.createMediaStreamDestination();
                 tracks.push(...destination.stream.getAudioTracks());
                 await audioContext.resume();
+
                 const prepareAudioTrack = async (url: string, volume: number, shouldLoop: boolean, label: string) => {
                     const element = new Audio(url);
                     element.preload = 'auto';
@@ -941,14 +1288,14 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
                     gain.connect(destination);
                     await new Promise<void>((resolve, reject) => {
                         if (element.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) { resolve(); return; }
-                        const timeout = window.setTimeout(() => reject(new Error(`${label} did not finish loading.`)), 10000);
+                        const timeout = window.setTimeout(() => reject(new Error(`${label} loading timeout.`)), 10000);
                         element.addEventListener('canplay', () => { window.clearTimeout(timeout); resolve(); }, { once: true });
-                        element.addEventListener('error', () => { window.clearTimeout(timeout); reject(new Error(`Could not decode the ${label.toLowerCase()}.`)); }, { once: true });
                         element.load();
                     });
                     element.currentTime = 0;
                     return element;
                 };
+
                 if (music) {
                     audioElement = await prepareAudioTrack(music.url, musicVolume / 100, true, 'Background music');
                     audioRef.current = audioElement;
@@ -959,13 +1306,14 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
                 }
             }
 
+            // 5. Recorder
             recorder = createExportRecorder(new MediaStream(tracks), 'mp4', '1080p');
             const chunks: Blob[] = [];
             const activeRecorder = recorder;
             let renderingError: Error | null = null;
             const recording = new Promise<Blob>((resolve, reject) => {
                 activeRecorder.ondataavailable = (event) => { if (event.data.size > 0) chunks.push(event.data); };
-                activeRecorder.onerror = () => reject(new Error('The browser could not encode this reel.'));
+                activeRecorder.onerror = () => reject(new Error('Browser encoding error.'));
                 activeRecorder.onstop = () => {
                     if (renderingError) {
                         reject(renderingError);
@@ -973,42 +1321,39 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
                     }
                     const blob = new Blob(chunks, { type: activeRecorder.mimeType || 'video/webm' });
                     if (blob.size) resolve(blob);
-                    else reject(new Error('The exported reel is empty.'));
+                    else reject(new Error('Exported reel is empty.'));
                 };
             });
+
             setExportStatus('Rendering your reel…');
             activeRecorder.start(250);
             const audioPlayback = Promise.all([
-                audioElement?.play().catch(() => { throw new Error('Could not start the background music during export. Try another audio file.'); }),
-                voiceoverAudioElement?.play().catch(() => { throw new Error('Could not start the voiceover during export.'); }),
+                audioElement?.play().catch(() => { }),
+                voiceoverAudioElement?.play().catch(() => { }),
             ]);
+
+            // 6. Frame loop
             let elapsed = 0;
             let previousFrameTimestamp: number | null = null;
             let activeVideoId: string | null = null;
             let lastReportedClip = -1;
-            const getIndexAtTime = (timeMs: number) => {
-                let elapsedMs = 0;
-                for (let index = 0; index < images.length; index += 1) {
-                    elapsedMs += getClipDurationMs(images[index]);
-                    if (timeMs < elapsedMs) return index;
-                }
-                return images.length - 1;
-            };
-            const getStartAtIndex = (targetIndex: number) => images.slice(0, targetIndex).reduce((total, clip) => total + getClipDurationMs(clip), 0);
-            async function renderFrame(timestamp: number) {
+
+            const renderFrame = async (timestamp: number) => {
                 if (previousFrameTimestamp !== null) elapsed += timestamp - previousFrameTimestamp;
                 previousFrameTimestamp = timestamp;
                 if (elapsed >= durationMs) {
                     if (activeRecorder.state === 'recording') activeRecorder.stop();
                     return;
                 }
+
                 const index = getIndexAtTime(elapsed);
                 const clip = images[index];
                 if (index !== lastReportedClip) {
                     lastReportedClip = index;
-                    setExportStatus(`Rendering ${clip.type === 'image' ? 'photo' : 'video'} ${index + 1} of ${images.length}…`);
+                    setExportStatus(`Rendering clip ${index + 1} of ${images.length}…`);
                 }
                 const localTimeMs = Math.max(0, elapsed - getStartAtIndex(index));
+
                 if (clip.type === 'video') {
                     const video = getVideo(clip);
                     video.muted = true;
@@ -1027,49 +1372,55 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
                         await waitForVideoFrame(video, clip.file.name, 1500);
                         activeVideoId = clip.id;
                     }
-                } else if (activeVideoId) {
-                    videoCacheRef.current.get(activeVideoId)?.pause();
-                    activeVideoId = null;
+                } else {
+                    if (activeVideoId) {
+                        videoCacheRef.current.get(activeVideoId)?.pause();
+                        activeVideoId = null;
+                    }
+                    await waitForImageDecode(getImage(clip), clip.file.name);
                 }
-                if (clip.type === 'image') await waitForImageDecode(getImage(clip), clip.file.name);
-                drawSlide(exportContext, clip, exportCanvas.width, exportCanvas.height, clip.transition === 'cut' ? 1 : Math.min(1, localTimeMs / 450), localTimeMs / Math.max(1, getClipDurationMs(clip)));
+
+                const transitionProgress = clip.transition === 'cut' ? 1 : Math.min(1, localTimeMs / TRANSITION_MS);
+                const motionProgress = localTimeMs / Math.max(1, getClipDurationMs(clip));
+                drawSlide(exportContext, clip, exportCanvas.width, exportCanvas.height, transitionProgress, motionProgress);
                 drawFreeTierWatermark(exportContext, exportCanvas.width, exportCanvas.height);
-                setExportProgress(5 + Math.min(80, Math.floor(elapsed / durationMs * 80)));
+                setExportProgress(5 + Math.min(80, Math.floor((elapsed / durationMs) * 80)));
                 scheduleRender();
-            }
+            };
+
             const scheduleRender = () => {
                 frameId = requestAnimationFrame((timestamp) => {
                     void renderFrame(timestamp).catch((cause: unknown) => {
-                        renderingError = cause instanceof Error ? cause : new Error('A video clip could not be rendered.');
+                        renderingError = cause instanceof Error ? cause : new Error('Rendering failed.');
                         if (activeRecorder.state === 'recording') activeRecorder.stop();
                     });
                 });
             };
             scheduleRender();
+
+            // 7. Finish
             let result = await Promise.all([recording, audioPlayback]).then(([recorded]) => recorded);
             if (!result.type.toLowerCase().startsWith('video/mp4')) {
-                setExportStatus('Encoding MP4… this can take a little while.');
+                setExportStatus('Encoding MP4…');
                 setExportProgress(85);
                 const { convertWebmToMp4 } = await import('@/components/editor/convertToMp4');
                 result = await convertWebmToMp4(result, (progress) => setExportProgress(100 - Math.ceil((1 - progress / 100) * 15)));
             }
+
             const url = URL.createObjectURL(result);
             setCompletedExportUrl(url);
-            setExportStatus('Reel is ready. Your download should start automatically.');
+            setExportStatus('Reel is ready! Your download should start automatically.');
             const anchor = document.createElement('a');
             anchor.href = url;
-            anchor.download = 'photo-reel.mp4';
+            anchor.download = 'product-reel.mp4';
             document.body.appendChild(anchor);
             anchor.click();
             anchor.remove();
-            window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
             setExportProgress(100);
-            setExportStatus('Reel downloaded. If it did not start, use Download reel below.');
         } catch (cause) {
             if (recorder?.state === 'recording') recorder.stop();
-            const message = cause instanceof Error ? cause.message : 'Could not export the photo reel.';
-            setError(message);
-            setExportStatus('Export stopped. Fix the issue and try again.');
+            setError(cause instanceof Error ? cause.message : 'Could not export reel.');
+            setExportStatus('Export stopped.');
         } finally {
             cancelAnimationFrame(frameId);
             if (recorder?.state === 'recording') recorder.stop();
@@ -1086,41 +1437,61 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
         }
     };
 
+    /* ---------------------------------------------------------------------- */
+    /* Preview styling                                                        */
+    /* ---------------------------------------------------------------------- */
+
     const filterStyle = `brightness(${brightness}%) saturate(${saturation}%)`;
-    const gradientStyle = gradient === 'none' ? 'none' : `linear-gradient(180deg, rgba(0,0,0,0.03) 0%, rgba(0,0,0,${gradientStrength / 240}) 45%, rgba(0,0,0,${gradientStrength / 100}) 100%)`;
-    const gradientColor = gradient === 'none' ? '' : `linear-gradient(180deg, rgba(${GRADIENTS.find((item) => item.id === gradient)?.colors[0]},0.12), rgba(${GRADIENTS.find((item) => item.id === gradient)?.colors[1]},${gradientStrength / 100}))`;
-    const activeClipProgress = activeImage ? Math.max(0, Math.min(1, (previewTimeMs - activeClipStartMs) / getClipDurationMs(activeImage))) : 0;
-    const transitionProgress = !activeImage || activeImage.transition === 'cut' ? 1 : Math.min(1, activeClipProgress * getClipDurationMs(activeImage) / 450);
+    const activeScale = activeImage?.scale ?? 1;
+    const activeClipProgress = activeImage ? clamp((previewTimeMs - activeClipStartMs) / getClipDurationMs(activeImage), 0, 1) : 0;
+    const transitionProgress = !activeImage || activeImage.transition === 'cut'
+        ? 1
+        : Math.min(1, (activeClipProgress * getClipDurationMs(activeImage)) / TRANSITION_MS);
     const transitionStyle: React.CSSProperties = activeImage?.transition === 'slide'
         ? { transform: `translateX(${(1 - transitionProgress) * 100}%)` }
         : activeImage?.transition === 'zoom'
             ? { transform: `scale(${1.12 - transitionProgress * 0.12})` }
             : { opacity: activeImage?.transition === 'fade' ? transitionProgress : 1 };
+
     const photoMotion = activeImage?.type === 'image' ? activeImage.motion ?? 'zoom-in' : 'none';
-    const activeDepth = activeImage?.type === 'image' && isDepthMotion(photoMotion) && depthStatus[activeImage.id] === 'ready' ? depthMaps[activeImage.id] ?? null : null;
-    const activeDepthLoading = activeImage?.type === 'image' && isDepthMotion(photoMotion) && !depthStatus[activeImage.id];
-    const photoScale = !isDepthMotion(photoMotion) && (photoMotion === 'zoom-in' || photoMotion === 'pan-left' || photoMotion === 'pan-right')
-        ? 1 + 0.12 * activeClipProgress
-        : photoMotion === 'zoom-out' ? 1.12 - 0.12 * activeClipProgress : 1;
-    const photoPanX = photoMotion === 'pan-left' ? `${(0.5 - activeClipProgress) * 8}%` : photoMotion === 'pan-right' ? `${(activeClipProgress - 0.5) * 8}%` : '0%';
-    const photoMotionStyle: React.CSSProperties = { transform: `translateX(${photoPanX}) scale(${photoScale})` };
+    const activeUsesDepth = activeImage?.type === 'image' && isDepthMotion(photoMotion);
+    const activeDepth = activeUsesDepth && depthStatus[activeImage!.id] === 'ready' ? depthMaps[activeImage!.id] ?? null : null;
+    const activeDepthLoading = activeUsesDepth && !depthStatus[activeImage!.id];
+
+    const frameSizeClass = aspectRatio === '9:16' ? 'h-[min(62dvh,38rem)] aspect-9/16'
+        : aspectRatio === '1:1' ? 'h-[min(62dvh,38rem)] aspect-square'
+            : aspectRatio === '4:5' ? 'h-[min(62dvh,38rem)] aspect-4/5'
+                : 'w-full aspect-video';
+
+    const mediaStyle: React.CSSProperties = { filter: filterStyle, transform: `scale(${activeScale})` };
+
+    /* ---------------------------------------------------------------------- */
+    /* Render                                                                 */
+    /* ---------------------------------------------------------------------- */
 
     return (
-        <main className="flex min-h-dvh flex-col bg-[#14121F] font-[family-name:var(--font-body)] text-[#14121F] lg:h-dvh lg:flex-row lg:overflow-hidden grain">
+        <main className="grain flex min-h-dvh flex-col bg-[#14121F] font-[family-name:var(--font-body)] text-[#14121F] lg:h-dvh lg:flex-row lg:overflow-hidden">
             <aside className="flex w-full shrink-0 flex-col gap-5 overflow-y-auto border-b border-[#14121F]/10 bg-[#F7F6FB] p-4 lg:max-h-full lg:w-92 lg:border-b-0 lg:border-r lg:p-5">
-                <button type="button" onClick={onBack} className="flex w-fit items-center gap-2 rounded-xl border border-[#14121F]/10 bg-white px-3 py-1.5 text-xs font-semibold text-[#14121F]/80 transition hover:bg-white hover:border-[#6A4CFF]/40 shadow-xs"><ArrowLeft className="h-3.5 w-3.5 text-[#14121F]/60" /> All creation options</button>
+                <button type="button" onClick={onBack} className="flex w-fit items-center gap-2 rounded-xl border border-[#14121F]/10 bg-white px-3 py-1.5 text-xs font-semibold text-[#14121F]/80 shadow-xs transition hover:border-[#6A4CFF]/40 hover:bg-white">
+                    <ArrowLeft className="h-3.5 w-3.5 text-[#14121F]/60" /> All creation options
+                </button>
+
                 <header>
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-[#6A4CFF]">Photo + video reel studio</p>
-                    <h1 className="mt-1 text-xl font-extrabold text-[#14121F]">Mix photos and video clips</h1>
-                    <p className="mt-1 text-xs leading-relaxed text-[#14121F]/60">Arrange photos and short clips, style them with text and gradients, add music, then export your reel.</p>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-[#6A4CFF]">Product Reel Studio</p>
+                    <h1 className="mt-1 text-xl font-extrabold text-[#14121F]">3D Product Showcase</h1>
+                    <p className="mt-1 text-xs leading-relaxed text-[#14121F]/60">Create cinematic orbits, custom backgrounds, and platform-optimized formats.</p>
                 </header>
 
-                <section className="space-y-3 rounded-2xl border border-[#14121F]/10 bg-white p-4 shadow-xs">
-                    <div className="flex items-center justify-between"><h2 className="text-xs font-bold uppercase tracking-wider text-[#14121F]/70">Reel clips <span className="text-[#14121F]/40">({images.length}/{MAX_IMAGES})</span></h2><span className="text-xs font-mono font-semibold text-[#14121F]/60">{durationLabel}</span></div>
+                {/* ---------------- Clips & drafts ---------------- */}
+                <section className={CARD_CLASS}>
+                    <div className="flex items-center justify-between">
+                        <h2 className="text-xs font-bold uppercase tracking-wider text-[#14121F]/70">Reel clips <span className="text-[#14121F]/40">({images.length}/{MAX_IMAGES})</span></h2>
+                        <span className="font-mono text-xs font-semibold text-[#14121F]/60">{durationLabel}</span>
+                    </div>
                     <input ref={imageInputRef} type="file" accept="image/*,video/*" multiple onChange={addImages} className="hidden" />
 
                     <section className="space-y-2.5 rounded-xl border border-[#14121F]/10 bg-[#F7F6FB] p-3.5">
-                        <button type="button" onClick={() => void saveDraft()} disabled={isSavingDraft || isExporting} className="flex w-full items-center justify-center gap-2 rounded-xl border border-[#6A4CFF]/30 bg-[#6A4CFF]/10 px-3.5 py-2.5 text-xs font-semibold text-[#6A4CFF] hover:bg-[#6A4CFF]/20 disabled:cursor-not-allowed disabled:opacity-50 transition shadow-xs">
+                        <button type="button" onClick={() => void saveDraft()} disabled={isSavingDraft || isExporting} className="flex w-full items-center justify-center gap-2 rounded-xl border border-[#6A4CFF]/30 bg-[#6A4CFF]/10 px-3.5 py-2.5 text-xs font-semibold text-[#6A4CFF] shadow-xs transition hover:bg-[#6A4CFF]/20 disabled:cursor-not-allowed disabled:opacity-50">
                             {isSavingDraft ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                             {isSavingDraft ? 'Saving draft…' : currentDraftId ? 'Update saved draft' : 'Save as draft'}
                         </button>
@@ -1129,166 +1500,290 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
                                 <FolderOpen className="h-3.5 w-3.5 text-[#6A4CFF]" /> Saved reel drafts ({drafts.length})
                             </summary>
                             <div className="mt-2 max-h-48 space-y-1.5 overflow-y-auto">
-                                {drafts.map((draft) => <div key={draft.id} className="flex items-center gap-2 rounded-xl border border-[#14121F]/10 bg-white px-3 py-2 shadow-xs">
-                                    <button type="button" onClick={() => void openDraft(draft.id)} disabled={isLoadingDraft} className="min-w-0 flex-1 text-left text-xs text-[#14121F] disabled:opacity-50">
-                                        <span className="block truncate font-semibold">{draft.title}</span>
-                                        <span className="mt-0.5 block text-[10px] font-medium text-[#14121F]/50">{draft.clipCount} clips · {Math.round(draft.durationMs / 1000)} sec · {new Date(draft.savedAt).toLocaleDateString()}</span>
-                                    </button>
-                                    <button type="button" onClick={() => void removeDraft(draft.id)} aria-label={`Delete ${draft.title}`} className="rounded-lg p-1.5 text-[#14121F]/40 hover:bg-red-50 hover:text-red-600 transition"><Trash2 className="h-3.5 w-3.5" /></button>
-                                </div>)}
-                                {drafts.length === 0 && <p className="px-2 py-2 text-[11px] font-medium text-[#14121F]/50">Your saved reels will appear here.</p>}
+                                {drafts.map((draft) => (
+                                    <div key={draft.id} className="flex items-center gap-2 rounded-xl border border-[#14121F]/10 bg-white px-3 py-2 shadow-xs">
+                                        <button type="button" onClick={() => void openDraft(draft.id)} disabled={isLoadingDraft} className="min-w-0 flex-1 text-left text-xs text-[#14121F] disabled:opacity-50">
+                                            <span className="block truncate font-semibold">{draft.title}</span>
+                                            <span className="mt-0.5 block text-[10px] font-medium text-[#14121F]/50">{draft.clipCount} clips · {Math.round(draft.durationMs / 1000)} sec</span>
+                                        </button>
+                                        <button type="button" onClick={() => void removeDraft(draft.id)} aria-label={`Delete ${draft.title}`} className="rounded-lg p-1.5 text-[#14121F]/40 transition hover:bg-red-50 hover:text-red-600"><Trash2 className="h-3.5 w-3.5" /></button>
+                                    </div>
+                                ))}
+                                {drafts.length === 0 && <p className="px-2 py-2 text-[11px] font-medium text-[#14121F]/50">No saved drafts yet.</p>}
                             </div>
                         </details>
                     </section>
-                    <button type="button" onClick={() => imageInputRef.current?.click()} disabled={images.length >= MAX_IMAGES} className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-[#14121F]/20 py-3.5 text-xs font-semibold text-[#14121F]/70 hover:border-[#6A4CFF] hover:text-[#6A4CFF] hover:bg-[#6A4CFF]/5 transition-colors disabled:opacity-40"><ImagePlus className="h-4 w-4" /> Add photos or videos</button>
-                    <p className="text-[11px] leading-relaxed text-[#14121F]/50">Mix photos with short MP4 or WebM video clips, then reorder them below.</p>
-                    {images.filter((clip) => clip.type === 'image').length > 1 && <button type="button" onClick={() => void autoOrderPhotos()} disabled={isSortingPhotos} className="w-full rounded-xl border border-[#14121F]/15 bg-white px-3.5 py-2.5 text-xs font-semibold text-[#14121F] hover:bg-[#14121F]/5 transition shadow-xs disabled:opacity-50">{isSortingPhotos ? 'Scoring photo clarity…' : 'Auto-order photos by quality'}</button>}
+
+                    <button type="button" onClick={() => imageInputRef.current?.click()} disabled={images.length >= MAX_IMAGES} className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-[#14121F]/20 py-3.5 text-xs font-semibold text-[#14121F]/70 transition-colors hover:border-[#6A4CFF] hover:bg-[#6A4CFF]/5 hover:text-[#6A4CFF] disabled:opacity-40">
+                        <ImagePlus className="h-4 w-4" /> Add photos or videos
+                    </button>
+
                     <div className="space-y-2">
                         {images.map((image, index) => (
                             <div key={image.id} className={`flex items-center gap-2 rounded-xl border p-2.5 shadow-xs ${selectedImageId === image.id ? 'border-[#6A4CFF]/60 bg-[#6A4CFF]/5' : 'border-[#14121F]/10 bg-white'}`}>
-                                <button type="button" onClick={() => { setSelectedImageId(image.id); setIsPreviewPlaying(false); seekPreview(images.slice(0, index).reduce((total, clip) => total + getClipDurationMs(clip), 0)); }} className="flex min-w-0 flex-1 items-center gap-2.5 text-left">
-                                    {image.type === 'video' ? <video src={image.url} muted playsInline className="h-10 w-10 shrink-0 rounded-lg object-cover shadow-xs" /> : <img src={image.url} alt="" className="h-10 w-10 shrink-0 rounded-lg object-cover shadow-xs" />}
-                                    <span className="min-w-0"><span className="block text-xs font-semibold text-[#14121F]">{image.type === 'video' ? 'Video' : 'Photo'} {index + 1}</span><span className="block truncate text-[10px] font-medium text-[#14121F]/50">{image.file.name}</span></span>
+                                <button
+                                    type="button"
+                                    onClick={() => { setSelectedImageId(image.id); setIsPreviewPlaying(false); seekPreview(getStartAtIndex(index)); }}
+                                    className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
+                                >
+                                    {image.type === 'video'
+                                        ? <video src={image.url} muted playsInline className="h-10 w-10 shrink-0 rounded-lg bg-black/5 object-contain shadow-xs" />
+                                        : <img src={image.url} alt="" className="h-10 w-10 shrink-0 rounded-lg bg-black/5 object-contain shadow-xs" />}
+                                    <span className="min-w-0">
+                                        <span className="block text-xs font-semibold text-[#14121F]">Clip {index + 1}</span>
+                                        <span className="block truncate text-[10px] font-medium text-[#14121F]/50">{image.file.name}</span>
+                                    </span>
                                 </button>
-                                <button type="button" onClick={() => moveImage(image.id, -1)} disabled={index === 0} aria-label={`Move clip ${index + 1} up`} className="rounded-lg p-1.5 text-[#14121F]/50 hover:bg-[#14121F]/10 disabled:opacity-30"><ArrowUp className="h-3.5 w-3.5" /></button>
-                                <button type="button" onClick={() => moveImage(image.id, 1)} disabled={index === images.length - 1} aria-label={`Move clip ${index + 1} down`} className="rounded-lg p-1.5 text-[#14121F]/50 hover:bg-[#14121F]/10 disabled:opacity-30"><ArrowDown className="h-3.5 w-3.5" /></button>
-                                <button type="button" onClick={() => removeImage(image.id)} aria-label={`Remove clip ${index + 1}`} className="rounded-lg p-1.5 text-[#14121F]/40 hover:bg-red-50 hover:text-red-600 transition"><Trash2 className="h-3.5 w-3.5" /></button>
+                                <button type="button" onClick={() => moveImage(image.id, -1)} disabled={index === 0} aria-label="Move up" className="rounded-lg p-1.5 text-[#14121F]/50 hover:bg-[#14121F]/10 disabled:opacity-30"><ArrowUp className="h-3.5 w-3.5" /></button>
+                                <button type="button" onClick={() => moveImage(image.id, 1)} disabled={index === images.length - 1} aria-label="Move down" className="rounded-lg p-1.5 text-[#14121F]/50 hover:bg-[#14121F]/10 disabled:opacity-30"><ArrowDown className="h-3.5 w-3.5" /></button>
+                                <button type="button" onClick={() => removeImage(image.id)} aria-label="Remove clip" className="rounded-lg p-1.5 text-[#14121F]/40 transition hover:bg-red-50 hover:text-red-600"><Trash2 className="h-3.5 w-3.5" /></button>
                             </div>
                         ))}
-                        {!images.length && <p className="py-4 text-center text-xs font-medium text-[#14121F]/50">Add a few photos to start building your reel.</p>}
                     </div>
                 </section>
 
-                <section className="space-y-3 rounded-2xl border border-[#14121F]/10 bg-white p-4 shadow-xs">
-                    <h2 className="text-xs font-bold uppercase tracking-wider text-[#14121F]/70">Image look</h2>
-                    <label className="block text-xs font-semibold text-[#14121F]">Reel template
-                        <div className="relative mt-1.5">
-                            <select value={template} onChange={(event) => applyTemplate(event.target.value as ReelTemplate)} className="w-full appearance-none rounded-xl border border-[#14121F]/15 bg-[#F7F6FB] px-3 py-2 pr-8 text-xs font-medium text-[#14121F] focus:border-[#6A4CFF] focus:outline-none cursor-pointer shadow-xs">
-                                <option value="custom">Custom look</option><option value="travel">Travel diary</option><option value="birthday">Birthday</option><option value="product">Product launch</option><option value="festival">Festival wishes</option>
-                            </select>
-                            <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#14121F]/50" />
-                        </div>
-                    </label>
-                    <label className="block text-xs font-semibold text-[#14121F]">Frame format
-                        <div className="relative mt-1.5">
-                            <select value={aspectRatio} onChange={(event) => setAspectRatio(event.target.value as AspectRatioType)} className="w-full appearance-none rounded-xl border border-[#14121F]/15 bg-[#F7F6FB] px-3 py-2 pr-8 text-xs font-medium text-[#14121F] focus:border-[#6A4CFF] focus:outline-none cursor-pointer shadow-xs"><option value="9:16">Reel · 9:16</option><option value="1:1">Square · 1:1</option><option value="16:9">Landscape · 16:9</option></select>
-                            <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#14121F]/50" />
-                        </div>
-                    </label>
-                    <label className="block text-xs font-semibold text-[#14121F]">Seconds per photo · {secondsPerImage}s
-                        <input type="range" min={1} max={8} value={secondsPerImage} onChange={(event) => setSecondsPerImage(Number(event.target.value))} className="mt-2 w-full accent-[#6A4CFF] bg-[#14121F]/10 h-1.5 rounded-full" />
-                    </label>
-                    {selectedImage?.type === 'video' && <label className="block text-xs font-semibold text-[#14121F]">Selected video length · {(selectedImage.durationMs / 1000).toFixed(1)}s
-                        <input type="range" min={Math.min(1000, selectedImage.sourceDurationMs ?? 1000)} max={Math.max(Math.min(1000, selectedImage.sourceDurationMs ?? 1000), Math.min(15000, selectedImage.sourceDurationMs ?? 15000))} step={100} value={selectedImage.durationMs} onChange={(event) => setImages((current) => current.map((clip) => clip.id === selectedImage.id ? { ...clip, durationMs: Number(event.target.value) } : clip))} className="mt-2 w-full accent-[#6A4CFF] bg-[#14121F]/10 h-1.5 rounded-full" />
-                    </label>}
-                    {selectedImage && <div className="grid grid-cols-2 gap-2.5">
-                        <label className="text-xs font-semibold text-[#14121F]">Entry transition
-                            <div className="relative mt-1">
-                                <select value={selectedImage.transition ?? 'fade'} onChange={(event) => setImages((current) => current.map((clip) => clip.id === selectedImage.id ? { ...clip, transition: event.target.value as ReelImage['transition'] } : clip))} className="w-full appearance-none rounded-xl border border-[#14121F]/15 bg-[#F7F6FB] px-2.5 py-2 pr-7 text-xs font-medium text-[#14121F] focus:border-[#6A4CFF] focus:outline-none cursor-pointer shadow-xs"><option value="cut">Cut</option><option value="fade">Fade</option><option value="slide">Slide</option><option value="zoom">Zoom</option></select>
-                                <ChevronDown className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#14121F]/50" />
-                            </div>
-                        </label>
-                        {selectedImage.type === 'image' && <label className="text-xs font-semibold text-[#14121F]">Photo motion
-                            <div className="relative mt-1">
-                                <select value={selectedImage.motion ?? 'none'} onChange={(event) => setImages((current) => current.map((clip) => clip.id === selectedImage.id ? { ...clip, motion: event.target.value as ReelImage['motion'] } : clip))} className="w-full appearance-none rounded-xl border border-[#14121F]/15 bg-[#F7F6FB] px-2.5 py-2 pr-7 text-xs font-medium text-[#14121F] focus:border-[#6A4CFF] focus:outline-none cursor-pointer shadow-xs"><option value="none">Still</option><option value="zoom-in">Slow zoom in</option><option value="zoom-out">Slow zoom out</option><option value="pan-left">Slow pan left</option><option value="pan-right">Slow pan right</option><option value="depth-dolly">3D Depth · dolly in</option><option value="depth-orbit">3D Depth · orbit</option><option value="depth-sway">3D Depth · sway</option></select>
-                                <ChevronDown className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#14121F]/50" />
-                            </div>
-                            {isDepthMotion(selectedImage.motion) && <span className="mt-1 flex items-center gap-1.5 text-[10px] font-semibold text-[#6A4CFF]">{!depthStatus[selectedImage.id] ? <><Loader2 className="h-3 w-3 animate-spin" /> Computing depth map on your device…</> : depthStatus[selectedImage.id] === 'failed' ? 'Depth unavailable on this device — using slow zoom instead.' : 'Depth map ready.'}</span>}</label>}
-                    </div>}
-                    <label className="block text-xs font-semibold text-[#14121F]">Gradient overlay
-                        <div className="relative mt-1.5">
-                            <select value={gradient} onChange={(event) => setGradient(event.target.value as GradientPreset)} className="w-full appearance-none rounded-xl border border-[#14121F]/15 bg-[#F7F6FB] px-3 py-2 pr-8 text-xs font-medium text-[#14121F] focus:border-[#6A4CFF] focus:outline-none cursor-pointer shadow-xs">{GRADIENTS.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select>
-                            <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#14121F]/50" />
-                        </div>
-                    </label>
-                    {gradient !== 'none' && <label className="block text-xs font-semibold text-[#14121F]">Gradient strength · {gradientStrength}%<input type="range" min={0} max={85} value={gradientStrength} onChange={(event) => setGradientStrength(Number(event.target.value))} className="mt-2 w-full accent-[#6A4CFF] bg-[#14121F]/10 h-1.5 rounded-full" /></label>}
-                    <label className="block text-xs font-semibold text-[#14121F]">Brightness · {brightness}%<input type="range" min={60} max={150} value={brightness} onChange={(event) => setBrightness(Number(event.target.value))} className="mt-2 w-full accent-[#6A4CFF] bg-[#14121F]/10 h-1.5 rounded-full" /></label>
-                    <label className="block text-xs font-semibold text-[#14121F]">Saturation · {saturation}%<input type="range" min={0} max={180} value={saturation} onChange={(event) => setSaturation(Number(event.target.value))} className="mt-2 w-full accent-[#6A4CFF] bg-[#14121F]/10 h-1.5 rounded-full" /></label>
-                    {selectedImage && <p className="text-[10px] font-medium text-[#14121F]/50">Image crop: fill frame. Current look applies to all photos.</p>}
-                </section>
+                {/* ---------------- Image look ---------------- */}
+                <section className={CARD_CLASS}>
+                    <h2 className="text-xs font-bold uppercase tracking-wider text-[#14121F]/70">Image Look</h2>
 
-                <section className="space-y-3 rounded-2xl border border-[#14121F]/10 bg-white p-4 shadow-xs">
-                    <div><h2 className="text-xs font-bold uppercase tracking-wider text-[#14121F]/70">Add text to a clip</h2><p className="mt-1 text-xs leading-relaxed text-[#14121F]/60">Select a photo or video above, then type a title or caption. Text appears over that clip in your reel.</p></div>
-                    {selectedImage ? <>
-                        <label className="block text-xs font-semibold text-[#14121F]">Describe this photo or clip for AI
-                            <textarea value={selectedImage.description ?? ''} onChange={(event) => setImages((current) => current.map((image) => image.id === selectedImage.id ? { ...image, description: event.target.value.slice(0, 500) } : image))} maxLength={500} rows={2} placeholder="Example: A sunset walk along the beach…" className="mt-1.5 w-full resize-y rounded-xl border border-[#14121F]/15 bg-[#F7F6FB] px-3.5 py-2.5 text-xs text-[#14121F] placeholder:text-[#14121F]/40 focus:border-[#6A4CFF] focus:outline-none shadow-xs" />
-                        </label>
-                        <div className="flex gap-2">
-                            <div className="relative min-w-0 flex-1">
-                                <select aria-label="Caption language" value={captionLanguage} onChange={(event) => setCaptionLanguage(event.target.value)} className="w-full appearance-none rounded-xl border border-[#14121F]/15 bg-[#F7F6FB] pl-3 pr-8 py-2 text-xs font-medium text-[#14121F] focus:border-[#6A4CFF] focus:outline-none shadow-xs cursor-pointer"><option value="en">English</option><option value="hi">Hindi</option><option value="bn">Bengali</option><option value="ta">Tamil</option><option value="te">Telugu</option></select>
-                                <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#14121F]/50" />
-                            </div>
-                            <button type="button" onClick={() => void generateCaption(selectedImage)} disabled={isGeneratingCaption || (selectedImage.description ?? '').trim().length < 3} className="flex items-center gap-1.5 rounded-xl bg-[#6A4CFF] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[#5839e0] disabled:opacity-50 transition shadow-xs">{isGeneratingCaption ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}Generate caption</button>
+                    <SelectField label="Reel template" value={template} onChange={(value) => applyTemplate(value as ReelTemplate)}>
+                        <option value="custom">Custom look</option>
+                        <option value="product-demo">⚡ Product 3D Showcase Preset</option>
+                        <option value="travel">Travel diary</option>
+                        <option value="birthday">Birthday</option>
+                        <option value="product">Product launch</option>
+                        <option value="festival">Festival</option>
+                    </SelectField>
+
+                    <SelectField label="Frame format" value={aspectRatio} onChange={(value) => setAspectRatio(value as PlatformAspect)}>
+                        <option value="9:16">Reel · 9:16</option>
+                        <option value="1:1">Square · 1:1</option>
+                        <option value="4:5">Portrait · 4:5</option>
+                        <option value="16:9">Landscape · 16:9</option>
+                    </SelectField>
+
+                    <div className="flex items-center justify-between pt-1">
+                        <label className="text-xs font-semibold text-[#14121F]">Custom Background Color</label>
+                        <div className="flex items-center gap-2">
+                            <input type="color" value={backgroundColor} onChange={(event) => setBackgroundColor(event.target.value)} className="h-7 w-9 cursor-pointer rounded-lg border border-[#14121F]/20 bg-transparent p-0" />
+                            <span className="font-mono text-[11px] text-[#14121F]/60">{backgroundColor}</span>
                         </div>
-                        <textarea aria-label={`Text overlay for clip ${images.findIndex((image) => image.id === selectedImage.id) + 1}`} value={selectedImage.overlayText} onChange={(event) => setImages((current) => current.map((image) => image.id === selectedImage.id ? { ...image, overlayText: event.target.value.slice(0, 120) } : image))} maxLength={120} rows={2} placeholder="Type text to add to this clip…" className="w-full resize-y rounded-xl border border-[#14121F]/15 bg-[#F7F6FB] px-3.5 py-2.5 text-xs text-[#14121F] placeholder:text-[#14121F]/40 focus:border-[#6A4CFF] focus:outline-none shadow-xs" />
-                        <div className="grid grid-cols-2 gap-2.5">
-                            <label className="text-xs font-semibold text-[#14121F]">Design
-                                <div className="relative mt-1">
-                                    <select value={selectedImage.textStyle} onChange={(event) => setImages((current) => current.map((image) => image.id === selectedImage.id ? { ...image, textStyle: event.target.value as TextOverlayStyle } : image))} className="w-full appearance-none rounded-xl border border-[#14121F]/15 bg-[#F7F6FB] px-2.5 py-2 pr-7 text-xs font-medium text-[#14121F] focus:border-[#6A4CFF] focus:outline-none cursor-pointer shadow-xs"><option value="classic">Classic</option><option value="banner">Banner</option><option value="highlight">Highlight</option><option value="outline">Outline</option></select>
-                                    <ChevronDown className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#14121F]/50" />
+                    </div>
+                    {selectedImage?.type === 'image' && (
+                        <button type="button" onClick={matchBackgroundToPhoto} className="w-full rounded-xl border border-[#14121F]/15 bg-[#F7F6FB] px-3 py-2 text-xs font-semibold text-[#14121F]/80 transition hover:border-[#6A4CFF]">Match background to selected photo</button>
+                    )}
+
+                    <RangeField label="Seconds per photo" display={`${secondsPerImage}s`} min={1} max={8} value={secondsPerImage} onChange={setSecondsPerImage} />
+
+                    <SelectField label="Gradient overlay" value={gradient} onChange={(value) => setGradient(value as GradientPreset)}>
+                        {GRADIENTS.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
+                    </SelectField>
+
+                    <RangeField label="Gradient strength" display={`${gradientStrength}%`} min={0} max={100} value={gradientStrength} onChange={setGradientStrength} />
+                    <RangeField label="Brightness" display={`${brightness}%`} min={50} max={150} value={brightness} onChange={setBrightness} />
+                    <RangeField label="Saturation" display={`${saturation}%`} min={0} max={200} value={saturation} onChange={setSaturation} />
+
+                    {selectedImage && (
+                        <div className="space-y-3 border-t border-[#14121F]/10 pt-3">
+                            <h3 className="text-xs font-bold text-[#6A4CFF]">Selected Clip Adjustments</h3>
+
+                            <label className="block text-xs font-semibold text-[#14121F]">Image Zoom · {((selectedImage.scale ?? 1) * 100).toFixed(0)}%
+                                <div className="mt-1 flex items-center gap-2">
+                                    <ZoomOut className="h-4 w-4 text-[#14121F]/50" />
+                                    <input
+                                        type="range" min={0.5} max={2.5} step={0.05}
+                                        value={selectedImage.scale ?? 1}
+                                        onChange={(event) => updateSelected({ scale: Number(event.target.value) })}
+                                        className="w-full accent-[#6A4CFF]"
+                                    />
+                                    <ZoomIn className="h-4 w-4 text-[#14121F]/50" />
                                 </div>
                             </label>
-                            <label className="text-xs font-semibold text-[#14121F]">Position
-                                <div className="relative mt-1">
-                                    <select value={selectedImage.textPosition} onChange={(event) => setImages((current) => current.map((image) => image.id === selectedImage.id ? { ...image, textPosition: event.target.value as ReelImage['textPosition'] } : image))} className="w-full appearance-none rounded-xl border border-[#14121F]/15 bg-[#F7F6FB] px-2.5 py-2 pr-7 text-xs font-medium text-[#14121F] focus:border-[#6A4CFF] focus:outline-none cursor-pointer shadow-xs"><option value="top">Top</option><option value="center">Center</option><option value="bottom">Bottom</option></select>
-                                    <ChevronDown className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#14121F]/50" />
-                                </div>
-                            </label>
+
+                            <div className="grid grid-cols-2 gap-2.5 pt-2">
+                                <SelectField label="Entry transition" value={selectedImage.transition ?? 'fade'} onChange={(value) => updateSelected({ transition: value as ReelImage['transition'] })}>
+                                    <option value="cut">Cut</option>
+                                    <option value="fade">Fade</option>
+                                    <option value="slide">Slide</option>
+                                    <option value="zoom">Zoom</option>
+                                </SelectField>
+
+                                {selectedImage.type === 'image' && (
+                                    <div>
+                                        <SelectField label="3D Camera Motion" value={selectedImage.motion ?? 'none'} onChange={(value) => updateSelected({ motion: value as ReelImage['motion'] })}>
+                                            <option value="none">Still</option>
+                                            <option value="zoom-in">Slow zoom in</option>
+                                            <option value="zoom-out">Slow zoom out</option>
+                                            <option value="depth-orbit">🔄 Product Orbit</option>
+                                            <option value="depth-sway">↔️ Turntable Sway</option>
+                                            <option value="depth-dolly">🔍 3D Dolly In</option>
+                                        </SelectField>
+                                        {isDepthMotion(selectedImage.motion) && (
+                                            <span className="mt-1 flex items-center gap-1.5 text-[10px] font-semibold text-[#6A4CFF]">
+                                                {depthStatus[selectedImage.id] === 'failed'
+                                                    ? 'Depth failed — showing a plain zoom.'
+                                                    : !depthStatus[selectedImage.id]
+                                                        ? <><Loader2 className="h-3 w-3 animate-spin" /> Computing 3D depth…</>
+                                                        : '3D Camera ready.'}
+                                            </span>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
                         </div>
-                        {selectedImage.overlayText && <button type="button" onClick={() => setImages((current) => current.map((image) => image.id === selectedImage.id ? { ...image, overlayText: '' } : image))} className="text-left text-xs font-semibold text-[#14121F]/60 hover:text-red-600">Remove text from this photo</button>}
-                    </> : <p className="rounded-xl border border-dashed border-[#14121F]/20 px-3.5 py-4 text-center text-xs font-medium text-[#14121F]/50">Add and select a photo or video above to edit its text.</p>}
+                    )}
                 </section>
 
-                <section className="space-y-3 rounded-2xl border border-[#14121F]/10 bg-white p-4 shadow-xs">
-                    <div>
-                        <h2 className="text-xs font-bold uppercase tracking-wider text-[#14121F]/70">Narration voiceover</h2>
-                        <p className="mt-1 text-xs leading-relaxed text-[#14121F]/60">Write a short narration or leave it blank to read your clip captions in order. Gemini generates a voice track for the reel.</p>
-                    </div>
-                    <textarea value={narrationText} onChange={(event) => setNarrationText(event.target.value.slice(0, 2000))} maxLength={2000} rows={3} placeholder="Write what the narrator should say…" className="w-full resize-y rounded-xl border border-[#14121F]/15 bg-[#F7F6FB] px-3.5 py-2.5 text-xs text-[#14121F] placeholder:text-[#14121F]/40 focus:border-[#6A4CFF] focus:outline-none shadow-xs" />
-                    <div className="grid grid-cols-2 gap-2.5">
-                        <label className="text-xs font-semibold text-[#14121F]">Narration language
-                            <div className="relative mt-1">
-                                <select value={narrationLanguage} onChange={(event) => setNarrationLanguage(event.target.value as typeof narrationLanguage)} className="w-full appearance-none rounded-xl border border-[#14121F]/15 bg-[#F7F6FB] px-2.5 py-2 pr-7 text-xs font-medium text-[#14121F] focus:border-[#6A4CFF] focus:outline-none cursor-pointer shadow-xs"><option value="en">English</option><option value="hi">Hindi</option><option value="bn">Bengali</option><option value="ta">Tamil</option><option value="te">Telugu</option></select>
-                                <ChevronDown className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#14121F]/50" />
+                {/* ---------------- Caption ---------------- */}
+                <section className={CARD_CLASS}>
+                    <h2 className="text-xs font-bold uppercase tracking-wider text-[#14121F]/70">Add text to a clip</h2>
+                    {selectedImage ? (
+                        <>
+                            <textarea
+                                aria-label="Text overlay"
+                                value={selectedImage.overlayText}
+                                onChange={(event) => updateSelected({ overlayText: event.target.value.slice(0, 120) })}
+                                maxLength={120}
+                                rows={2}
+                                placeholder="Type product highlight text…"
+                                className="w-full resize-y rounded-xl border border-[#14121F]/15 bg-[#F7F6FB] px-3.5 py-2.5 text-xs text-[#14121F] shadow-xs placeholder:text-[#14121F]/40 focus:border-[#6A4CFF] focus:outline-none"
+                            />
+                            <p className="text-[10px] italic text-[#14121F]/50">💡 Tip: Drag the caption on the preview to reposition it.</p>
+
+                            <div className="grid grid-cols-2 gap-2.5">
+                                <SelectField label="Design" value={selectedImage.textStyle} onChange={(value) => updateSelected({ textStyle: value as TextOverlayStyle })}>
+                                    <option value="classic">Classic</option>
+                                    <option value="banner">Banner</option>
+                                    <option value="highlight">Highlight</option>
+                                    <option value="outline">Outline</option>
+                                </SelectField>
+                                <SelectField label="Position" value={selectedImage.textPosition} onChange={(value) => updateSelected({ textPosition: value as TextPosition, textOffset: { x: 0, y: 0 } })}>
+                                    <option value="top">Top</option>
+                                    <option value="center">Center</option>
+                                    <option value="bottom">Bottom</option>
+                                </SelectField>
                             </div>
-                        </label>
-                        <label className="text-xs font-semibold text-[#14121F]">Voice
-                            <div className="relative mt-1">
-                                <select value={narrationVoiceGender} onChange={(event) => setNarrationVoiceGender(event.target.value as typeof narrationVoiceGender)} className="w-full appearance-none rounded-xl border border-[#14121F]/15 bg-[#F7F6FB] px-2.5 py-2 pr-7 text-xs font-medium text-[#14121F] focus:border-[#6A4CFF] focus:outline-none cursor-pointer shadow-xs"><option value="female">Female</option><option value="male">Male</option></select>
-                                <ChevronDown className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#14121F]/50" />
+
+                            <RangeField
+                                label="Font size"
+                                display={`${Math.round((selectedImage.textSize ?? 1) * 100)}%`}
+                                min={0.5} max={2.5} step={0.05}
+                                value={selectedImage.textSize ?? 1}
+                                onChange={(value) => updateSelected({ textSize: value })}
+                            />
+
+                            <div className="grid grid-cols-2 gap-2.5">
+                                <SelectField label="Font" value={selectedImage.fontFamily ?? 'sans'} onChange={(value) => updateSelected({ fontFamily: value as FontKey })}>
+                                    <option value="sans">Sans</option>
+                                    <option value="serif">Serif</option>
+                                    <option value="mono">Mono</option>
+                                    <option value="display">Impact</option>
+                                </SelectField>
+                                <label className="block text-xs font-semibold text-[#14121F]">Color
+                                    <div className="mt-1.5 flex items-center gap-2">
+                                        <input
+                                            type="color"
+                                            value={selectedImage.textColor ?? getDefaultTextColor(selectedImage.textStyle)}
+                                            onChange={(event) => updateSelected({ textColor: event.target.value })}
+                                            className="h-9 w-full cursor-pointer rounded-lg border border-[#14121F]/20 p-0"
+                                        />
+                                    </div>
+                                </label>
                             </div>
-                        </label>
+
+                            <div className="flex gap-2">
+                                <button type="button" onClick={() => updateSelected({ textOffset: { x: 0, y: 0 } })} className="flex-1 rounded-xl border border-[#14121F]/15 bg-[#F7F6FB] px-3 py-2 text-xs font-semibold text-[#14121F]/80 transition hover:border-[#6A4CFF]">Reset position</button>
+                                <button type="button" onClick={() => updateSelected({ textSize: 1, textColor: undefined, fontFamily: 'sans' })} className="flex-1 rounded-xl border border-[#14121F]/15 bg-[#F7F6FB] px-3 py-2 text-xs font-semibold text-[#14121F]/80 transition hover:border-[#6A4CFF]">Reset style</button>
+                            </div>
+                        </>
+                    ) : (
+                        <p className="rounded-xl border border-dashed border-[#14121F]/20 px-3.5 py-4 text-center text-xs font-medium text-[#14121F]/50">Select a clip to add text.</p>
+                    )}
+                </section>
+
+                {/* ---------------- Product effects ---------------- */}
+                <section className={CARD_CLASS}>
+                    <h2 className="text-xs font-bold uppercase tracking-wider text-[#14121F]/70">Product effects</h2>
+                    {selectedImage ? (
+                        <>
+                            <label className="flex items-center justify-between text-xs font-semibold text-[#14121F]">
+                                Shine sweep
+                                <input type="checkbox" checked={!!selectedImage.shine} onChange={(event) => updateSelected({ shine: event.target.checked })} className="h-4 w-4 accent-[#6A4CFF]" />
+                            </label>
+                            {selectedImage.type === 'image' && isDepthMotion(selectedImage.motion) && (
+                                <label className="flex items-center justify-between text-xs font-semibold text-[#14121F]">
+                                    Soft edges when zoomed out
+                                    <input type="checkbox" checked={selectedImage.softEdges !== false} onChange={(event) => updateSelected({ softEdges: event.target.checked })} className="h-4 w-4 accent-[#6A4CFF]" />
+                                </label>
+                            )}
+                            <RangeField label="Vignette" display={`${selectedImage.vignette ?? 0}%`} min={0} max={60} value={selectedImage.vignette ?? 0} onChange={(value) => updateSelected({ vignette: value })} />
+                            <input
+                                aria-label="Badge text"
+                                value={selectedImage.badgeText ?? ''}
+                                onChange={(event) => updateSelected({ badgeText: event.target.value.slice(0, 24) })}
+                                placeholder="Badge: NEW, 50% OFF, ₹999…"
+                                className="w-full rounded-xl border border-[#14121F]/15 bg-[#F7F6FB] px-3.5 py-2.5 text-xs text-[#14121F] shadow-xs placeholder:text-[#14121F]/40 focus:border-[#6A4CFF] focus:outline-none"
+                            />
+                            <div className="grid grid-cols-2 gap-2.5">
+                                <SelectField label="Badge corner" value={selectedImage.badgeCorner ?? 'tl'} onChange={(value) => updateSelected({ badgeCorner: value as Corner })}>
+                                    <option value="tl">Top left</option>
+                                    <option value="tr">Top right</option>
+                                    <option value="bl">Bottom left</option>
+                                    <option value="br">Bottom right</option>
+                                </SelectField>
+                                <label className="block text-xs font-semibold text-[#14121F]">Badge color
+                                    <input type="color" value={selectedImage.badgeColor ?? '#ef4444'} onChange={(event) => updateSelected({ badgeColor: event.target.value })} className="mt-1.5 h-9 w-full cursor-pointer rounded-lg border border-[#14121F]/20 p-0" />
+                                </label>
+                            </div>
+                        </>
+                    ) : (
+                        <p className="rounded-xl border border-dashed border-[#14121F]/20 px-3.5 py-4 text-center text-xs font-medium text-[#14121F]/50">Select a clip to add effects.</p>
+                    )}
+                </section>
+
+                {/* ---------------- Brand logo ---------------- */}
+                <section className={CARD_CLASS}>
+                    <div className="flex items-center justify-between">
+                        <h2 className="text-xs font-bold uppercase tracking-wider text-[#14121F]/70">Brand logo</h2>
+                        {logo && <button type="button" onClick={() => { URL.revokeObjectURL(logo.url); setLogo(null); }} className="text-xs font-semibold text-[#14121F]/50 hover:text-red-600">Remove</button>}
                     </div>
-                    <button type="button" onClick={() => void generateVoiceover()} disabled={isGeneratingVoiceover || (!narrationText.trim() && !images.some((clip) => clip.overlayText.trim()))} className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#6A4CFF] px-4 py-2.5 text-xs font-semibold text-white hover:bg-[#5839e0] disabled:opacity-50 transition shadow-sm">
-                        {isGeneratingVoiceover ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}{isGeneratingVoiceover ? 'Generating narration…' : 'Generate voiceover'}
+                    <input ref={logoInputRef} type="file" accept="image/*" onChange={setLogoFile} className="hidden" />
+                    <button type="button" onClick={() => logoInputRef.current?.click()} className="w-full rounded-xl border border-[#14121F]/15 bg-[#F7F6FB] px-3.5 py-2.5 text-left text-xs font-semibold text-[#14121F] shadow-xs transition hover:border-[#6A4CFF]">
+                        {logo ? logo.file.name : 'Upload logo (PNG works best)'}
                     </button>
-                    {voiceover && <>
-                        <audio ref={previewVoiceoverRef} src={voiceover.url} controls preload="auto" className="w-full accent-[#6A4CFF]" aria-label="Preview generated narration" onLoadedMetadata={(event) => {
-                            const audio = event.currentTarget;
-                            if (Number.isFinite(audio.duration) && audio.duration > 0) audio.currentTime = Math.min(previewTimeRef.current / 1000, Math.max(0, audio.duration - 0.05));
-                        }} />
-                        <div className="flex gap-2"><a href={voiceover.url} download={voiceover.file.name} className="flex-1 rounded-xl border border-[#14121F]/15 bg-[#F7F6FB] px-3.5 py-2.5 text-center text-xs font-semibold text-[#14121F] hover:bg-white transition shadow-xs">Download WAV</a><button type="button" onClick={() => { URL.revokeObjectURL(voiceover.url); setVoiceover(null); }} className="rounded-xl border border-[#14121F]/15 bg-[#F7F6FB] px-3.5 py-2.5 text-xs font-semibold text-[#14121F] hover:border-red-500 hover:text-red-600 transition shadow-xs">Remove voiceover</button></div>
-                    </>}
+                    {logo && (
+                        <>
+                            <SelectField label="Logo corner" value={logoCorner} onChange={(value) => setLogoCorner(value as Corner)}>
+                                <option value="tl">Top left</option>
+                                <option value="tr">Top right</option>
+                                <option value="bl">Bottom left</option>
+                                <option value="br">Bottom right</option>
+                            </SelectField>
+                            <RangeField label="Logo size" display={`${logoSize}%`} min={6} max={40} value={logoSize} onChange={setLogoSize} />
+                        </>
+                    )}
                 </section>
 
-                <section className="space-y-3 rounded-2xl border border-[#14121F]/10 bg-white p-4 shadow-xs">
-                    <div className="flex items-center justify-between"><h2 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#14121F]/70"><Music2 className="h-4 w-4 text-[#6A4CFF]" /> Background music</h2>{music && <button type="button" onClick={() => { URL.revokeObjectURL(music.url); setMusic(null); }} className="text-xs font-semibold text-[#14121F]/50 hover:text-red-600">Remove</button>}</div>
+                {/* ---------------- Music ---------------- */}
+                <section className={CARD_CLASS}>
+                    <div className="flex items-center justify-between">
+                        <h2 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#14121F]/70"><Music2 className="h-4 w-4 text-[#6A4CFF]" /> Background music</h2>
+                        {music && <button type="button" onClick={() => { URL.revokeObjectURL(music.url); setMusic(null); }} className="text-xs font-semibold text-[#14121F]/50 hover:text-red-600">Remove</button>}
+                    </div>
                     <input ref={musicInputRef} type="file" accept="audio/*" onChange={setMusicFile} className="hidden" />
-                    <button type="button" onClick={() => musicInputRef.current?.click()} className="w-full rounded-xl border border-[#14121F]/15 bg-[#F7F6FB] px-3.5 py-2.5 text-left text-xs font-semibold text-[#14121F] hover:border-[#6A4CFF] transition shadow-xs">{music ? music.file.name : 'Choose music from your device'}</button>
-                    {music && <>
-                        <audio ref={previewAudioRef} src={music.url} controls preload="auto" className="w-full accent-[#6A4CFF]" aria-label="Preview background music" onLoadedMetadata={(event) => {
-                            const audio = event.currentTarget;
-                            if (Number.isFinite(audio.duration) && audio.duration > 0) audio.currentTime = (previewTimeRef.current / 1000) % audio.duration;
-                        }} />
-                        <label className="block text-xs font-semibold text-[#14121F]">Music volume · {musicVolume}%<input type="range" min={0} max={100} value={musicVolume} onChange={(event) => setMusicVolume(Number(event.target.value))} className="mt-2 w-full accent-[#6A4CFF] bg-[#14121F]/10 h-1.5 rounded-full" /></label>
-                        <p className="text-[11px] leading-relaxed text-[#14121F]/50">Music plays across the reel and follows the timeline. Video clip audio is muted so it won’t compete with the soundtrack.</p>
-                    </>}
-                    {music && <button type="button" onClick={() => void syncToMusicBeat()} disabled={isAnalyzingBeats || images.length === 0} className="flex w-full items-center justify-center gap-2 rounded-xl border border-[#14121F]/15 bg-[#F7F6FB] px-3.5 py-2.5 text-xs font-semibold text-[#14121F] hover:border-[#6A4CFF] transition shadow-xs disabled:opacity-50">{isAnalyzingBeats ? <Loader2 className="h-3.5 w-3.5 animate-spin text-[#6A4CFF]" /> : <Music2 className="h-3.5 w-3.5 text-[#6A4CFF]" />}{isAnalyzingBeats ? 'Analyzing beat…' : 'Sync photo timing to beat'}</button>}
-                    {beatSyncMessage && <p className="text-[11px] font-medium text-[#6A4CFF]">{beatSyncMessage}</p>}
+                    <button type="button" onClick={() => musicInputRef.current?.click()} className="w-full rounded-xl border border-[#14121F]/15 bg-[#F7F6FB] px-3.5 py-2.5 text-left text-xs font-semibold text-[#14121F] shadow-xs transition hover:border-[#6A4CFF]">
+                        {music ? music.file.name : 'Choose music track'}
+                    </button>
+                    {music && (
+                        <>
+                            <audio ref={previewAudioRef} src={music.url} controls preload="auto" className="w-full accent-[#6A4CFF]" />
+                            <RangeField label="Music volume" display={`${musicVolume}%`} min={0} max={100} value={musicVolume} onChange={setMusicVolume} />
+                        </>
+                    )}
                 </section>
-                <p className="text-[11px] leading-relaxed text-[#14121F]/40">Use music you have permission to use. Free exports are limited to 60 seconds and include a small watermark.</p>
             </aside>
 
+            {/* ---------------- Preview ---------------- */}
             <section className="flex min-h-[70dvh] min-w-0 flex-1 flex-col items-center justify-center gap-4 p-4 lg:min-h-0 lg:p-8">
                 <div className="flex w-full max-w-4xl items-center justify-between gap-3">
                     <div>
@@ -1296,56 +1791,71 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
                         <p className="text-xs font-medium text-[#14121F]/50">{images.length} clips · {durationLabel}</p>
                     </div>
                     {images.length > 0 && (
-                        <button
-                            type="button"
-                            onClick={togglePreview}
-                            className="flex items-center gap-2 rounded-xl border border-[#14121F]/15 bg-white px-4 py-2 text-xs font-semibold text-[#14121F] hover:bg-gray-100 hover:border-[#6A4CFF]/40 shadow-xs transition"
-                        >
+                        <button type="button" onClick={togglePreview} className="flex items-center gap-2 rounded-xl border border-[#14121F]/15 bg-white px-4 py-2 text-xs font-semibold text-[#14121F] shadow-xs transition hover:border-[#6A4CFF]/40 hover:bg-gray-100">
                             <Play className="h-3.5 w-3.5 text-[#6A4CFF]" />
                             {isPreviewPlaying ? 'Pause preview' : 'Play preview'}
                         </button>
                     )}
                 </div>
-                <div className="relative flex max-h-[65dvh] min-h-80 w-full max-w-4xl items-center justify-center overflow-hidden rounded-3xl border border-[#14121F]/10 bg-[#F7F6FB] p-5 shadow-sm">
-                    <div className={`relative overflow-hidden rounded-2xl bg-[#14121F] shadow-xl ${aspectRatio === '9:16' ? 'h-[min(62dvh,38rem)] aspect-9/16' : aspectRatio === '1:1' ? 'h-[min(62dvh,38rem)] aspect-square' : 'w-full aspect-video'}`} style={transitionStyle}>
-                        {activeImage?.type === 'video' ? <video key={activeImage.id} ref={previewVideoRef} src={activeImage.url} muted playsInline preload="auto" onLoadedMetadata={(event) => {
-                            const video = event.currentTarget;
-                            const localTime = Math.max(0, (previewTimeRef.current - activeClipStartMs) / 1000);
-                            video.currentTime = Math.min(localTime, Math.max(0, video.duration - 0.05));
-                            if (isPreviewPlaying) video.play().catch(() => setError('This video clip could not play in the preview.'));
-                        }} className="h-full w-full object-cover" style={{ filter: filterStyle, ...photoMotionStyle }} /> : activeImage && activeDepth ? <DepthPreview clip={activeImage} depth={activeDepth} progress={activeClipProgress} aspectRatio={aspectRatio} filter={filterStyle} /> : activeImage ? <img src={activeImage.url} alt={`${activeImage.type === 'image' ? 'Photo' : 'Video'} ${safePreviewIndex + 1} preview`} className="h-full w-full object-cover" style={{ filter: filterStyle, ...photoMotionStyle }} /> : <div className="flex h-full items-center justify-center text-center text-xs font-semibold text-white/50"><span><ImagePlus className="mx-auto mb-3 h-8 w-8 text-white/40" />Add photos or videos to preview your reel</span></div>}
-                        {activeDepthLoading && <div className="pointer-events-none absolute left-1/2 top-3 z-10 flex -translate-x-1/2 items-center gap-2 rounded-full bg-black/70 px-3.5 py-1.5 text-xs font-semibold text-white backdrop-blur-md"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Building 3D depth…</div>}
-                        {activeImage && gradient !== 'none' && <div className="pointer-events-none absolute inset-0" style={{ backgroundImage: `${gradientColor}, ${gradientStyle}` }} />}
-                        {activeImage?.overlayText && <div className={`pointer-events-none absolute left-1/2 w-[84%] -translate-x-1/2 px-3 py-2 text-center text-sm font-bold sm:text-xl ${activeImage.textPosition === 'top' ? 'top-[15%]' : activeImage.textPosition === 'center' ? 'top-1/2 -translate-y-1/2' : 'bottom-[15%]'} ${activeImage.textStyle === 'banner' ? 'rounded-lg bg-black/80 text-white' : activeImage.textStyle === 'highlight' ? 'rounded-lg bg-yellow-400/95 text-neutral-950' : activeImage.textStyle === 'outline' ? 'text-white [text-shadow:-1px_-1px_0_#000,1px_-1px_0_#000,-1px_1px_0_#000,1px_1px_0_#000]' : 'text-white [text-shadow:0_2px_7px_#000]'}`}>{activeImage.overlayText}</div>}
-                        {activeImage && <div className="absolute bottom-3 right-3 rounded-lg bg-black/60 px-2.5 py-1 text-[10px] font-bold text-white/90 backdrop-blur-md">CLIPRAME · FREE</div>}
+
+                <div className="relative flex max-h-[65dvh] min-h-80 w-full max-w-4xl select-none items-center justify-center overflow-hidden rounded-3xl border border-[#14121F]/10 bg-[#F7F6FB] p-5 shadow-sm">
+                    <div
+                        ref={frameRef}
+                        className={`relative flex items-center justify-center overflow-hidden rounded-2xl shadow-xl ${frameSizeClass}`}
+                        style={{ backgroundColor, containerType: 'inline-size', ...transitionStyle }}
+                    >
+                        {activeImage?.type === 'video' ? (
+                            <video key={activeImage.id} ref={previewVideoRef} src={activeImage.url} muted playsInline preload="auto" className="h-full w-full object-contain" style={mediaStyle} />
+                        ) : activeImage && activeDepth ? (
+                            <DepthPreview clip={activeImage} depth={activeDepth} progress={activeClipProgress} aspectRatio={aspectRatio} filter={filterStyle} backgroundColor={backgroundColor} scale={activeScale} softEdges={activeImage.softEdges !== false} />
+                        ) : activeImage ? (
+                            <img src={activeImage.url} alt="" className="h-full w-full object-contain" style={mediaStyle} />
+                        ) : (
+                            <div className="flex h-full items-center justify-center text-center text-xs font-semibold text-black/40">
+                                <span><ImagePlus className="mx-auto mb-3 h-8 w-8 text-black/30" />Add product photos or videos</span>
+                            </div>
+                        )}
+
+                        {activeDepthLoading && (
+                            <div className="pointer-events-none absolute left-1/2 top-3 z-10 flex -translate-x-1/2 items-center gap-2 rounded-full bg-black/70 px-3.5 py-1.5 text-xs font-semibold text-white backdrop-blur-md">
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" /> Rendering 3D camera angles…
+                            </div>
+                        )}
+
+                        {activeImage && (
+                            <EffectsOverlay clip={activeImage} progress={activeClipProgress} aspectRatio={aspectRatio} logoImage={logoImage} logoCorner={logoCorner} logoSize={logoSize} />
+                        )}
+
+                        {activeImage?.overlayText && (
+                            <CaptionOverlay
+                                clip={activeImage}
+                                onPointerDown={handleCaptionPointerDown}
+                                onPointerMove={handleCaptionPointerMove}
+                                onPointerUp={handleCaptionPointerUp}
+                            />
+                        )}
                     </div>
                 </div>
-                {images.length > 0 && <div className="w-full max-w-4xl rounded-2xl border border-[#14121F]/10 bg-white p-4 shadow-xs">
-                    <div className="mb-2.5 flex justify-between text-xs font-mono font-semibold text-[#14121F]/70"><span>Photo {safePreviewIndex + 1} of {images.length}</span><span>{(previewTimeMs / 1000).toFixed(1)}s / {(durationMs / 1000).toFixed(1)}s</span></div>
-                    <input aria-label="Reel preview timeline" type="range" min={0} max={Math.max(durationMs, 1)} step={100} value={Math.min(previewTimeMs, durationMs)} onChange={(event) => seekPreview(Number(event.target.value))} className="w-full cursor-pointer accent-[#6A4CFF] bg-[#14121F]/10 h-1.5 rounded-full" />
-                    <div className="mt-3 flex gap-2 overflow-x-auto">
-                        {images.map((image, index) => <button key={image.id} type="button" onClick={() => { setSelectedImageId(image.id); setIsPreviewPlaying(false); seekPreview(images.slice(0, index).reduce((total, clip) => total + getClipDurationMs(clip), 0)); }} aria-label={`Preview clip ${index + 1}`} aria-pressed={safePreviewIndex === index} className={`relative h-12 w-11 shrink-0 overflow-hidden rounded-xl border-2 transition ${safePreviewIndex === index ? 'border-[#6A4CFF] shadow-xs' : 'border-transparent opacity-70 hover:opacity-100'}`}>{image.type === 'video' ? <video src={image.url} muted playsInline className="h-full w-full object-cover" /> : <img src={image.url} alt="" className="h-full w-full object-cover" />}</button>)}
-                    </div>
-                </div>}
-                {(isExporting || completedExportUrl) && <div role="status" aria-live="polite" className="w-full max-w-4xl rounded-2xl border border-[#6A4CFF]/30 bg-[#6A4CFF]/5 p-4 shadow-xs">
-                    <div className="flex items-center gap-3">
-                        {isExporting && <Loader2 className="h-5 w-5 shrink-0 animate-spin text-[#6A4CFF]" />}
-                        <div className="min-w-0 flex-1">
-                            <div className="flex items-center justify-between gap-3 text-xs font-semibold text-[#14121F]">
-                                <span className="truncate">{exportStatus ?? 'Preparing your reel…'}</span>
-                                {isExporting && <span className="shrink-0 tabular-nums font-mono font-bold text-[#6A4CFF]">{exportProgress}%</span>}
-                            </div>
-                            {isExporting && <div className="mt-2.5 h-2 overflow-hidden rounded-full bg-[#14121F]/10"><div className="h-full rounded-full bg-[#6A4CFF] transition-[width] duration-200" style={{ width: `${Math.max(3, exportProgress)}%` }} /></div>}
+
+                {images.length > 0 && (
+                    <div className="w-full max-w-4xl rounded-2xl border border-[#14121F]/10 bg-white p-4 shadow-xs">
+                        <div className="mb-2.5 flex justify-between font-mono text-xs font-semibold text-[#14121F]/70">
+                            <span>Clip {safePreviewIndex + 1} of {images.length}</span>
+                            <span>{(previewTimeMs / 1000).toFixed(1)}s / {(durationMs / 1000).toFixed(1)}s</span>
                         </div>
-                        {completedExportUrl && !isExporting && <a href={completedExportUrl} download="photo-reel.mp4" className="shrink-0 rounded-xl bg-[#6A4CFF] px-4 py-2.5 text-xs font-semibold text-white hover:bg-[#5839e0] transition shadow-sm"><Download className="mr-1.5 inline h-3.5 w-3.5" />Download reel</a>}
+                        <input type="range" min={0} max={Math.max(durationMs, 1)} step={100} value={Math.min(previewTimeMs, durationMs)} onChange={(event) => seekPreview(Number(event.target.value))} className="h-1.5 w-full cursor-pointer rounded-full bg-[#14121F]/10 accent-[#6A4CFF]" />
                     </div>
-                </div>}
+                )}
+
                 <div className="flex w-full max-w-4xl flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#14121F]/10 bg-white p-4 shadow-xs">
-                    <div className="text-xs font-semibold text-[#14121F]/70">{durationLabel} total {durationMs > FREE_VIDEO_LIMIT_MS && <span className="text-red-600">· Over 60-second limit</span>}</div>
-                    <button type="button" onClick={() => void exportReel()} disabled={!images.length || isExporting || durationMs > FREE_VIDEO_LIMIT_MS} className="flex items-center gap-2 rounded-xl bg-[#6A4CFF] px-6 py-3 text-xs font-bold text-white hover:bg-[#5839e0] disabled:cursor-not-allowed disabled:opacity-50 transition shadow-md shadow-[#6A4CFF]/20">
-                        {isExporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}{isExporting ? 'Rendering reel…' : completedExportUrl ? 'Create another export' : 'Create & download reel'}
+                    <div className="text-xs font-semibold text-[#14121F]/70">{durationLabel} total</div>
+                    <button type="button" onClick={() => void exportReel()} disabled={!images.length || isExporting} className="flex items-center gap-2 rounded-xl bg-[#6A4CFF] px-6 py-3 text-xs font-bold text-white shadow-md shadow-[#6A4CFF]/20 transition hover:bg-[#5839e0] disabled:opacity-50">
+                        {isExporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                        {isExporting ? `Rendering (${exportProgress}%)...` : 'Create & download reel'}
                     </button>
                 </div>
+
+                {isExporting && exportStatus && <p className="w-full max-w-4xl text-xs font-medium text-white/70">{exportStatus}</p>}
                 {error && <p role="alert" className="w-full max-w-4xl rounded-2xl border border-red-200 bg-red-50 p-3.5 text-xs font-medium text-red-600 shadow-xs">{error}</p>}
                 <canvas ref={canvasRef} className="hidden" />
             </section>
