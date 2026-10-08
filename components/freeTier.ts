@@ -3,7 +3,7 @@ export const FREE_VIDEO_LIMIT_MS = 60_000;
 export function drawFreeTierWatermark(ctx: CanvasRenderingContext2D, width: number, height: number) {
     const fontSize = Math.max(14, Math.round(width * 0.018));
     const padding = Math.max(10, Math.round(width * 0.012));
-    const label = 'CLIPRAME';
+    const label = 'Recorded with CLIPRAME';
     ctx.save();
     ctx.font = `600 ${fontSize}px sans-serif`;
     ctx.textAlign = 'left';
