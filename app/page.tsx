@@ -1,108 +1,371 @@
 import Link from 'next/link';
 import Image from 'next/image';
-import { ArrowRight, AudioLines, Clapperboard, Images, Layers3, Play, Video, WandSparkles } from 'lucide-react';
+import type { CSSProperties } from 'react';
+import { Bricolage_Grotesque, Instrument_Sans } from 'next/font/google';
+import { ArrowRight, ScreenShare, Sparkles } from 'lucide-react';
 
-const features = [
-  { icon: Clapperboard, title: 'Record your way', text: 'Use a teleprompter, choose your frame, and capture a polished take right in your browser.' },
-  { icon: Images, title: 'Bring media together', text: 'Mix photos and video clips into a reel with titles, transitions, music, and narration.' },
-  { icon: WandSparkles, title: 'Make every detail yours', text: 'Style captions, color, and overlays, then preview your edits before exporting.' },
+const display = Bricolage_Grotesque({ subsets: ['latin'], variable: '--font-display', display: 'swap' });
+const body = Instrument_Sans({ subsets: ['latin'], variable: '--font-body', display: 'swap' });
+
+/* ---------- Palette ----------
+   ink     #14121F   text, dark surfaces
+   paper   #F7F6FB   page background
+   violet  #6A4CFF   primary accent
+   pink    #FF3D81   secondary accent / playhead / REC
+   yellow  #FFE347   caption highlight (the one "loud" color, used on captions only)
+*/
+
+const D = 'font-[family-name:var(--font-display)]';
+const focus =
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6A4CFF]/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[#F7F6FB]';
+
+const captionWords = ['Aaj', 'chalo', 'Hyderabad', 'ghoomte', 'hain'];
+const prompterLines = [
+  'Namaste doston, aaj ka video',
+  'Hyderabad ke bare mein hai',
+  'Charminar se shuru karte hain',
+  'Phir biryani ki baat karenge',
+];
+const languages = ['English', 'हिन्दी', 'Hinglish', 'বাংলা', 'मराठी', 'தமிழ்', 'తెలుగు'];
+
+const effects = [
+  { name: 'Blur', bg: 'bg-[radial-gradient(circle_at_30%_30%,#e0e7ff,#818cf8)]' },
+  { name: 'Green screen', bg: 'bg-[#22c55e]' },
+  { name: 'Cutout', bg: 'bg-[linear-gradient(135deg,#FFE347,#FF3D81)]' },
+  { name: 'Your image', bg: 'bg-[linear-gradient(160deg,#ffb86b,#5b3df5)]' },
 ];
 
 const steps = [
-  { number: '01', title: 'Start with an idea', text: 'Record a fresh take or bring the photos and clips you already have.' },
-  { number: '02', title: 'Shape the story', text: 'Add a script, captions, designed text, music, transitions, or narration.' },
-  { number: '03', title: 'Preview and export', text: 'Fine-tune the result, then download a video ready to share.' },
+  { n: '01', color: 'text-[#6A4CFF]', title: 'Start with an idea', text: 'Record a fresh take or bring the photos and clips you already have.' },
+  { n: '02', color: 'text-[#FF3D81]', title: 'Shape the story', text: 'Add a script, captions, designed text, music, transitions, or narration.' },
+  { n: '03', color: 'text-[#14121F]', title: 'Preview and export', text: 'Fine-tune the result, then download a video ready to share.' },
 ];
 
+const useCases = [
+  { rule: 'border-[#6A4CFF]', title: 'Social & personal', text: 'Turn everyday moments, travel photos, and ideas into reels people will remember.' },
+  { rule: 'border-[#FF3D81]', title: 'Business & brands', text: 'Showcase a product, explain a service, or create a polished update for your audience.' },
+  { rule: 'border-[#14121F]', title: 'Learning & explaining', text: 'Break down a topic, share a presentation, or make a lesson easier to follow.' },
+];
+
+const css = `
+.cap{display:inline-block;padding:.02em .22em;border-radius:.3em;animation:capHit 4.5s infinite;animation-delay:calc(var(--i)*.9s)}
+@keyframes capHit{0%,18%{background:#FFE347;color:#14121F;transform:translateY(-2px) scale(1.06)}24%,100%{background:rgba(255,227,71,0);color:#fff;transform:none}}
+@keyframes prompter{to{transform:translateY(-50%)}}
+.prompter{animation:prompter 16s linear infinite}
+.prompter-mask{-webkit-mask-image:linear-gradient(transparent,#000 28%,#000 72%,transparent);mask-image:linear-gradient(transparent,#000 28%,#000 72%,transparent)}
+@keyframes bar{0%,100%{transform:scaleY(.3)}50%{transform:scaleY(1)}}
+.bar{transform-origin:center;animation:bar 1s ease-in-out infinite;animation-delay:calc(var(--i)*.12s)}
+@keyframes rise{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+.rise{opacity:0;animation:rise .8s cubic-bezier(.2,.7,.2,1) forwards;animation-delay:calc(var(--d,0)*90ms)}
+@media (prefers-reduced-motion:reduce){.cap,.prompter,.bar{animation:none}.rise{animation:none;opacity:1}}
+`;
+
 function Wordmark() {
-  return <Link href="/" aria-label="Cliprame home" className="group inline-flex shrink-0 items-center gap-2.5 font-semibold tracking-tight text-white">
-    <Image src="/cliprame-icon.svg" alt="" width={40} height={40} className="h-10 w-10 transition-transform duration-200 group-hover:scale-105" />
-    <span className="text-lg">Cliprame</span>
-  </Link>;
+  return (
+    <Link href="/" aria-label="Cliprame home" className={`group inline-flex shrink-0 items-center gap-2.5 rounded-full font-semibold tracking-tight text-[#14121F] ${focus}`}>
+      <Image src="/cliprame-icon.svg" alt="" width={36} height={36} className="h-9 w-9 transition-transform duration-200 group-hover:scale-105" />
+      <span className={`${D} text-lg font-bold`}>Cliprame</span>
+    </Link>
+  );
 }
+
+const navLink = `rounded-full px-4 py-2 text-sm font-medium text-[#14121F]/65 transition-colors hover:bg-[#14121F]/[0.06] hover:text-[#14121F] ${focus}`;
+const mobileNavLink = 'shrink-0 rounded-full bg-white/70 px-3.5 py-1.5 text-xs font-medium text-[#14121F]/70 backdrop-blur transition-colors hover:text-[#14121F]';
+const h2 = `${D} text-4xl font-bold leading-[1.02] tracking-[-0.03em] text-[#14121F] sm:text-5xl lg:text-6xl`;
+const tile = 'relative overflow-hidden border border-[#14121F]/10 p-6 sm:p-8';
+const tileTitle = `${D} text-2xl font-bold leading-tight tracking-tight`;
+const tileText = 'mt-3 text-[15px] leading-7';
 
 export default function HomePage() {
   return (
-    <main className="min-h-dvh overflow-x-clip bg-[#080a12] text-white selection:bg-indigo-400/30">
-      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(ellipse_at_15%_0%,rgba(79,70,229,0.16),transparent_34%),radial-gradient(ellipse_at_85%_42%,rgba(56,189,248,0.09),transparent_32%)]" />
-      <header className="sticky top-0 z-50 border-b border-white/[0.06] bg-[#080a12]/80 backdrop-blur-xl">
-        <div className="mx-auto flex h-[68px] w-full max-w-7xl items-center justify-between gap-3 px-4 sm:h-[76px] sm:px-8 lg:px-12">
+    <main className={`${display.variable} ${body.variable} min-h-dvh overflow-x-clip bg-[#F7F6FB] font-[family-name:var(--font-body)] text-[#14121F] selection:bg-[#6A4CFF]/20`}>
+      <style dangerouslySetInnerHTML={{ __html: css }} />
+
+      {/* Floating glass nav */}
+      <header className="sticky top-0 z-50 px-3 pt-3 sm:px-6 sm:pt-4">
+        <div className="mx-auto flex h-14 max-w-5xl items-center justify-between gap-3 rounded-full border border-white/70 bg-white/70 pl-4 pr-2 shadow-[0_10px_30px_-10px_rgba(20,18,31,0.18)] backdrop-blur-xl sm:h-16 sm:pl-5">
           <Wordmark />
-          <nav aria-label="Main navigation" className="hidden items-center gap-1 rounded-full border border-white/[0.08] bg-white/[0.035] p-1 text-sm md:flex">
-            <a href="#features" className="rounded-full px-4 py-2 text-neutral-400 transition-colors hover:bg-white/[0.07] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/70">Features</a>
-            <a href="#how-it-works" className="rounded-full px-4 py-2 text-neutral-400 transition-colors hover:bg-white/[0.07] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/70">How it works</a>
-            <a href="#use-cases" className="rounded-full px-4 py-2 text-neutral-400 transition-colors hover:bg-white/[0.07] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/70">Use cases</a>
-            <Link href="/pricing" className="rounded-full px-4 py-2 text-neutral-400 transition-colors hover:bg-white/[0.07] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/70">Pricing</Link>
+          <nav aria-label="Main navigation" className="hidden items-center gap-1 md:flex">
+            <a href="#features" className={navLink}>Features</a>
+            <a href="#how-it-works" className={navLink}>How it works</a>
+            <a href="#use-cases" className={navLink}>Use cases</a>
+            <Link href="/pricing" className={navLink}>Pricing</Link>
           </nav>
-          <div className="flex shrink-0 items-center gap-1 sm:gap-2">
-            <Link href="/login" className="rounded-full px-2.5 py-2 text-xs font-medium text-neutral-300 transition-colors hover:bg-white/[0.06] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/70 sm:px-4 sm:text-sm">Log in</Link>
-            <Link href="/login?setup=1" className="rounded-full bg-linear-to-r from-cyan-500 via-indigo-500 to-fuchsia-500 px-3 py-2.5 text-xs font-semibold text-white shadow-lg shadow-indigo-950/40 transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-200/80 sm:px-5 sm:text-sm">Try the studio <ArrowRight className="ml-1 inline h-3.5 w-3.5" /></Link>
+          <div className="flex shrink-0 items-center gap-1">
+            <Link href="/login" className={`rounded-full px-3 py-2 text-sm font-medium text-[#14121F]/75 transition-colors hover:text-[#14121F] sm:px-4 ${focus}`}>Log in</Link>
+            <Link href="/login?setup=1" className={`inline-flex items-center gap-1.5 rounded-full bg-[#14121F] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#2c2742] sm:px-5 ${focus}`}>
+              Try the studio <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
           </div>
         </div>
-        <nav aria-label="Mobile main navigation" className="flex gap-1 overflow-x-auto border-t border-white/[0.05] px-4 pb-2.5 pt-2 [scrollbar-width:none] md:hidden [&::-webkit-scrollbar]:hidden">
-          <a href="#features" className="shrink-0 rounded-full px-3 py-1.5 text-xs font-medium text-neutral-400 transition-colors hover:bg-white/[0.07] hover:text-white">Features</a>
-          <a href="#how-it-works" className="shrink-0 rounded-full px-3 py-1.5 text-xs font-medium text-neutral-400 transition-colors hover:bg-white/[0.07] hover:text-white">How it works</a>
-          <a href="#use-cases" className="shrink-0 rounded-full px-3 py-1.5 text-xs font-medium text-neutral-400 transition-colors hover:bg-white/[0.07] hover:text-white">Use cases</a>
-          <Link href="/pricing" className="shrink-0 rounded-full px-3 py-1.5 text-xs font-medium text-neutral-400 transition-colors hover:bg-white/[0.07] hover:text-white">Pricing</Link>
+        <nav aria-label="Mobile main navigation" className="mx-auto mt-2 flex max-w-5xl gap-1.5 overflow-x-auto px-1 [scrollbar-width:none] md:hidden [&::-webkit-scrollbar]:hidden">
+          <a href="#features" className={mobileNavLink}>Features</a>
+          <a href="#how-it-works" className={mobileNavLink}>How it works</a>
+          <a href="#use-cases" className={mobileNavLink}>Use cases</a>
+          <Link href="/pricing" className={mobileNavLink}>Pricing</Link>
         </nav>
       </header>
 
-      <section className="relative z-10 mx-auto max-w-7xl px-5 pb-16 pt-12 sm:px-8 sm:pt-16 lg:px-12 lg:pb-20">
-        <div className="mx-auto max-w-4xl">
-          <div className="mb-3 text-[11px] font-semibold uppercase tracking-[0.2em] text-indigo-300">Cliprame workspace</div>
-          <h1 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">What are we creating today?</h1>
-          <p className="mt-3 max-w-2xl text-sm leading-6 text-neutral-400 sm:text-base">Start with a recording or bring your photos and clips together into a reel.</p>
-          <div className="mt-8 grid gap-3 md:grid-cols-2">
-            <Link href="/login?setup=1" className="group flex min-h-44 items-start gap-4 rounded-2xl border border-neutral-800 bg-neutral-900 p-5 transition hover:border-indigo-500/60 hover:bg-neutral-900/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 sm:p-6">
-              <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-indigo-500/15 text-indigo-300"><Video className="h-6 w-6" /></span>
-              <span className="min-w-0">
-                <span className="block text-xs font-medium text-neutral-500">RECORD</span>
-                <span className="mt-1 block text-lg font-semibold text-white">Record a video</span>
-                <span className="mt-1 block text-sm leading-5 text-neutral-400">Camera, teleprompter, creative effects, and editing.</span>
-                <span className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-indigo-300">Open recording studio <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" /></span>
-              </span>
+      {/* Hero */}
+      <section className="relative mx-auto grid max-w-7xl items-center gap-12 px-5 pb-20 pt-10 sm:px-8 lg:grid-cols-[1.05fr_.95fr] lg:gap-6 lg:px-12 lg:pb-28 lg:pt-16">
+        <div>
+          <h1 className={`rise ${D} text-[2.9rem] font-extrabold leading-[0.95] tracking-[-0.04em] sm:text-7xl lg:text-[5.4rem]`} style={{ '--d': 0 } as CSSProperties}>
+            Record, caption and post from one browser tab.
+          </h1>
+          <p className="rise mt-6 max-w-xl text-base leading-7 text-[#14121F]/65 sm:text-lg sm:leading-8" style={{ '--d': 1 } as CSSProperties}>
+            A teleprompter, word-by-word captions and photo reels in one studio. Write scripts in seven Indian and global languages. No install, and no timeline to learn.
+          </p>
+          <div className="rise mt-8 flex flex-wrap items-center gap-3" style={{ '--d': 2 } as CSSProperties}>
+            <Link href="/login?setup=1" className={`group inline-flex items-center gap-2 rounded-full bg-[#14121F] px-6 py-3.5 text-sm font-semibold text-white shadow-[0_12px_30px_-10px_rgba(20,18,31,0.55)] transition hover:-translate-y-0.5 hover:bg-[#2c2742] ${focus}`}>
+              Try the studio <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
             </Link>
-            <Link href="/login?setup=1" className="group flex min-h-44 items-start gap-4 rounded-2xl border border-neutral-800 bg-neutral-900 p-5 transition hover:border-fuchsia-500/60 hover:bg-neutral-900/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fuchsia-400 sm:p-6">
-              <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-fuchsia-500/15 text-fuchsia-300"><Images className="h-6 w-6" /></span>
-              <span className="min-w-0">
-                <span className="block text-xs font-medium text-neutral-500">REELS</span>
-                <span className="mt-1 block text-lg font-semibold text-white">Create a photo + video reel</span>
-                <span className="mt-1 block text-sm leading-5 text-neutral-400">Combine clips and photos with text, music, and narration.</span>
-                <span className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-fuchsia-300">Start a reel <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" /></span>
-              </span>
-            </Link>
+            <a href="#how-it-works" className={`inline-flex items-center rounded-full border border-[#14121F]/15 bg-white/60 px-6 py-3.5 text-sm font-semibold text-[#14121F] transition hover:bg-white ${focus}`}>
+              See how it works
+            </a>
           </div>
-          <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-neutral-800 pt-4 text-xs text-neutral-500"><span className="inline-flex items-center gap-2"><span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />Ready in your browser</span><span>Drafts stay on this device</span></div>
+          <p className="rise mt-4 text-sm text-[#14121F]/55" style={{ '--d': 3 } as CSSProperties}>Free to start. Drafts stay on your device.</p>
+          <div className="rise mt-9" style={{ '--d': 4 } as CSSProperties}>
+            <p className="text-sm font-medium text-[#14121F]/70">AI script writing in</p>
+            <ul className="mt-3 flex flex-wrap gap-2">
+              {languages.map((l) => (
+                <li key={l} className="rounded-full border border-[#14121F]/10 bg-white px-3.5 py-1.5 text-sm font-medium text-[#14121F]/80">{l}</li>
+              ))}
+            </ul>
+          </div>
         </div>
 
-        <div className="hidden">
-          <div className="absolute -inset-10 rounded-[3rem] bg-indigo-500/10 blur-3xl" />
-          <div className="relative rounded-4xl border border-white/10 bg-[#11141f]/90 p-3 shadow-2xl shadow-black/50 backdrop-blur-xl sm:p-4">
-            <div className="flex items-center justify-between px-2 pb-3"><div className="flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-rose-400" /><span className="h-2 w-2 rounded-full bg-amber-300" /><span className="h-2 w-2 rounded-full bg-emerald-400" /></div><span className="text-[10px] font-medium uppercase tracking-[0.18em] text-neutral-500">Your creative workspace</span><span className="w-9" /></div>
-            <div className="relative overflow-hidden rounded-[1.45rem] border border-white/10 bg-[#181b28] p-4 sm:p-5">
-              <div className="mb-4 flex items-center justify-between"><div><p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-indigo-300">A short story · 00:24</p><p className="mt-1 text-sm font-semibold text-white">A moment worth remembering</p></div><span className="rounded-lg border border-white/10 bg-black/20 px-2.5 py-1.5 text-[10px] text-neutral-300">9:16</span></div>
-              <div className="relative mx-auto flex aspect-9/10 max-h-90 items-end overflow-hidden rounded-xl border border-white/10 bg-[radial-gradient(circle_at_50%_32%,rgba(56,189,248,.6),transparent_26%),linear-gradient(160deg,#1e3a5f_0%,#101827_58%,#412d50_100%)] p-5">
-                <div className="absolute inset-0 opacity-50" style={{ backgroundImage: 'linear-gradient(155deg, transparent 25%, rgba(255,255,255,.12) 25.3%, transparent 25.8%), linear-gradient(25deg, transparent 59%, rgba(255,255,255,.14) 59.3%, transparent 59.8%)' }} />
-                <div className="absolute left-[17%] top-[22%] h-20 w-20 rounded-full bg-sky-100/10 blur-2xl" /><div className="absolute right-[15%] top-[32%] h-16 w-16 rounded-full bg-indigo-300/20 blur-xl" />
-                <div className="relative z-10 w-full rounded-xl border border-white/15 bg-black/35 p-4 backdrop-blur-md"><p className="text-[9px] font-semibold uppercase tracking-[0.2em] text-sky-200">A little recap</p><p className="mt-1.5 text-lg font-semibold leading-tight text-white">Collect the moments.<br />Keep the feeling.</p><div className="mt-3 flex items-center gap-2"><span className="h-1 flex-1 overflow-hidden rounded-full bg-white/15"><span className="block h-full w-2/3 rounded-full bg-indigo-300" /></span><span className="text-[9px] text-neutral-300">00:24</span></div></div>
-                <div className="absolute right-3 top-3 flex items-center gap-1.5 rounded-full border border-white/10 bg-black/35 px-2.5 py-1.5 text-[9px] text-white"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-rose-400" />REC</div>
+        {/* Product moment: a reel being captioned */}
+        <div className="rise relative mx-auto w-full max-w-[440px] py-6" style={{ '--d': 3 } as CSSProperties}>
+          <div className="absolute -left-10 top-10 h-64 w-64 rounded-full bg-[#6A4CFF]/25 blur-3xl" />
+          <div className="absolute -right-6 bottom-8 h-64 w-64 rounded-full bg-[#FF3D81]/20 blur-3xl" />
+
+          <div className="relative mx-auto w-[270px] rotate-[2.5deg] rounded-[2.7rem] bg-[#14121F] p-2.5 shadow-[0_40px_80px_-20px_rgba(20,18,31,0.45)] sm:w-[300px]">
+            <div className="relative aspect-[9/18.5] overflow-hidden rounded-[2.2rem] bg-[linear-gradient(180deg,#ffb86b_0%,#ff6a8b_46%,#5b3df5_100%)]">
+              <div className="absolute left-1/2 top-[28%] h-24 w-24 -translate-x-1/2 rounded-full bg-[#FFE9A8]" />
+              <div className="absolute -bottom-10 -left-10 h-48 w-72 rounded-[50%] bg-[#2a1a5e]" />
+              <div className="absolute -bottom-14 -right-12 h-52 w-72 rounded-[50%] bg-[#1b1040]" />
+              <div className="absolute inset-x-0 bottom-0 h-1/2 bg-[linear-gradient(transparent,rgba(20,18,31,0.55))]" />
+
+              <div className="absolute inset-x-4 top-10 flex items-center justify-between text-[11px] font-semibold text-white">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-black/35 px-2.5 py-1 backdrop-blur">
+                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#FF3D81]" />REC 00:24
+                </span>
+                <span className="rounded-full bg-black/35 px-2.5 py-1 backdrop-blur">9:16</span>
               </div>
-              <div className="mt-4 flex items-center justify-between gap-3"><div className="flex items-center gap-2"><span className="flex h-8 w-8 items-center justify-center rounded-full bg-indigo-500/20 text-indigo-200"><AudioLines className="h-4 w-4" /></span><div><p className="text-[10px] font-medium text-white">Captions ready</p><p className="text-[9px] text-neutral-500">Clear, readable, on time</p></div></div><button aria-label="Preview example video" className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-neutral-950 shadow-lg"><Play className="ml-0.5 h-4 w-4 fill-current" /></button></div>
+
+              <div className="absolute inset-x-3 bottom-10 text-center">
+                <p className={`${D} text-[1.7rem] font-extrabold leading-snug text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.35)]`}>
+                  {captionWords.map((w, i) => (
+                    <span key={w}>
+                      <span className="cap" style={{ '--i': i } as CSSProperties}>{w}</span>{' '}
+                    </span>
+                  ))}
+                </p>
+              </div>
             </div>
-            <div className="mt-3 grid grid-cols-3 gap-2"><div className="rounded-xl border border-white/8 bg-white/3 p-3"><Images className="h-4 w-4 text-fuchsia-300" /><p className="mt-2 text-[10px] font-medium text-neutral-200">Photo reel</p></div><div className="rounded-xl border border-white/8 bg-white/3 p-3"><AudioLines className="h-4 w-4 text-sky-300" /><p className="mt-2 text-[10px] font-medium text-neutral-200">Voice + music</p></div><div className="rounded-xl border border-white/8 bg-white/3 p-3"><Layers3 className="h-4 w-4 text-indigo-300" /><p className="mt-2 text-[10px] font-medium text-neutral-200">Text + style</p></div></div>
+            <div className="absolute left-1/2 top-[18px] h-5 w-20 -translate-x-1/2 rounded-full bg-[#14121F]" />
+          </div>
+
+          {/* Floating teleprompter */}
+          <div className="absolute -left-4 top-24 hidden w-52 rounded-2xl border border-white/70 bg-white/80 p-3 shadow-[0_20px_40px_-12px_rgba(20,18,31,0.25)] backdrop-blur-xl sm:block lg:-left-12">
+            <div className="mb-2 flex items-center justify-between text-[11px] font-semibold text-[#14121F]/55">
+              <span>Teleprompter</span>
+              <span className="inline-flex items-center gap-1 text-[#6A4CFF]"><Sparkles className="h-3 w-3" />AI script</span>
+            </div>
+            <div className="prompter-mask h-[84px] overflow-hidden">
+              <div className="prompter text-[13px] font-medium leading-5 text-[#14121F]">
+                {[...prompterLines, ...prompterLines].map((line, i) => (
+                  <p key={i} className="pb-1.5">{line}</p>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Floating captions chip */}
+          <div className="absolute -right-2 bottom-28 hidden items-center gap-3 rounded-2xl border border-white/70 bg-white/85 px-4 py-3 shadow-[0_20px_40px_-12px_rgba(20,18,31,0.25)] backdrop-blur-xl sm:flex lg:-right-8">
+            <span className="flex h-8 items-center gap-[3px]" aria-hidden="true">
+              {[0, 1, 2, 3, 4].map((i) => (
+                <span key={i} className="bar block h-6 w-1 rounded-full bg-[#6A4CFF]" style={{ '--i': i } as CSSProperties} />
+              ))}
+            </span>
+            <span>
+              <span className="block text-xs font-semibold">Captions ready</span>
+              <span className="block text-[11px] text-[#14121F]/55">Hinglish, in sync</span>
+            </span>
           </div>
         </div>
       </section>
 
-      <section id="features" className="relative z-10 border-y border-white/[0.07] bg-white/[0.018]">
-        <div className="mx-auto max-w-7xl px-5 py-20 sm:px-8 lg:px-12 lg:py-24"><div className="max-w-xl"><p className="text-xs font-semibold uppercase tracking-[0.2em] text-indigo-300">Everything in one place</p><h2 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Less fiddling with tools.<br />More time for your story.</h2><p className="mt-4 text-sm leading-7 text-neutral-400">From first take to final export, keep your creative flow simple and focused.</p></div><div className="mt-10 grid gap-4 md:grid-cols-3">{features.map(({ icon: Icon, title, text }, index) => <article key={title} className="rounded-2xl border border-white/8 bg-[#10131d] p-6 transition hover:-translate-y-1 hover:border-indigo-400/25"><span className={`flex h-11 w-11 items-center justify-center rounded-xl ${index === 1 ? 'bg-fuchsia-400/10 text-fuchsia-300' : 'bg-indigo-400/10 text-indigo-300'}`}><Icon className="h-5 w-5" /></span><h3 className="mt-5 text-base font-semibold">{title}</h3><p className="mt-2 text-sm leading-6 text-neutral-400">{text}</p></article>)}</div></div>
+      {/* Bento features */}
+      <section id="features" className="relative mx-auto max-w-7xl scroll-mt-28 px-5 pb-24 sm:px-8 lg:px-12 lg:pb-32">
+        <div className="max-w-3xl">
+          <h2 className={h2}>Less fiddling with tools. More time for your story.</h2>
+          <p className="mt-5 max-w-xl text-base leading-7 text-[#14121F]/65">From first take to final export, keep your creative flow simple and focused.</p>
+        </div>
+
+        <div className="mt-12 grid gap-4 md:grid-cols-2 lg:grid-cols-6">
+          {/* Teleprompter + AI script */}
+          <article className={`${tile} rounded-[2rem] bg-white md:col-span-2 lg:col-span-4`}>
+            <div className="grid items-center gap-8 sm:grid-cols-2">
+              <div>
+                <h3 className={`${tileTitle} sm:text-3xl`}>Write the script with AI. Read it while you record.</h3>
+                <p className={`${tileText} max-w-sm text-[#14121F]/65`}>Type a topic and get a script in seven languages. The teleprompter scrolls on screen while you record.</p>
+              </div>
+              <div className="rounded-2xl bg-[#14121F] p-5 text-white">
+                <div className="flex items-center justify-between gap-2 rounded-xl bg-white/10 px-3 py-2 text-xs">
+                  <span className="truncate text-white/80">Topic: a day in Hyderabad</span>
+                  <span className="shrink-0 rounded-full bg-[#6A4CFF] px-2 py-0.5 font-semibold">Hinglish</span>
+                </div>
+                <div className={`${D} mt-4 space-y-2 text-lg font-semibold leading-snug`}>
+                  <p className="text-white/35">Namaste doston, aaj ka video</p>
+                  <p>Hyderabad ke bare mein <span className="rounded bg-[#FFE347] px-1 text-[#14121F]">hai</span></p>
+                  <p className="text-white/35">Charminar se shuru karte hain</p>
+                </div>
+              </div>
+            </div>
+          </article>
+
+          {/* Captions */}
+          <article className={`${tile} flex flex-col justify-between rounded-[1.75rem] border-transparent bg-[#6A4CFF] text-white lg:col-span-2`}>
+            <div>
+              <h3 className={tileTitle}>Captions that follow your voice</h3>
+              <p className={`${tileText} text-white/80`}>Word-by-word highlighting in English, Hindi and Hinglish.</p>
+            </div>
+            <p className={`${D} mt-8 text-3xl font-extrabold leading-tight`}>
+              Yeh <mark className="rounded-md bg-[#FFE347] px-1.5 text-[#14121F]">sabse</mark> mast hai
+            </p>
+          </article>
+
+          {/* Effects */}
+          <article className={`${tile} rounded-[1.75rem] bg-white lg:col-span-2`}>
+            <h3 className={tileTitle}>Look good anywhere</h3>
+            <p className={`${tileText} text-[#14121F]/65`}>Blur your background, key out a green screen, or drop in your own image.</p>
+            <div className="mt-6 grid grid-cols-4 gap-2 text-center text-[11px] font-medium text-[#14121F]/60">
+              {effects.map((e) => (
+                <div key={e.name}>
+                  <span className={`mx-auto block h-12 w-12 rounded-full ring-1 ring-[#14121F]/10 ${e.bg}`} />
+                  <span className="mt-1.5 block leading-tight">{e.name}</span>
+                </div>
+              ))}
+            </div>
+          </article>
+
+          {/* Photo reels */}
+          <article className={`${tile} rounded-[1.75rem] bg-white lg:col-span-2`}>
+            <h3 className={tileTitle}>Photos and clips, one reel</h3>
+            <p className={`${tileText} text-[#14121F]/65`}>Transitions, music and narration, with templates for travel, birthdays and products.</p>
+            <div className="relative mt-6 h-32" aria-hidden="true">
+              <div className="absolute left-4 top-3 h-28 w-20 -rotate-12 rounded-xl bg-[linear-gradient(160deg,#38BDF8,#6A4CFF)] shadow-lg" />
+              <div className="absolute left-16 top-0 h-28 w-20 rotate-3 rounded-xl bg-[linear-gradient(160deg,#FFE347,#FF3D81)] shadow-lg" />
+              <div className="absolute left-32 top-5 h-28 w-20 rotate-12 rounded-xl bg-[linear-gradient(160deg,#FF3D81,#14121F)] shadow-lg" />
+            </div>
+          </article>
+
+          {/* Editor */}
+          <article className={`${tile} rounded-[1.75rem] bg-white lg:col-span-2`}>
+            <h3 className={tileTitle}>Edit without a learning curve</h3>
+            <p className={`${tileText} text-[#14121F]/65`}>Trim, split, zoom in on key moments, and change speed.</p>
+            <div className="relative mt-6 rounded-xl bg-[#14121F]/[0.04] p-3" aria-hidden="true">
+              <div className="flex gap-1.5">
+                <span className="h-8 flex-[3] rounded-lg bg-[#6A4CFF]" />
+                <span className="h-8 flex-[2] rounded-lg bg-[#6A4CFF]/55" />
+                <span className="h-8 flex-[2] rounded-lg bg-[#6A4CFF]" />
+              </div>
+              <div className="mt-2 flex gap-1.5">
+                <span className="h-3 flex-[2] rounded bg-[#FF3D81]/70" />
+                <span className="h-3 flex-[4] rounded bg-[#14121F]/10" />
+                <span className="h-3 flex-[1] rounded bg-[#FFE347]" />
+              </div>
+              <span className="absolute inset-y-2 left-[42%] w-0.5 rounded bg-[#FF3D81]" />
+            </div>
+          </article>
+
+          {/* Screen share */}
+          <article className={`${tile} rounded-[2rem] border-transparent bg-[#14121F] text-white md:col-span-2 lg:col-span-6`}>
+            <div className="pointer-events-none absolute -right-20 -top-24 h-72 w-72 rounded-full bg-[#6A4CFF]/40 blur-3xl" />
+            <div className="relative grid items-center gap-8 md:grid-cols-2">
+              <div>
+                <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-white/10"><ScreenShare className="h-5 w-5" /></span>
+                <h3 className={`${tileTitle} mt-5 sm:text-3xl`}>Explain it on camera. Then show your screen.</h3>
+                <p className={`${tileText} max-w-md text-white/70`}>Start recording yourself, share a page in the middle of the take, and keep talking. Great for lessons, demos and walkthroughs.</p>
+              </div>
+              <div className="relative rounded-2xl border border-white/10 bg-white/[0.06] p-4" aria-hidden="true">
+                <div className="space-y-2.5 rounded-xl bg-white p-4">
+                  <span className="block h-3 w-1/3 rounded bg-[#14121F]/80" />
+                  <span className="block h-2 w-full rounded bg-[#14121F]/10" />
+                  <span className="block h-2 w-5/6 rounded bg-[#14121F]/10" />
+                  <span className="block h-16 w-full rounded-lg bg-[linear-gradient(120deg,#e0e7ff,#fce7f3)]" />
+                </div>
+                <span className="absolute -bottom-3 -right-3 h-16 w-16 rounded-full bg-[linear-gradient(160deg,#ffb86b,#FF3D81)] ring-4 ring-[#14121F]" />
+              </div>
+            </div>
+          </article>
+        </div>
       </section>
 
-      <section id="how-it-works" className="relative z-10 mx-auto max-w-7xl px-5 py-20 sm:px-8 lg:px-12 lg:py-24"><div className="grid gap-12 lg:grid-cols-[.8fr_1.2fr]"><div><p className="text-xs font-semibold uppercase tracking-[0.2em] text-indigo-300">A simple creative flow</p><h2 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">From idea to<br />ready-to-share.</h2><p className="mt-4 max-w-sm text-sm leading-7 text-neutral-400">No complicated timeline to learn. Start with what you have and build from there.</p></div><div className="grid gap-3 sm:grid-cols-3">{steps.map((step) => <article key={step.number} className="rounded-2xl border border-white/8 bg-white/2.5 p-5"><p className="font-mono text-xs text-indigo-300">{step.number}</p><h3 className="mt-6 text-base font-semibold">{step.title}</h3><p className="mt-2 text-sm leading-6 text-neutral-400">{step.text}</p></article>)}</div></div></section>
+      {/* How it works: a real sequence */}
+      <section id="how-it-works" className="relative mx-auto max-w-7xl scroll-mt-28 px-5 pb-24 sm:px-8 lg:px-12 lg:pb-32">
+        <div className="grid gap-12 lg:grid-cols-[.8fr_1.2fr]">
+          <div>
+            <h2 className={h2}>From idea to ready-to-share.</h2>
+            <p className="mt-5 max-w-sm text-base leading-7 text-[#14121F]/65">No complicated timeline to learn. Start with what you have and build from there.</p>
+          </div>
+          <ol className="divide-y divide-[#14121F]/10 border-y border-[#14121F]/10">
+            {steps.map((s) => (
+              <li key={s.n} className="grid grid-cols-[auto_1fr] items-baseline gap-6 py-7 sm:gap-10 sm:py-9">
+                <span className={`${D} text-5xl font-extrabold tracking-tight sm:text-7xl ${s.color}`}>{s.n}</span>
+                <div>
+                  <h3 className={`${D} text-xl font-bold tracking-tight sm:text-2xl`}>{s.title}</h3>
+                  <p className="mt-2 max-w-md text-[15px] leading-7 text-[#14121F]/65">{s.text}</p>
+                </div>
+              </li>
+            ))}
+          </ol>
+        </div>
+      </section>
 
-      <section id="use-cases" className="relative z-10 mx-auto max-w-7xl px-5 pb-20 sm:px-8 lg:px-12 lg:pb-24"><div className="mb-8 max-w-xl"><p className="text-xs font-semibold uppercase tracking-[0.2em] text-indigo-300">Made for all kinds of stories</p><h2 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">One studio. Your kind of video.</h2><p className="mt-4 text-sm leading-7 text-neutral-400">From a quick social clip to a thoughtful explainer, start with the story you want to share.</p></div><div className="grid gap-4 md:grid-cols-3"><article className="rounded-2xl border border-white/8 bg-[#10131d] p-5"><p className="text-sm font-semibold">Social & personal</p><p className="mt-2 text-sm leading-6 text-neutral-400">Turn everyday moments, travel photos, and ideas into reels people will remember.</p></article><article className="rounded-2xl border border-white/8 bg-[#10131d] p-5"><p className="text-sm font-semibold">Business & brands</p><p className="mt-2 text-sm leading-6 text-neutral-400">Showcase a product, explain a service, or create a polished update for your audience.</p></article><article className="rounded-2xl border border-white/8 bg-[#10131d] p-5"><p className="text-sm font-semibold">Learning & explaining</p><p className="mt-2 text-sm leading-6 text-neutral-400">Break down a topic, share a presentation, or make a lesson easier to follow.</p></article></div><div className="mt-8 flex flex-col items-start justify-between gap-5 rounded-3xl border border-indigo-300/15 bg-[linear-gradient(120deg,rgba(79,70,229,.15),rgba(30,41,59,.65)_52%,rgba(14,165,233,.1))] p-6 sm:flex-row sm:items-center sm:p-8"><div><p className="text-xs font-semibold uppercase tracking-[0.2em] text-indigo-200">Ready when you are</p><h3 className="mt-2 text-xl font-semibold">Bring your idea. We’ll help with the polish.</h3></div><Link href="/login?setup=1" className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-white px-5 py-3 text-sm font-semibold text-neutral-950 transition hover:bg-indigo-100">Explore the studio <ArrowRight className="h-4 w-4" /></Link></div></section>
+      {/* Use cases */}
+      <section id="use-cases" className="relative mx-auto max-w-7xl scroll-mt-28 px-5 pb-24 sm:px-8 lg:px-12 lg:pb-32">
+        <div className="max-w-2xl">
+          <h2 className={h2}>One studio. Your kind of video.</h2>
+          <p className="mt-5 max-w-xl text-base leading-7 text-[#14121F]/65">From a quick social clip to a thoughtful explainer, start with the story you want to share.</p>
+        </div>
+        <div className="mt-12 grid gap-10 md:grid-cols-3 md:gap-8">
+          {useCases.map((u) => (
+            <article key={u.title} className={`border-t-2 pt-6 ${u.rule}`}>
+              <h3 className={`${D} text-2xl font-bold tracking-tight`}>{u.title}</h3>
+              <p className="mt-3 text-[15px] leading-7 text-[#14121F]/65">{u.text}</p>
+            </article>
+          ))}
+        </div>
+      </section>
 
-      <footer className="relative z-10 border-t border-white/[0.07]"><div className="mx-auto flex max-w-7xl flex-col gap-4 px-5 py-8 text-xs text-neutral-500 sm:px-8 md:flex-row md:items-center md:justify-between lg:px-12"><Wordmark /><p>Record. Edit. Share your story.</p><div className="flex items-center gap-5"><Link href="/pricing" className="transition hover:text-white">Pricing</Link><Link href="/login" className="transition hover:text-white">Log in</Link><Link href="/login?setup=1" className="transition hover:text-white">Try the studio</Link></div></div></footer>
+      {/* Closing CTA */}
+      <section className="relative mx-auto max-w-7xl px-5 pb-20 sm:px-8 lg:px-12 lg:pb-28">
+        <div className="relative overflow-hidden rounded-[2.5rem] bg-[#14121F] px-6 py-16 text-center text-white sm:px-12 sm:py-24">
+          <div className="pointer-events-none absolute -left-24 -top-24 h-80 w-80 rounded-full bg-[#6A4CFF]/45 blur-3xl" />
+          <div className="pointer-events-none absolute -bottom-28 -right-20 h-80 w-80 rounded-full bg-[#FF3D81]/35 blur-3xl" />
+          <div className="relative">
+            <h2 className={`${D} mx-auto max-w-3xl text-4xl font-extrabold leading-[1.02] tracking-[-0.035em] sm:text-6xl`}>Bring your idea. We’ll help with the polish.</h2>
+            <Link href="/login?setup=1" className={`group mt-9 inline-flex items-center gap-2 rounded-full bg-white px-7 py-4 text-sm font-semibold text-[#14121F] transition hover:-translate-y-0.5 hover:bg-[#FFE347] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-[#14121F]`}>
+              Explore the studio <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+            </Link>
+            <p className="mt-4 text-sm text-white/55">Free to start.</p>
+          </div>
+        </div>
+      </section>
+
+      <footer className="relative border-t border-[#14121F]/10">
+        <div className="mx-auto flex max-w-7xl flex-col gap-4 px-5 py-8 text-sm text-[#14121F]/55 sm:px-8 md:flex-row md:items-center md:justify-between lg:px-12">
+          <Wordmark />
+          <p>Record. Edit. Share your story.</p>
+          <div className="flex items-center gap-5">
+            <Link href="/pricing" className="transition hover:text-[#14121F]">Pricing</Link>
+            <Link href="/login" className="transition hover:text-[#14121F]">Log in</Link>
+            <Link href="/login?setup=1" className="transition hover:text-[#14121F]">Try the studio</Link>
+          </div>
+        </div>
+      </footer>
     </main>
   );
 }

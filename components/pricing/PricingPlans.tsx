@@ -61,40 +61,134 @@ export function PricingPlans({ billingEnabled = false }: { billingEnabled?: bool
 
     return (
         <>
-            <section aria-labelledby="audience-title" className="relative z-10 mx-auto max-w-7xl px-5 pb-8 sm:px-8 lg:px-12">
-                <div className="border-b border-neutral-800 pb-6">
-                    <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
+            {/* Audience Selector Section */}
+            <section aria-labelledby="audience-title" className="relative z-10 mx-auto pb-8 ">
+                <div className="rounded-[2rem] border border-[#14121F]/10 bg-white p-6 shadow-[0_15px_40px_-15px_rgba(20,18,31,0.06)] sm:p-8">
+                    <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
                         <div>
-                            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-indigo-300">Plan selector</p>
-                            <h2 id="audience-title" className="mt-2 text-xl font-semibold text-white">Choose a starting point</h2>
-                            <p className="mt-1 text-sm text-neutral-400">Pick the closest fit. You can use every tool in the preview.</p>
+                            <span className="inline-flex items-center gap-1.5 rounded-full bg-[#6A4CFF]/10 px-3 py-1 text-xs font-semibold text-[#6A4CFF]">
+                                Plan selector
+                            </span>
+                            <h2 id="audience-title" className="mt-2.5 text-2xl font-bold tracking-tight text-[#14121F]">
+                                Choose a starting point
+                            </h2>
+                            <p className="mt-1 text-sm text-[#14121F]/65">
+                                Pick the closest fit. You can use every tool in the preview.
+                            </p>
                         </div>
-                        <div role="group" aria-label="Choose your use case" className="grid grid-cols-3 gap-2">
-                            {audiences.map(({ id, label, icon: Icon }) => <button key={id} type="button" aria-pressed={audience === id} onClick={() => setAudience(id)} className={`flex min-w-0 items-center justify-center gap-1.5 rounded-lg border px-2.5 py-2.5 text-xs font-medium transition sm:gap-2 sm:px-3 sm:text-sm ${audience === id ? 'border-neutral-600 bg-neutral-800 text-white' : 'border-neutral-800 bg-transparent text-neutral-400 hover:border-neutral-700 hover:text-white'}`}><Icon className="h-4 w-4 shrink-0" />{label}</button>)}
+                        <div role="group" aria-label="Choose your use case" className="grid grid-cols-3 gap-2 rounded-2xl bg-[#F7F6FB] p-1.5 border border-[#14121F]/10">
+                            {audiences.map(({ id, label, icon: Icon }) => (
+                                <button
+                                    key={id}
+                                    type="button"
+                                    aria-pressed={audience === id}
+                                    onClick={() => setAudience(id)}
+                                    className={`flex min-w-0 items-center justify-center gap-1.5 rounded-xl px-3 py-2.5 text-xs font-semibold transition-all sm:gap-2 sm:px-4 sm:text-sm ${audience === id
+                                        ? 'bg-[#14121F] text-white shadow-md'
+                                        : 'text-[#14121F]/70 hover:bg-white hover:text-[#14121F]'
+                                        }`}
+                                >
+                                    <Icon className="h-4 w-4 shrink-0" />
+                                    {label}
+                                </button>
+                            ))}
                         </div>
                     </div>
-                    <p className="mt-4 flex items-start gap-2 text-xs leading-5 text-neutral-400"><BadgeCheck className="mt-0.5 h-4 w-4 shrink-0 text-indigo-300" /><span><span className="font-semibold text-neutral-200">{audienceCopy[audience].title}:</span> {audienceCopy[audience].description} Suggested plan: <span className="font-semibold text-indigo-200">{recommendedPlan === 'creator' ? 'Creator' : 'Studio'}</span>.</span></p>
+                    <div className="mt-6 flex items-center gap-2 rounded-2xl bg-[#6A4CFF]/5 border border-[#6A4CFF]/15 px-4 py-3 text-xs leading-5 text-[#14121F]/80">
+                        <BadgeCheck className="h-4 w-4 shrink-0 text-[#6A4CFF]" />
+                        <span>
+                            <strong className="font-bold text-[#14121F]">{audienceCopy[audience].title}:</strong> {audienceCopy[audience].description} Suggested plan:{' '}
+                            <strong className="font-bold text-[#6A4CFF]">{recommendedPlan === 'creator' ? 'Creator' : 'Studio'}</strong>.
+                        </span>
+                    </div>
                 </div>
             </section>
 
-            <section aria-label="Cliprame packages" className="relative z-10 mx-auto grid max-w-7xl gap-3 px-5 pb-12 sm:px-8 lg:grid-cols-3 lg:px-12">
+            {/* Plans Grid */}
+            <section aria-label="Cliprame packages" className="relative z-10 mx-auto grid max-w-7xl gap-6 px-5 pb-16 sm:px-8 lg:grid-cols-3 lg:px-12">
                 {plans.map((plan) => {
                     const recommended = plan.id === recommendedPlan;
                     const available = plan.id === 'preview';
                     const purchasable = plan.id === 'creator' && billingEnabled;
-                    return <article key={plan.id} className={`flex flex-col rounded-xl border p-5 sm:p-6 ${recommended ? 'border-indigo-400/45 bg-[#11141f]' : 'border-neutral-800 bg-neutral-900/70'}`}>
-                        {recommended && <span className="mb-3 inline-flex w-fit rounded-md border border-indigo-400/20 bg-indigo-400/[0.08] px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-indigo-200">Suggested for you</span>}
-                        <div className="flex items-start justify-between gap-3"><div><p className="text-lg font-semibold text-white">{plan.name}</p><p className="mt-2 min-h-12 text-sm leading-5 text-neutral-400">{plan.summary}</p></div><span className={`shrink-0 rounded-md px-2 py-1 text-[10px] font-medium ${available || purchasable ? 'bg-emerald-400/10 text-emerald-200' : 'bg-neutral-800 text-neutral-400'}`}>{purchasable ? 'Available now' : plan.status}</span></div>
-                        <div className="mt-6 flex items-baseline gap-2"><span className="text-4xl font-semibold tracking-tight text-white">{plan.price}</span><span className="text-xs text-neutral-500">{plan.period}</span></div>
-                        <div className="my-6 h-px bg-white/10" />
-                        <ul className="flex-1 space-y-3">{plan.features.map((feature) => <li key={feature} className="flex items-start gap-2.5 text-sm leading-5 text-neutral-300"><Check className={`mt-0.5 h-4 w-4 shrink-0 ${available ? 'text-emerald-300' : 'text-indigo-300'}`} />{feature}</li>)}</ul>
-                        {purchasable ? <div className="mt-8"><UpgradeButton className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-linear-to-r from-cyan-500 via-indigo-500 to-fuchsia-500 px-4 py-3 text-sm font-semibold text-white hover:brightness-110 disabled:opacity-60">Upgrade to Creator</UpgradeButton></div> : <Link href={plan.href} className={`mt-8 inline-flex w-full items-center justify-center gap-2 rounded-lg px-4 py-3 text-sm font-semibold transition ${available ? 'bg-linear-to-r from-cyan-500 via-indigo-500 to-fuchsia-500 text-white hover:brightness-110' : 'border border-neutral-700 bg-neutral-800/70 text-neutral-300 hover:border-neutral-600 hover:text-white'}`}>{plan.action}{available && <ArrowRight className="h-4 w-4" />}</Link>}
-                    </article>;
+
+                    return (
+                        <article
+                            key={plan.id}
+                            className={`relative flex flex-col rounded-[2.2rem] p-7 sm:p-8 transition-all duration-300 ${recommended
+                                ? 'border-2 border-[#6A4CFF] bg-white shadow-[0_20px_50px_-15px_rgba(106,76,255,0.15)] ring-4 ring-[#6A4CFF]/10'
+                                : 'border border-[#14121F]/10 bg-white shadow-[0_15px_40px_-15px_rgba(20,18,31,0.06)] hover:border-[#14121F]/20'
+                                }`}
+                        >
+                            {recommended && (
+                                <span className="absolute -top-3.5 left-7 inline-flex items-center gap-1 rounded-full bg-[#6A4CFF] px-3.5 py-1 text-[11px] font-bold uppercase tracking-wider text-white shadow-sm">
+                                    Suggested for you
+                                </span>
+                            )}
+
+                            <div className="flex items-start justify-between gap-3">
+                                <div>
+                                    <h3 className="text-xl font-bold tracking-tight text-[#14121F]">{plan.name}</h3>
+                                    <p className="mt-2 min-h-12 text-sm leading-6 text-[#14121F]/65">{plan.summary}</p>
+                                </div>
+                                <span
+                                    className={`shrink-0 rounded-full px-3 py-1 text-xs font-semibold ${available || purchasable
+                                        ? 'bg-emerald-500/10 text-emerald-700 border border-emerald-500/20'
+                                        : 'bg-[#14121F]/5 text-[#14121F]/60'
+                                        }`}
+                                >
+                                    {purchasable ? 'Available now' : plan.status}
+                                </span>
+                            </div>
+
+                            <div className="mt-6 flex items-baseline gap-2">
+                                <span className="text-4xl font-extrabold tracking-tight text-[#14121F]">{plan.price}</span>
+                                <span className="text-xs font-medium text-[#14121F]/50">{plan.period}</span>
+                            </div>
+
+                            <div className="my-6 h-px bg-[#14121F]/10" />
+
+                            <ul className="flex-1 space-y-3.5">
+                                {plan.features.map((feature) => (
+                                    <li key={feature} className="flex items-start gap-3 text-sm leading-5 text-[#14121F]/80 font-medium">
+                                        <span className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${available ? 'bg-emerald-500/10 text-emerald-600' : 'bg-[#6A4CFF]/10 text-[#6A4CFF]'}`}>
+                                            <Check className="h-3.5 w-3.5" />
+                                        </span>
+                                        {feature}
+                                    </li>
+                                ))}
+                            </ul>
+
+                            {purchasable ? (
+                                <div className="mt-8">
+                                    <UpgradeButton className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-[#14121F] px-5 py-3.5 text-sm font-semibold text-white shadow-lg shadow-[#14121F]/20 transition hover:bg-[#2c2742] disabled:opacity-60">
+                                        Upgrade to Creator
+                                    </UpgradeButton>
+                                </div>
+                            ) : (
+                                <Link
+                                    href={plan.href}
+                                    className={`mt-8 inline-flex w-full items-center justify-center gap-2 rounded-full px-5 py-3.5 text-sm font-semibold transition ${available
+                                        ? 'bg-[#14121F] text-white shadow-lg shadow-[#14121F]/20 hover:bg-[#2c2742]'
+                                        : 'border border-[#14121F]/15 bg-[#F7F6FB] text-[#14121F]/75 hover:bg-[#14121F] hover:text-white hover:border-[#14121F]'
+                                        }`}
+                                >
+                                    {plan.action}
+                                    {available && <ArrowRight className="h-4 w-4" />}
+                                </Link>
+                            )}
+                        </article>
+                    );
                 })}
             </section>
 
-            <section className="relative z-10 mx-auto max-w-7xl px-5 pb-16 sm:px-8 lg:px-12">
-                <div className="border-t border-neutral-800 pt-5"><h2 className="text-xs font-semibold uppercase tracking-wider text-amber-200">About proposed plans</h2><p className="mt-2 max-w-4xl text-xs leading-5 text-neutral-500">Creator and Studio prices and future features are planning estimates, not offers. We’ll validate production, storage, payment, and AI-provider costs before enabling subscriptions. AI usage is not included in a paid package until an allowance and provider billing are configured. Creator checkout is available when payments are enabled; Studio is not yet on sale.</p></div>
+            {/* Disclaimer Footer Notice */}
+            <section className="relative z-10 mx-auto max-w-7xl px-5 pb-20 sm:px-8 lg:px-12">
+                <div className="rounded-[2rem] border border-[#14121F]/10 bg-white/60 p-6 backdrop-blur-md sm:p-8">
+                    <h2 className="text-xs font-bold uppercase tracking-wider text-[#14121F]/70">About proposed plans</h2>
+                    <p className="mt-2 max-w-4xl text-xs leading-6 text-[#14121F]/55">
+                        Creator and Studio prices and future features are planning estimates, not offers. We’ll validate production, storage, payment, and AI-provider costs before enabling subscriptions. AI usage is not included in a paid package until an allowance and provider billing are configured. Creator checkout is available when payments are enabled; Studio is not yet on sale.
+                    </p>
+                </div>
             </section>
         </>
     );
