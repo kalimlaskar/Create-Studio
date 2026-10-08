@@ -1,7 +1,11 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Video, Pause, Play, Square, FolderOpen, Trash2, Images, MonitorUp, LoaderCircle, SlidersHorizontal, SwitchCamera, ArrowLeft, X } from 'lucide-react';
+import Link from 'next/link';
+import Image from 'next/image';
+import type { CSSProperties } from 'react';
+import { Bricolage_Grotesque, Instrument_Sans } from 'next/font/google';
+import { Video, Pause, Play, Square, FolderOpen, Trash2, Images, MonitorUp, LoaderCircle, SlidersHorizontal, SwitchCamera, ArrowLeft, ArrowRight, X, Sparkles } from 'lucide-react';
 import { SidebarControls } from '@/components/studio/SidebarControls';
 import { VideoCanvas } from '@/components/studio/VideoCanvas';
 import { ExportModal } from '@/components/studio/ExportModal';
@@ -11,6 +15,37 @@ import { deleteEditorDraft, DraftSummary, LoadedDraft, listEditorDrafts, loadEdi
 import { PhotoReelStudio } from '@/components/studio/PhotoReelStudio';
 import { changePasswordAction, checkUsernameAvailabilityAction, signOutAction, updateProfileAction, updateProfileAvatarAction } from '@/app/auth/actions';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
+
+const display = Bricolage_Grotesque({ subsets: ['latin'], variable: '--font-display', display: 'swap' });
+const body = Instrument_Sans({ subsets: ['latin'], variable: '--font-body', display: 'swap' });
+
+/* ---------- Palette matching landing/pricing/auth pages ----------
+   ink     #14121F   text, dark surfaces
+   paper   #F7F6FB   page background
+   violet  #6A4CFF   primary accent
+   pink    #FF3D81   secondary accent / REC
+   yellow  #FFE347   caption highlight
+*/
+
+const D = 'font-[family-name:var(--font-display)]';
+const focus =
+    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6A4CFF]/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[#F7F6FB]';
+
+const css = `
+@keyframes rise{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+.rise{opacity:0;animation:rise .8s cubic-bezier(.2,.7,.2,1) forwards;animation-delay:calc(var(--d,0)*90ms)}
+.grain{background-image:radial-gradient(rgba(20,18,31,.04) 1px,transparent 1px);background-size:24px 24px}
+@media (prefers-reduced-motion:reduce){.rise{animation:none;opacity:1}}
+`;
+
+function Wordmark() {
+    return (
+        <Link href="/" aria-label="Cliprame home" className={`group inline-flex shrink-0 items-center gap-2.5 rounded-full font-semibold tracking-tight text-[#14121F] ${focus}`}>
+            <Image src="/cliprame-icon.svg" alt="" width={36} height={36} className="h-9 w-9 transition-transform duration-200 group-hover:scale-105" />
+            <span className={`${D} text-lg font-bold`}>Cliprame</span>
+        </Link>
+    );
+}
 
 function getFallbackDisplayName(userEmail: string) {
     const accountName = userEmail.split(' · ')[0]?.split('@')[0] ?? '';
@@ -137,47 +172,47 @@ function ProfileMenu({ creatorName, username, avatarUrl, userEmail, profilePersi
 
     return (
         <details className="relative">
-            <summary className="flex max-w-[min(15rem,52vw)] cursor-pointer list-none items-center gap-2 rounded-xl border border-neutral-700 bg-neutral-900 px-2.5 py-2 text-xs text-neutral-200 shadow-lg hover:border-neutral-500 hover:bg-neutral-800">
-                <span aria-hidden="true" className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-indigo-500/20 bg-cover bg-center text-[10px] font-bold text-indigo-200" style={avatarUrl ? { backgroundImage: `url("${avatarUrl}")` } : undefined}>{!avatarUrl && (creatorName.trim().charAt(0).toUpperCase() || 'C')}</span>
-                <span className="truncate">Signed in as {creatorName}</span>
+            <summary className={`flex max-w-[min(15rem,52vw)] cursor-pointer list-none items-center gap-2 rounded-full border border-[#14121F]/15 bg-white/80 px-3.5 py-2 text-xs font-semibold text-[#14121F] shadow-sm backdrop-blur transition hover:bg-white ${focus}`}>
+                <span aria-hidden="true" className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#6A4CFF]/20 bg-cover bg-center text-[10px] font-bold text-[#6A4CFF]" style={avatarUrl ? { backgroundImage: `url("${avatarUrl}")` } : undefined}>{!avatarUrl && (creatorName.trim().charAt(0).toUpperCase() || 'C')}</span>
+                <span className="truncate">{creatorName}</span>
             </summary>
-            <div className="absolute right-0 mt-2 max-h-[75dvh] w-[min(22rem,calc(100vw-1.5rem))] overflow-y-auto rounded-xl border border-neutral-700 bg-neutral-900 p-4 shadow-2xl">
+            <div className="absolute right-0 mt-2 max-h-[75dvh] w-[min(22rem,calc(100vw-1.5rem))] overflow-y-auto rounded-3xl border border-[#14121F]/10 bg-white p-5 shadow-[0_20px_50px_-15px_rgba(20,18,31,0.15)] backdrop-blur-xl">
                 <div className="flex items-center gap-3">
-                    <span aria-hidden="true" className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-indigo-500/20 bg-cover bg-center text-lg font-bold text-indigo-200" style={avatarUrl ? { backgroundImage: `url("${avatarUrl}")` } : undefined}>{!avatarUrl && (creatorName.trim().charAt(0).toUpperCase() || 'C')}</span>
-                    <div className="min-w-0"><p className="truncate text-sm font-semibold text-neutral-100">{creatorName}</p>{userEmail && <p className="mt-0.5 truncate text-xs text-neutral-500">{userEmail}</p>}</div>
+                    <span aria-hidden="true" className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#6A4CFF]/20 bg-cover bg-center text-lg font-bold text-[#6A4CFF]" style={avatarUrl ? { backgroundImage: `url("${avatarUrl}")` } : undefined}>{!avatarUrl && (creatorName.trim().charAt(0).toUpperCase() || 'C')}</span>
+                    <div className="min-w-0"><p className={`${D} truncate text-base font-bold text-[#14121F]`}>{creatorName}</p>{userEmail && <p className="mt-0.5 truncate text-xs text-[#14121F]/60">{userEmail}</p>}</div>
                 </div>
-                <div className="my-4 border-t border-neutral-800" />
-                <label htmlFor="profile-picture" className={`inline-flex cursor-pointer items-center rounded-lg border border-neutral-700 px-3 py-2 text-xs font-semibold text-neutral-200 transition hover:border-neutral-500 hover:bg-neutral-800 ${!profilePersistenceEnabled ? 'pointer-events-none opacity-50' : ''}`}>Update profile picture</label>
+                <div className="my-4 border-t border-[#14121F]/10" />
+                <label htmlFor="profile-picture" className={`inline-flex cursor-pointer items-center rounded-full border border-[#14121F]/15 bg-[#F7F6FB] px-3.5 py-2 text-xs font-semibold text-[#14121F] transition hover:bg-[#14121F] hover:text-white ${!profilePersistenceEnabled ? 'pointer-events-none opacity-50' : ''}`}>Update profile picture</label>
                 <input id="profile-picture" type="file" accept="image/jpeg,image/png,image/webp" disabled={!profilePersistenceEnabled} onChange={(event) => void uploadAvatar(event)} className="sr-only" />
-                <p className="mt-1 text-[10px] text-neutral-500">JPG, PNG, or WebP · up to 5 MB</p>
-                {avatarState && <p role="status" className={`mt-1 text-[11px] ${avatarState === 'Profile picture updated' ? 'text-emerald-300' : avatarState.includes('…') ? 'text-neutral-400' : 'text-red-300'}`}>{avatarState}</p>}
+                <p className="mt-1.5 text-[11px] text-[#14121F]/50">JPG, PNG, or WebP · up to 5 MB</p>
+                {avatarState && <p role="status" className={`mt-1.5 text-xs font-medium ${avatarState === 'Profile picture updated' ? 'text-emerald-600' : avatarState.includes('…') ? 'text-[#14121F]/60' : 'text-red-600'}`}>{avatarState}</p>}
 
-                <div className="my-4 border-t border-neutral-800" />
-                <label htmlFor="profile-display-name" className="block text-[10px] font-semibold uppercase tracking-wider text-neutral-500">Profile name</label>
-                <input id="profile-display-name" value={creatorName} onChange={(event) => onNameChange(event.target.value)} maxLength={80} autoComplete="name" className="mt-1.5 w-full rounded-md border border-neutral-800 bg-neutral-950 px-2.5 py-2 text-sm text-neutral-200 focus:border-indigo-500 focus:outline-none" />
-                <label htmlFor="profile-username" className="mt-3 block text-[10px] font-semibold uppercase tracking-wider text-neutral-500">Username</label>
+                <div className="my-4 border-t border-[#14121F]/10" />
+                <label htmlFor="profile-display-name" className="block text-[11px] font-bold uppercase tracking-wider text-[#14121F]/70">Profile name</label>
+                <input id="profile-display-name" value={creatorName} onChange={(event) => onNameChange(event.target.value)} maxLength={80} autoComplete="name" className="mt-1.5 w-full rounded-2xl border border-[#14121F]/15 bg-[#F7F6FB] px-3.5 py-2.5 text-sm text-[#14121F] focus:border-[#6A4CFF] focus:bg-white focus:outline-none" />
+                <label htmlFor="profile-username" className="mt-3.5 block text-[11px] font-bold uppercase tracking-wider text-[#14121F]/70">Username</label>
                 <div className="mt-1.5 flex gap-2">
-                    <div className="flex min-w-0 flex-1 items-center rounded-md border border-neutral-800 bg-neutral-950 px-2.5 focus-within:border-indigo-500"><span className="text-sm text-neutral-500">@</span><input id="profile-username" value={username} onChange={(event) => { onUsernameChange(event.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 20)); setUsernameCheck(''); setUsernameCheckState(''); }} maxLength={20} autoComplete="username" disabled={!profilePersistenceEnabled} className="min-w-0 flex-1 bg-transparent py-2 text-sm text-neutral-200 outline-none disabled:opacity-50" /></div>
-                    <button type="button" onClick={() => void checkUsername()} disabled={!profilePersistenceEnabled || !username} className="rounded-lg border border-neutral-700 px-2.5 text-[11px] font-semibold text-neutral-200 hover:bg-neutral-800 disabled:opacity-50">Check</button>
+                    <div className="flex min-w-0 flex-1 items-center rounded-2xl border border-[#14121F]/15 bg-[#F7F6FB] px-3.5 focus-within:border-[#6A4CFF] focus-within:bg-white"><span className="text-sm text-[#14121F]/50">@</span><input id="profile-username" value={username} onChange={(event) => { onUsernameChange(event.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 20)); setUsernameCheck(''); setUsernameCheckState(''); }} maxLength={20} autoComplete="username" disabled={!profilePersistenceEnabled} className="min-w-0 flex-1 bg-transparent py-2.5 text-sm text-[#14121F] outline-none disabled:opacity-50" /></div>
+                    <button type="button" onClick={() => void checkUsername()} disabled={!profilePersistenceEnabled || !username} className="rounded-xl border border-[#14121F]/15 bg-[#F7F6FB] px-3 text-xs font-semibold text-[#14121F] transition hover:bg-[#14121F] hover:text-white disabled:opacity-50">Check</button>
                 </div>
-                <p className="mt-1 text-[10px] text-neutral-500">3–20 lowercase letters, numbers, or underscores.</p>
-                {usernameCheck && <p role="status" className={`mt-1 text-[11px] ${usernameCheckState === 'available' ? 'text-emerald-300' : usernameCheckState === 'taken' || usernameCheckState === 'error' ? 'text-red-300' : 'text-neutral-400'}`}>{usernameCheck}</p>}
-                <button type="button" onClick={onSave} disabled={saveState === 'Saving…'} className="mt-3 w-full rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-indigo-500 disabled:cursor-wait disabled:opacity-60">Save profile</button>
-                {saveState && <p role="status" className={`mt-2 text-[11px] ${saveState === 'Profile saved' || saveState === 'Saved on this device' ? 'text-emerald-300' : saveState === 'Saving…' || saveState === 'Unsaved changes' ? 'text-neutral-400' : 'text-red-300'}`}>{saveState}</p>}
+                <p className="mt-1.5 text-[11px] text-[#14121F]/50">3–20 lowercase letters, numbers, or underscores.</p>
+                {usernameCheck && <p role="status" className={`mt-1.5 text-xs font-medium ${usernameCheckState === 'available' ? 'text-emerald-600' : usernameCheckState === 'taken' || usernameCheckState === 'error' ? 'text-red-600' : 'text-[#14121F]/60'}`}>{usernameCheck}</p>}
+                <button type="button" onClick={onSave} disabled={saveState === 'Saving…'} className="mt-4 w-full rounded-full bg-[#14121F] px-4 py-3 text-xs font-semibold text-white transition hover:bg-[#2c2742] disabled:cursor-wait disabled:opacity-60">Save profile</button>
+                {saveState && <p role="status" className={`mt-2 text-xs font-medium ${saveState === 'Profile saved' || saveState === 'Saved on this device' ? 'text-emerald-600' : saveState === 'Saving…' || saveState === 'Unsaved changes' ? 'text-[#14121F]/60' : 'text-red-600'}`}>{saveState}</p>}
 
                 {profilePersistenceEnabled && <>
-                    <div className="my-4 border-t border-neutral-800" />
-                    <form onSubmit={(event) => void changePassword(event)} className="space-y-2">
-                        <label htmlFor="profile-password" className="block text-[10px] font-semibold uppercase tracking-wider text-neutral-500">Change password</label>
-                        <input id="profile-password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} minLength={8} maxLength={128} autoComplete="new-password" placeholder="New password" required className="w-full rounded-md border border-neutral-800 bg-neutral-950 px-2.5 py-2 text-sm text-neutral-200 placeholder:text-neutral-600 focus:border-indigo-500 focus:outline-none" />
-                        <input type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} minLength={8} maxLength={128} autoComplete="new-password" placeholder="Confirm new password" aria-label="Confirm new password" required className="w-full rounded-md border border-neutral-800 bg-neutral-950 px-2.5 py-2 text-sm text-neutral-200 placeholder:text-neutral-600 focus:border-indigo-500 focus:outline-none" />
-                        <button type="submit" disabled={isChangingPassword} className="w-full rounded-lg border border-neutral-700 px-3 py-2 text-xs font-semibold text-neutral-200 transition hover:border-neutral-500 hover:bg-neutral-800 disabled:opacity-50">{isChangingPassword ? 'Updating…' : 'Update password'}</button>
-                        {passwordState && <p role="status" className={`text-[11px] ${passwordState === 'Password updated' ? 'text-emerald-300' : passwordState.includes('…') ? 'text-neutral-400' : 'text-red-300'}`}>{passwordState}</p>}
+                    <div className="my-4 border-t border-[#14121F]/10" />
+                    <form onSubmit={(event) => void changePassword(event)} className="space-y-2.5">
+                        <label htmlFor="profile-password" className="block text-[11px] font-bold uppercase tracking-wider text-[#14121F]/70">Change password</label>
+                        <input id="profile-password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} minLength={8} maxLength={128} autoComplete="new-password" placeholder="New password" required className="w-full rounded-2xl border border-[#14121F]/15 bg-[#F7F6FB] px-3.5 py-2.5 text-sm text-[#14121F] placeholder:text-[#14121F]/40 focus:border-[#6A4CFF] focus:bg-white focus:outline-none" />
+                        <input type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} minLength={8} maxLength={128} autoComplete="new-password" placeholder="Confirm new password" aria-label="Confirm new password" required className="w-full rounded-2xl border border-[#14121F]/15 bg-[#F7F6FB] px-3.5 py-2.5 text-sm text-[#14121F] placeholder:text-[#14121F]/40 focus:border-[#6A4CFF] focus:bg-white focus:outline-none" />
+                        <button type="submit" disabled={isChangingPassword} className="w-full rounded-full border border-[#14121F]/15 bg-[#F7F6FB] px-4 py-2.5 text-xs font-semibold text-[#14121F] transition hover:bg-[#14121F] hover:text-white disabled:opacity-50">{isChangingPassword ? 'Updating…' : 'Update password'}</button>
+                        {passwordState && <p role="status" className={`text-xs font-medium ${passwordState === 'Password updated' ? 'text-emerald-600' : passwordState.includes('…') ? 'text-[#14121F]/60' : 'text-red-600'}`}>{passwordState}</p>}
                     </form>
                 </>}
-                {!profilePersistenceEnabled && <p className="mt-3 text-[10px] text-neutral-500">Account settings are unavailable in tester mode.</p>}
-                <form action={signOutAction} className="mt-4 border-t border-neutral-800 pt-3">
-                    <button className="w-full rounded-lg border border-neutral-700 px-3 py-2 text-left text-xs font-semibold text-neutral-300 transition hover:border-neutral-500 hover:bg-neutral-800">Sign out</button>
+                {!profilePersistenceEnabled && <p className="mt-3.5 text-[11px] text-[#14121F]/50">Account settings are unavailable in tester mode.</p>}
+                <form action={signOutAction} className="mt-4 border-t border-[#14121F]/10 pt-4">
+                    <button className="w-full rounded-full border border-[#14121F]/15 px-4 py-2.5 text-left text-xs font-semibold text-[#14121F] transition hover:bg-red-50 hover:text-red-600 hover:border-red-200">Sign out</button>
                 </form>
             </div>
         </details>
@@ -226,6 +261,7 @@ export function CreatorStudioDashboard({ userEmail, initialDisplayName = '', ini
             console.warn('Could not inspect the incoming screen-share frame:', error);
         }
     }, []);
+
     const {
         settings,
         updateSettings,
@@ -289,14 +325,11 @@ export function CreatorStudioDashboard({ userEmail, initialDisplayName = '', ini
         setScreenFramesReceived(0);
         lastScreenFrameReportRef.current = 0;
         lastScreenFingerprintRef.current = null;
-        <VideoCanvas videoRef={videoRef} canvasStreamRef={canvasStreamRef} settings={settings} onAvatarMouthPositionChange={(cameraAvatarMouthX, cameraAvatarMouthY) => updateSettings({ cameraAvatarMouthX, cameraAvatarMouthY })} microphoneLevelRef={microphoneLevelRef} isRecording={isRecording} isRecordingPaused={isRecordingPaused} countdown={countdown} screenShareStream={screenShareStream} onScreenFrame={reportScreenFrame} />
-        { screenShareStream ? <div className="max-w-sm space-y-2 rounded-lg border border-white/10 bg-neutral-950/80 px-3 py-2 text-[11px] leading-relaxed text-neutral-300"><p>Chrome source: <strong className="text-emerald-200">{screenShareSurface ?? 'checking…'}</strong>{isScreenTrackMuted && <span className="font-semibold text-amber-200"> · paused</span>} · live frame checks: <strong className="text-white">{screenFramesReceived}</strong></p><p>Switch to the page you want to record for a few seconds. If the frame-check number doesn’t increase, Chrome isn’t delivering frames from that selected source. For tab switching, select <strong className="text-white">Window → Chrome</strong>, not a single Chrome tab. The direct screen capture is saved first; the camera inset is composed afterward.</p>{studioWasBackgrounded && <p role="status" className="rounded-md border border-emerald-300/20 bg-emerald-300/10 px-2 py-1.5 text-emerald-100">Studio is in another tab. The display is being captured directly.</p>}</div> : <p className="max-w-sm rounded-lg border border-white/10 bg-neutral-950/75 px-3 py-2 text-[11px] leading-relaxed text-neutral-400">Choose <strong className="text-neutral-200">Window</strong> in Chrome’s picker, then select the Chrome window you’ll navigate in. Avoid <strong className="text-neutral-200">Chrome tab</strong>, which captures only one tab.</p> }
         if (!navigator.mediaDevices?.getDisplayMedia) {
             setScreenShareError('Screen sharing is not supported in this browser. Use a recent desktop version of Chrome, Edge, Firefox, or Safari.');
             return;
         }
         try {
-            // Must be invoked directly from this click so the browser can show its share picker.
             const captureOptions = {
                 video: { displaySurface: 'window', frameRate: { ideal: 30, max: 30 } },
                 audio: false,
@@ -499,35 +532,77 @@ export function CreatorStudioDashboard({ userEmail, initialDisplayName = '', ini
 
     if (creationMode === 'choose') {
         return (
-            <main className="flex min-h-dvh items-center justify-center bg-neutral-950 px-4 py-10 text-neutral-100">
-                <div className="fixed right-5 top-5 z-30 flex items-center gap-2">
-                    {isPro
-                        ? <span className="rounded-lg bg-indigo-500/15 px-2.5 py-1.5 text-[11px] font-semibold text-indigo-200">Pro</span>
-                        : profilePersistenceEnabled && <a href="/pricing" className="rounded-lg bg-linear-to-r from-cyan-500 via-indigo-500 to-fuchsia-500 px-3 py-2 text-xs font-semibold text-white hover:brightness-110">Upgrade</a>}
-                    <ProfileMenu creatorName={creatorName} username={profileUsername} avatarUrl={profileAvatarUrl} userEmail={userEmail} profilePersistenceEnabled={profilePersistenceEnabled} onNameChange={updateCreatorName} onUsernameChange={(username) => { setProfileUsername(username); setProfileSaveState('Unsaved changes'); }} onSave={() => void saveCreatorProfile()} onAvatarChange={setProfileAvatarUrl} saveState={profileSaveState} />
-                </div>
-                <div className="w-full max-w-4xl">
-                    <div className="mb-9 text-center">
-                        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-indigo-300">Cliprame workspace</p>
-                        <h1 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">What are we creating today?</h1>
-                        <p className="mx-auto mt-3 max-w-xl text-sm leading-relaxed text-neutral-400">Record a video with your camera, or turn your photos into a music-backed reel.</p>
+            <main className={`${display.variable} ${body.variable} min-h-dvh overflow-x-clip bg-[#F7F6FB] font-[family-name:var(--font-body)] text-[#14121F] selection:bg-[#6A4CFF]/20`}>
+                <style dangerouslySetInnerHTML={{ __html: css }} />
+                <div className="grain pointer-events-none absolute inset-0 -z-10" />
+
+                {/* Floating glass nav matching landing/pricing pages */}
+                <header className="sticky top-0 z-50 px-3 pt-3 sm:px-6 sm:pt-4">
+                    <div className="mx-auto flex h-14 max-w-5xl items-center justify-between gap-3 rounded-full border border-white/70 bg-white/70 pl-4 pr-2 shadow-[0_10px_30px_-10px_rgba(20,18,31,0.18)] backdrop-blur-xl sm:h-16 sm:pl-5">
+                        <Wordmark />
+                        <nav aria-label="Main navigation" className="hidden items-center gap-1 md:flex">
+                            <Link href="/" className={`rounded-full px-4 py-2 text-sm font-medium text-[#14121F]/65 transition-colors hover:bg-[#14121F]/[0.06] hover:text-[#14121F] ${focus}`}>Home</Link>
+                            <Link href="/pricing" className={`rounded-full px-4 py-2 text-sm font-medium text-[#14121F]/65 transition-colors hover:bg-[#14121F]/[0.06] hover:text-[#14121F] ${focus}`}>Pricing</Link>
+                            <span aria-current="page" className="rounded-full bg-[#14121F]/[0.08] px-4 py-2 text-sm font-semibold text-[#14121F]">Studio</span>
+                        </nav>
+                        <div className="flex shrink-0 items-center gap-2">
+                            {isPro ? (
+                                <span className="rounded-full bg-[#6A4CFF]/10 px-3 py-1 text-xs font-semibold text-[#6A4CFF]">Pro</span>
+                            ) : profilePersistenceEnabled && (
+                                <Link href="/pricing" className="rounded-full bg-[#6A4CFF] px-3.5 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-[#5839e0]">Upgrade</Link>
+                            )}
+                            <ProfileMenu creatorName={creatorName} username={profileUsername} avatarUrl={profileAvatarUrl} userEmail={userEmail} profilePersistenceEnabled={profilePersistenceEnabled} onNameChange={updateCreatorName} onUsernameChange={(username) => { setProfileUsername(username); setProfileSaveState('Unsaved changes'); }} onSave={() => void saveCreatorProfile()} onAvatarChange={setProfileAvatarUrl} saveState={profileSaveState} />
+                        </div>
                     </div>
-                    <div className="grid gap-4 md:grid-cols-2">
-                        <button type="button" onClick={() => { setView('record'); setCreationMode('record'); }} className="group rounded-3xl border border-neutral-800 bg-neutral-900 p-6 text-left transition-all hover:-translate-y-1 hover:border-indigo-500/70 hover:bg-neutral-900/90 sm:p-8">
-                            <div className="mb-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-500/15 text-indigo-300"><Video className="h-7 w-7" /></div>
-                            <h2 className="text-xl font-bold">Record a video</h2>
-                            <p className="mt-2 min-h-12 text-sm leading-relaxed text-neutral-400">Use your camera, teleprompter, creative effects and the video editor.</p>
-                            <span className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-indigo-300">Open recording studio <span aria-hidden="true">→</span></span>
+                </header>
+
+                <section className="relative mx-auto max-w-7xl px-5 pb-20 pt-12 sm:px-8 sm:pt-16 lg:px-12">
+                    <div className="absolute -left-20 -top-10 -z-10 h-72 w-72 rounded-full bg-[#6A4CFF]/15 blur-3xl" />
+                    <div className="absolute -right-20 top-10 -z-10 h-72 w-72 rounded-full bg-[#FF3D81]/10 blur-3xl" />
+
+                    <div className="rise" style={{ '--d': 0 } as CSSProperties}>
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-[#6A4CFF]/10 px-3.5 py-1 text-xs font-semibold text-[#6A4CFF]">
+                            <Sparkles className="h-3.5 w-3.5" /> Cliprame workspace
+                        </span>
+                    </div>
+
+                    <div className="rise mt-4" style={{ '--d': 1 } as CSSProperties}>
+                        <h1 className={`${D} text-4xl font-extrabold tracking-[-0.03em] text-[#14121F] sm:text-5xl`}>
+                            What are we creating today?
+                        </h1>
+                        <p className="mt-3 max-w-xl text-base leading-7 text-[#14121F]/65">
+                            Record a video with your camera, or turn your photos into a music-backed reel.
+                        </p>
+                    </div>
+
+                    <div className="rise mt-10 grid gap-6 md:grid-cols-2" style={{ '--d': 2 } as CSSProperties}>
+                        <button type="button" onClick={() => { setView('record'); setCreationMode('record'); }} className="group relative rounded-[2.2rem] border border-[#14121F]/10 bg-white p-8 text-left shadow-[0_15px_40px_-15px_rgba(20,18,31,0.06)] transition-all duration-300 hover:-translate-y-1 hover:border-[#6A4CFF]/50 hover:shadow-[0_20px_50px_-15px_rgba(106,76,255,0.15)]">
+                            <div className="mb-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#6A4CFF]/10 text-[#6A4CFF] transition-transform duration-300 group-hover:scale-110">
+                                <Video className="h-7 w-7" />
+                            </div>
+                            <h2 className={`${D} text-2xl font-bold tracking-tight text-[#14121F]`}>Record a video</h2>
+                            <p className="mt-2.5 min-h-12 text-sm leading-6 text-[#14121F]/65">Use your camera, teleprompter, creative effects and the video editor.</p>
+                            <span className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-[#6A4CFF]">
+                                Open recording studio <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+                            </span>
                         </button>
-                        <button type="button" onClick={() => setCreationMode('photos')} className="group rounded-3xl border border-neutral-800 bg-neutral-900 p-6 text-left transition-all hover:-translate-y-1 hover:border-fuchsia-500/70 hover:bg-neutral-900/90 sm:p-8">
-                            <div className="mb-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-fuchsia-500/15 text-fuchsia-300"><Images className="h-7 w-7" /></div>
-                            <h2 className="text-xl font-bold">Create a photo + video reel</h2>
-                            <p className="mt-2 min-h-12 text-sm leading-relaxed text-neutral-400">Mix photos and video clips, add text and music, then export a finished reel.</p>
-                            <span className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-fuchsia-300">Make a reel <span aria-hidden="true">→</span></span>
+
+                        <button type="button" onClick={() => setCreationMode('photos')} className="group relative rounded-[2.2rem] border border-[#14121F]/10 bg-white p-8 text-left shadow-[0_15px_40px_-15px_rgba(20,18,31,0.06)] transition-all duration-300 hover:-translate-y-1 hover:border-[#FF3D81]/50 hover:shadow-[0_20px_50px_-15px_rgba(255,61,129,0.15)]">
+                            <div className="mb-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#FF3D81]/10 text-[#FF3D81] transition-transform duration-300 group-hover:scale-110">
+                                <Images className="h-7 w-7" />
+                            </div>
+                            <h2 className={`${D} text-2xl font-bold tracking-tight text-[#14121F]`}>Create a photo + video reel</h2>
+                            <p className="mt-2.5 min-h-12 text-sm leading-6 text-[#14121F]/65">Mix photos and video clips, add text and music, then export a finished reel.</p>
+                            <span className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-[#FF3D81]">
+                                Make a reel <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+                            </span>
                         </button>
                     </div>
-                    <p className="mt-6 flex items-center justify-center text-center text-[11px] text-neutral-600">Your media and drafts stay in this browser unless you export them.</p>
-                </div>
+
+                    <p className="rise mt-10 text-center text-xs text-[#14121F]/45" style={{ '--d': 3 } as CSSProperties}>
+                        Your media and drafts stay in this browser unless you export them.
+                    </p>
+                </section>
             </main>
         );
     }
@@ -545,17 +620,17 @@ export function CreatorStudioDashboard({ userEmail, initialDisplayName = '', ini
             <div className="relative flex min-h-0 min-w-0 flex-1 flex-col md:pt-14">
                 <button type="button" onClick={() => { setShowWelcome(false); setCreationMode('choose'); }} aria-label="Back to creation options" className="absolute left-3 top-3 z-30 flex h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-neutral-950/80 text-neutral-100 backdrop-blur-md md:hidden"><ArrowLeft className="h-5 w-5" /></button>
                 <div className="absolute right-3 top-3 z-40 flex items-start gap-2 md:right-4">
-                <button type="button" onClick={() => { setShowWelcome(false); setCreationMode('choose'); }} className="hidden items-center rounded-lg border border-neutral-700 bg-neutral-900/95 px-3 py-2 text-xs font-semibold text-neutral-200 shadow-lg hover:bg-neutral-800 md:flex">Creation options</button>
-                <ProfileMenu creatorName={creatorName} username={profileUsername} avatarUrl={profileAvatarUrl} userEmail={userEmail} profilePersistenceEnabled={profilePersistenceEnabled} onNameChange={updateCreatorName} onUsernameChange={(username) => { setProfileUsername(username); setProfileSaveState('Unsaved changes'); }} onSave={() => void saveCreatorProfile()} onAvatarChange={setProfileAvatarUrl} saveState={profileSaveState} />
-                <details className="relative">
-                    <summary className="flex cursor-pointer list-none items-center gap-2 rounded-lg border border-neutral-700 bg-neutral-900/95 px-3 py-2 text-xs font-semibold text-neutral-200 shadow-lg hover:bg-neutral-800"><FolderOpen className="h-4 w-4" /> Projects ({savedDrafts.length})</summary>
-                    <div className="absolute right-0 mt-2 max-h-[60dvh] w-[min(22rem,calc(100vw-1.5rem))] overflow-y-auto rounded-xl border border-neutral-700 bg-neutral-900 p-2 shadow-2xl">
-                        {savedDrafts.map((draft) => <div key={draft.id} className="flex items-center gap-1 rounded-lg hover:bg-neutral-800"><button onClick={() => void openDraft(draft.id)} disabled={isLoadingDraft} className="min-w-0 flex-1 rounded-lg px-3 py-2 text-left text-xs text-neutral-200 disabled:opacity-50"><span className="block truncate font-semibold">{draft.title || 'Untitled creator project'}</span><span className="mt-1 block text-neutral-500">{draft.creatorName} · {Math.round(draft.durationMs / 1000)} sec · {new Date(draft.savedAt).toLocaleDateString()}</span></button><button onClick={() => void removeDraft(draft.id)} aria-label={`Delete ${draft.title}`} className="rounded-md p-2 text-neutral-600 hover:text-red-400"><Trash2 className="h-3.5 w-3.5" /></button></div>)}
-                        {savedDrafts.length === 0 && <p className="px-3 py-2 text-xs text-neutral-400">Your saved edits will appear here.</p>}
-                        {isLoadingDraft && <p className="px-3 py-2 text-xs text-neutral-400">Opening project…</p>}
-                        <div className="mx-2 mt-2 rounded-lg border border-neutral-800 bg-neutral-950 p-3"><span className="text-xs font-semibold text-neutral-200">Free plan</span><p className="mt-1 text-[10px] leading-relaxed text-neutral-500">60-second recordings and exports · watermark included. Billing is not configured.</p><button type="button" disabled className="mt-2 w-full cursor-not-allowed rounded-md border border-neutral-800 px-2 py-1.5 text-[10px] font-semibold text-neutral-500">Upgrade · payments not configured</button></div>
-                    </div>
-                </details>
+                    <button type="button" onClick={() => { setShowWelcome(false); setCreationMode('choose'); }} className="hidden items-center rounded-lg border border-neutral-700 bg-neutral-900/95 px-3 py-2 text-xs font-semibold text-neutral-200 shadow-lg hover:bg-neutral-800 md:flex">Creation options</button>
+                    <ProfileMenu creatorName={creatorName} username={profileUsername} avatarUrl={profileAvatarUrl} userEmail={userEmail} profilePersistenceEnabled={profilePersistenceEnabled} onNameChange={updateCreatorName} onUsernameChange={(username) => { setProfileUsername(username); setProfileSaveState('Unsaved changes'); }} onSave={() => void saveCreatorProfile()} onAvatarChange={setProfileAvatarUrl} saveState={profileSaveState} />
+                    <details className="relative">
+                        <summary className="flex cursor-pointer list-none items-center gap-2 rounded-lg border border-neutral-700 bg-neutral-900/95 px-3 py-2 text-xs font-semibold text-neutral-200 shadow-lg hover:bg-neutral-800"><FolderOpen className="h-4 w-4" /> Projects ({savedDrafts.length})</summary>
+                        <div className="absolute right-0 mt-2 max-h-[60dvh] w-[min(22rem,calc(100vw-1.5rem))] overflow-y-auto rounded-xl border border-neutral-700 bg-neutral-900 p-2 shadow-2xl">
+                            {savedDrafts.map((draft) => <div key={draft.id} className="flex items-center gap-1 rounded-lg hover:bg-neutral-800"><button onClick={() => void openDraft(draft.id)} disabled={isLoadingDraft} className="min-w-0 flex-1 rounded-lg px-3 py-2 text-left text-xs text-neutral-200 disabled:opacity-50"><span className="block truncate font-semibold">{draft.title || 'Untitled creator project'}</span><span className="mt-1 block text-neutral-500">{draft.creatorName} · {Math.round(draft.durationMs / 1000)} sec · {new Date(draft.savedAt).toLocaleDateString()}</span></button><button onClick={() => void removeDraft(draft.id)} aria-label={`Delete ${draft.title}`} className="rounded-md p-2 text-neutral-600 hover:text-red-400"><Trash2 className="h-3.5 w-3.5" /></button></div>)}
+                            {savedDrafts.length === 0 && <p className="px-3 py-2 text-xs text-neutral-400">Your saved edits will appear here.</p>}
+                            {isLoadingDraft && <p className="px-3 py-2 text-xs text-neutral-400">Opening project…</p>}
+                            <div className="mx-2 mt-2 rounded-lg border border-neutral-800 bg-neutral-950 p-3"><span className="text-xs font-semibold text-neutral-200">Free plan</span><p className="mt-1 text-[10px] leading-relaxed text-neutral-500">60-second recordings and exports · watermark included. Billing is not configured.</p><button type="button" disabled className="mt-2 w-full cursor-not-allowed rounded-md border border-neutral-800 px-2 py-1.5 text-[10px] font-semibold text-neutral-500">Upgrade · payments not configured</button></div>
+                        </div>
+                    </details>
                 </div>
                 {cameraError && <div className="absolute left-1/2 top-4 z-40 -translate-x-1/2 rounded-lg bg-red-600/90 px-4 py-2 text-sm text-white shadow-lg">{cameraError}</div>}
                 <VideoCanvas videoRef={videoRef} canvasStreamRef={canvasStreamRef} settings={settings} onAvatarMouthPositionChange={(cameraAvatarMouthX, cameraAvatarMouthY) => updateSettings({ cameraAvatarMouthX, cameraAvatarMouthY })} microphoneLevelRef={microphoneLevelRef} isRecording={isRecording} isRecordingPaused={isRecordingPaused} countdown={countdown} screenShareStream={screenShareStream} onScreenFrame={reportScreenFrame} />
