@@ -1169,7 +1169,35 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
 
         // Media (the user zoom now applies to depth frames too)
         ctx.filter = `brightness(${brightness}%) saturate(${saturation}%)`;
-        if (depthFrame) {
+        const isSaaSMode = productTemplateId === 'saas' || aspectRatio === '16:9';
+
+        if (isSaaSMode && image.type === 'image') {
+            const barH = height * 0.06;
+            ctx.fillStyle = '#1e1e2e';
+            ctx.beginPath();
+            ctx.roundRect(drawX, drawY, drawW, drawH, 12);
+            ctx.fill();
+
+            const dotR = height * 0.008;
+            const dotY = drawY + barH / 2;
+            ['#ef4444', '#f59e0b', '#10b981'].forEach((color, i) => {
+                ctx.fillStyle = color;
+                ctx.beginPath();
+                ctx.arc(drawX + width * 0.03 + i * (dotR * 3), dotY, dotR, 0, Math.PI * 2);
+                ctx.fill();
+            });
+
+            ctx.save();
+            ctx.beginPath();
+            ctx.roundRect(drawX, drawY + barH, drawW, drawH - barH, [0, 0, 12, 12]);
+            ctx.clip();
+            if (depthFrame) {
+                ctx.drawImage(depthFrame, drawX, drawY + barH, drawW, drawH - barH);
+            } else {
+                ctx.drawImage(element, drawX, drawY + barH, drawW, drawH - barH);
+            }
+            ctx.restore();
+        } else if (depthFrame) {
             const depthW = width * userScale;
             const depthH = height * userScale;
             const depthX = (width - depthW) / 2;
@@ -2036,17 +2064,37 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
                         className={`relative flex items-center justify-center overflow-hidden rounded-2xl shadow-xl ${frameSizeClass}`}
                         style={{ backgroundColor, containerType: 'inline-size', ...transitionStyle }}
                     >
-                        {activeImage?.type === 'video' ? (
-                            <video key={activeImage.id} ref={previewVideoRef} src={activeImage.url} muted playsInline preload="auto" className="h-full w-full object-contain" style={mediaStyle} />
-                        ) : activeImage && activeDepth ? (
-                            <DepthPreview clip={activeImage} depth={activeDepth} progress={activeClipProgress} aspectRatio={aspectRatio} filter={filterStyle} backgroundColor={backgroundColor} scale={activeScale} softEdges={activeImage.softEdges !== false} />
-                        ) : activeImage ? (
-                            <img src={activeImage.url} alt="" className="h-full w-full object-contain" style={mediaStyle} />
-                        ) : (
-                            <div className="flex h-full items-center justify-center text-center text-xs font-semibold text-black/40">
-                                <span><ImagePlus className="mx-auto mb-3 h-8 w-8 text-black/30" />Add product photos or videos</span>
-                            </div>
-                        )}
+                        {(() => {
+                            const isSaaSMode = productTemplateId === 'saas' || aspectRatio === '16:9';
+                            if (isSaaSMode && activeImage?.type === 'image') {
+                                return (
+                                    <div className="flex flex-col h-full w-full bg-[#1e1e2e] rounded-xl overflow-hidden shadow-2xl border border-white/10" style={mediaStyle}>
+                                        <div className="flex items-center gap-1.5 px-3 py-2 bg-[#181824] shrink-0">
+                                            <div className="w-2.5 h-2.5 rounded-full bg-red-500" />
+                                            <div className="w-2.5 h-2.5 rounded-full bg-amber-500" />
+                                            <div className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+                                        </div>
+                                        <div className="relative flex-1 overflow-hidden bg-black">
+                                            <img src={activeImage.url} alt="" className="h-full w-full object-fill" />
+                                        </div>
+                                    </div>
+                                );
+                            }
+                            if (activeImage?.type === 'video') {
+                                return <video key={activeImage.id} ref={previewVideoRef} src={activeImage.url} muted playsInline preload="auto" className="h-full w-full object-contain" style={mediaStyle} />;
+                            }
+                            if (activeImage && activeDepth) {
+                                return <DepthPreview clip={activeImage} depth={activeDepth} progress={activeClipProgress} aspectRatio={aspectRatio} filter={filterStyle} backgroundColor={backgroundColor} scale={activeScale} softEdges={activeImage.softEdges !== false} />;
+                            }
+                            if (activeImage) {
+                                return <img src={activeImage.url} alt="" className="h-full w-full object-contain" style={mediaStyle} />;
+                            }
+                            return (
+                                <div className="flex h-full items-center justify-center text-center text-xs font-semibold text-black/40">
+                                    <span><ImagePlus className="mx-auto mb-3 h-8 w-8 text-black/30" />Add product photos or videos</span>
+                                </div>
+                            );
+                        })()}
 
                         {activeDepthLoading && (
                             <div className="pointer-events-none absolute left-1/2 top-3 z-10 flex -translate-x-1/2 items-center gap-2 rounded-full bg-black/70 px-3.5 py-1.5 text-xs font-semibold text-white backdrop-blur-md">
