@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, ArrowDown, ArrowUp, Download, FolderOpen, ImagePlus, Loader2, Music2, Play, Save, Trash2, ChevronDown, ZoomIn, ZoomOut } from 'lucide-react';
+import { ArrowLeft, ArrowDown, ArrowUp, Download, FolderOpen, ImagePlus, Loader2, Maximize, Minimize, Music2, Play, Save, Trash2, ChevronDown, ZoomIn, ZoomOut } from 'lucide-react';
 import { AspectRatioType } from '@/types/studio';
 import { createExportRecorder, getExportDimensions, RECORDING_FRAME_RATE } from '@/components/recordingQuality';
 import { drawFreeTierWatermark, FREE_VIDEO_LIMIT_MS } from '@/components/freeTier';
@@ -9,6 +9,11 @@ import { TextOverlayStyle } from '@/types/editor';
 import { DepthMotion, getDepthMap, getPhotoCacheKey, isDepthMotion } from './depthEstimator';
 import { getDepthRenderer } from './depthRenderer';
 import { deletePhotoReelDraft, listPhotoReelDrafts, loadPhotoReelDraft, PhotoReelDraftSummary, savePhotoReelDraft } from './photoReelDrafts';
+import {
+    BORDER_EFFECTS, BorderEffect, DEFAULT_TRACKS, createDefaultTrackFile,
+    drawBorderEffect, exitDocumentFullscreen, requestElementFullscreen,
+} from './photoReelExtras';
+import { FX_LIST, FX_PRESETS, FxId, applyCameraFx, cameraCss, drawOverlayFx, drawRgbSplit } from './photoReelFx';
 
 /* -------------------------------------------------------------------------- */
 /* Types & constants                                                          */
@@ -42,6 +47,9 @@ interface ReelImage {
     badgeText?: string;                    // sticker such as "NEW" or "₹999"
     badgeColor?: string;
     badgeCorner?: Corner;
+    borderEffect?: BorderEffect;           // animated glowing / glitter border
+    borderColor?: string;                  // border accent color (hex)
+    fx?: FxId[];                           // trending wow effects
     autoCaption?: boolean;                 // caption came from the template (safe to replace)
     scale?: number;                        // image zoom (0.5 – 2.5)
     motion: 'none' | 'zoom-in' | 'zoom-out' | 'pan-left' | 'pan-right' | DepthMotion;
@@ -117,8 +125,13 @@ function drawSoftEdged(ctx: CanvasRenderingContext2D, source: CanvasImageSource,
     ctx.drawImage(softEdgeScratch, 0, 0);
 }
 
-/** Vignette, shine sweep, badge sticker and brand logo. Shared by the live preview and the export. */
-function drawProductEffects(ctx: CanvasRenderingContext2D, clip: ReelImage, width: number, height: number, t: number, logo: { image: HTMLImageElement | null; corner: Corner; sizePct: number }) {
+/**
+ * Vignette, shine sweep, badge sticker, brand logo and animated border.
+ * Shared by the live preview and the export. `seconds` is the time inside the current clip.
+ */
+function drawProductEffects(ctx: CanvasRenderingContext2D, clip: ReelImage, width: number, height: number, t: number, logo: { image: HTMLImageElement | null; corner: Corner; sizePct: number }, seconds = 0) {
+    drawOverlayFx(ctx, clip.fx, width, height, seconds);
+
     const vignette = clip.vignette ?? 0;
     if (vignette > 0) {
         const gradient = ctx.createRadialGradient(width / 2, height / 2, Math.min(width, height) * 0.35, width / 2, height / 2, Math.max(width, height) * 0.75);
@@ -172,6 +185,8 @@ function drawProductEffects(ctx: CanvasRenderingContext2D, clip: ReelImage, widt
         const { x, y } = getCornerPosition(logo.corner, logoW, logoH, width, height, width * 0.05);
         ctx.drawImage(logo.image, x, y, logoW, logoH);
     }
+
+    drawBorderEffect(ctx, clip.borderEffect, clip.borderColor, width, height, seconds);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -390,10 +405,11 @@ function DepthPreview({ clip, depth, progress, aspectRatio, filter, backgroundCo
     );
 }
 
-/** Live preview of vignette, shine, badge and logo (same drawing code as the export). */
-function EffectsOverlay({ clip, progress, aspectRatio, logoImage, logoCorner, logoSize }: {
+/** Live preview of vignette, shine, badge, logo and animated border (same drawing code as the export). */
+function EffectsOverlay({ clip, progress, seconds, aspectRatio, logoImage, logoCorner, logoSize }: {
     clip: ReelImage;
     progress: number;
+    seconds: number;
     aspectRatio: PlatformAspect;
     logoImage: HTMLImageElement | null;
     logoCorner: Corner;
@@ -406,8 +422,8 @@ function EffectsOverlay({ clip, progress, aspectRatio, logoImage, logoCorner, lo
         const ctx = canvasRef.current?.getContext('2d');
         if (!ctx) return;
         ctx.clearRect(0, 0, width, height);
-        drawProductEffects(ctx, clip, width, height, progress, { image: logoImage, corner: logoCorner, sizePct: logoSize });
-    }, [clip, progress, width, height, logoImage, logoCorner, logoSize]);
+        drawProductEffects(ctx, clip, width, height, progress, { image: logoImage, corner: logoCorner, sizePct: logoSize }, seconds);
+    }, [clip, progress, seconds, width, height, logoImage, logoCorner, logoSize]);
 
     return <canvas ref={canvasRef} width={width} height={height} className="pointer-events-none absolute inset-0 h-full w-full" />;
 }
@@ -466,10 +482,12 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
     const [brightness, setBrightness] = useState(100);
     const [saturation, setSaturation] = useState(100);
     const [template, setTemplate] = useState<ReelTemplate>('custom');
+    const [fxBpm, setFxBpm] = useState(120);
 
     /* ---- audio ---- */
     const [music, setMusic] = useState<{ file: File; url: string } | null>(null);
     const [musicVolume, setMusicVolume] = useState(70);
+    const [loadingTrack, setLoadingTrack] = useState<string | null>(null);
     const [narrationText, setNarrationText] = useState('');
     const [narrationLanguage, setNarrationLanguage] = useState<'en' | 'hi' | 'bn' | 'ta' | 'te'>('en');
     const [narrationVoiceGender, setNarrationVoiceGender] = useState<'female' | 'male'>('female');
@@ -485,6 +503,7 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
     const [isPreviewPlaying, setIsPreviewPlaying] = useState(false);
     const [previewTimeMs, setPreviewTimeMs] = useState(0);
     const [isDraggingCaption, setIsDraggingCaption] = useState(false);
+    const [isFullscreen, setIsFullscreen] = useState(false);
 
     /* ---- export ---- */
     const [isExporting, setIsExporting] = useState(false);
@@ -509,6 +528,7 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
     const [depthMaps, setDepthMaps] = useState<Record<string, HTMLCanvasElement>>({});
 
     /* ---- refs ---- */
+    const stageRef = useRef<HTMLDivElement>(null);
     const frameRef = useRef<HTMLDivElement>(null);
     const imageInputRef = useRef<HTMLInputElement>(null);
     const musicInputRef = useRef<HTMLInputElement>(null);
@@ -555,6 +575,17 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
         setImages((current) => current.map((clip) => (clip.id === id ? { ...clip, ...patch } : clip)));
     const updateSelected = (patch: Partial<ReelImage>) => {
         if (selectedImageId) updateClip(selectedImageId, patch);
+    };
+
+    const toggleFx = (id: FxId) => {
+        if (!selectedImage) return;
+        const current = selectedImage.fx ?? [];
+        updateSelected({ fx: current.includes(id) ? current.filter((item) => item !== id) : [...current, id] });
+    };
+
+    const applyFxPreset = (fx: FxId[], allClips: boolean) => {
+        if (allClips) setImages((current) => current.map((clip) => ({ ...clip, fx: [...fx] })));
+        else updateSelected({ fx: [...fx] });
     };
 
     /* ---------------------------------------------------------------------- */
@@ -625,6 +656,12 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
         if (completedExportUrl) URL.revokeObjectURL(completedExportUrl);
     }, [completedExportUrl]);
 
+    useEffect(() => {
+        const sync = () => setIsFullscreen(Boolean(document.fullscreenElement));
+        document.addEventListener('fullscreenchange', sync);
+        return () => document.removeEventListener('fullscreenchange', sync);
+    }, []);
+
     /* ---------------------------------------------------------------------- */
     /* Preview playback                                                       */
     /* ---------------------------------------------------------------------- */
@@ -656,6 +693,19 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
         }
         if (previewTimeRef.current >= durationMs) seekPreview(0);
         setIsPreviewPlaying(true);
+    };
+
+    const toggleFullscreen = async () => {
+        try {
+            if (isFullscreen) {
+                await exitDocumentFullscreen();
+            } else {
+                await requestElementFullscreen(stageRef.current);
+                if (images.length && !isPreviewPlaying) togglePreview();
+            }
+        } catch {
+            setError('Fullscreen is not available in this browser.');
+        }
     };
 
     useEffect(() => {
@@ -836,6 +886,21 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
         if (music) URL.revokeObjectURL(music.url);
         setMusic({ file, url: URL.createObjectURL(file) });
         setError(null);
+    };
+
+    /** One-click built-in music: the track is synthesized in the browser, no upload needed. */
+    const pickDefaultTrack = async (id: string) => {
+        setLoadingTrack(id);
+        try {
+            const file = await createDefaultTrackFile(id);
+            if (music) URL.revokeObjectURL(music.url);
+            setMusic({ file, url: URL.createObjectURL(file) });
+            setError(null);
+        } catch {
+            setError('Could not create this music track.');
+        } finally {
+            setLoadingTrack(null);
+        }
     };
 
     /** Non-blocking quality check: warn about small photos instead of rejecting them. */
@@ -1126,6 +1191,7 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
 
         const progressClamped = clamp(progress, 0, 1);
         const motionT = clamp(motionProgress, 0, 1);
+        const clipSeconds = (motionT * getClipDurationMs(image)) / 1000;
         const requestedMotion = image.type === 'image' ? image.motion ?? 'zoom-in' : 'none';
         const userScale = image.scale ?? 1;
 
@@ -1166,6 +1232,10 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
             ctx.scale(transitionScale, transitionScale);
             ctx.translate(-width / 2, -height / 2);
         }
+
+        // Camera effects (punch zoom, beat pulse, shake) move the media only
+        ctx.save();
+        applyCameraFx(ctx, image.fx, width, height, clipSeconds, fxBpm);
 
         // Media (the user zoom now applies to depth frames too)
         ctx.filter = `brightness(${brightness}%) saturate(${saturation}%)`;
@@ -1221,7 +1291,9 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
             ctx.fillRect(0, 0, width, height);
         }
 
-        drawProductEffects(ctx, image, width, height, motionT, { image: logoImage, corner: logoCorner, sizePct: logoSize });
+        ctx.restore(); // end camera transform
+        drawRgbSplit(ctx, image.fx, clipSeconds, fxBpm);
+        drawProductEffects(ctx, image, width, height, motionT, { image: logoImage, corner: logoCorner, sizePct: logoSize }, clipSeconds);
         drawCaption(ctx, image, width, height);
         ctx.restore();
     };
@@ -1247,6 +1319,7 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
                 brightness,
                 saturation,
                 musicVolume,
+                fxBpm,
                 template,
                 productTemplateId,
                 narrationText,
@@ -1275,6 +1348,9 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
                     badgeText: clip.badgeText,
                     badgeColor: clip.badgeColor,
                     badgeCorner: clip.badgeCorner,
+                    borderEffect: clip.borderEffect,
+                    borderColor: clip.borderColor,
+                    fx: clip.fx,
                     scale: clip.scale,
                     motion: clip.motion,
                     transition: clip.transition,
@@ -1364,6 +1440,7 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
             setBrightness(saved.brightness);
             setSaturation(saved.saturation);
             setMusicVolume(saved.musicVolume);
+            setFxBpm(saved.fxBpm ?? 120);
             setTemplate(saved.template ?? 'custom');
             setProductTemplateId(saved.productTemplateId ?? null);
             setNarrationText(saved.narrationText ?? '');
@@ -1646,6 +1723,7 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
     const filterStyle = `brightness(${brightness}%) saturate(${saturation}%)`;
     const activeScale = activeImage?.scale ?? 1;
     const activeClipProgress = activeImage ? clamp((previewTimeMs - activeClipStartMs) / getClipDurationMs(activeImage), 0, 1) : 0;
+    const activeClipSeconds = activeImage ? (activeClipProgress * getClipDurationMs(activeImage)) / 1000 : 0;
     const transitionProgress = !activeImage || activeImage.transition === 'cut'
         ? 1
         : Math.min(1, (activeClipProgress * getClipDurationMs(activeImage)) / TRANSITION_MS);
@@ -1660,10 +1738,11 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
     const activeDepth = activeUsesDepth && depthStatus[activeImage!.id] === 'ready' ? depthMaps[activeImage!.id] ?? null : null;
     const activeDepthLoading = activeUsesDepth && !depthStatus[activeImage!.id];
 
-    const frameSizeClass = aspectRatio === '9:16' ? 'h-[min(62dvh,38rem)] aspect-9/16'
-        : aspectRatio === '1:1' ? 'h-[min(62dvh,38rem)] aspect-square'
-            : aspectRatio === '4:5' ? 'h-[min(62dvh,38rem)] aspect-4/5'
-                : 'w-full aspect-video';
+    const frameH = isFullscreen ? 'h-[92dvh]' : 'h-[min(62dvh,38rem)]';
+    const frameSizeClass = aspectRatio === '9:16' ? `${frameH} aspect-9/16`
+        : aspectRatio === '1:1' ? `${frameH} aspect-square`
+            : aspectRatio === '4:5' ? `${frameH} aspect-4/5`
+                : isFullscreen ? 'w-full max-h-[92dvh] aspect-video' : 'w-full aspect-video';
 
     const mediaStyle: React.CSSProperties = { filter: filterStyle, transform: `scale(${activeScale})` };
 
@@ -1977,6 +2056,25 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
                                 </label>
                             )}
                             <RangeField label="Vignette" display={`${selectedImage.vignette ?? 0}%`} min={0} max={60} value={selectedImage.vignette ?? 0} onChange={(value) => updateSelected({ vignette: value })} />
+
+                            <SelectField label="Animated border" value={selectedImage.borderEffect ?? 'none'} onChange={(value) => updateSelected({ borderEffect: value as BorderEffect })}>
+                                {BORDER_EFFECTS.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
+                            </SelectField>
+                            {selectedImage.borderEffect && selectedImage.borderEffect !== 'none' && (
+                                <>
+                                    <label className="block text-xs font-semibold text-[#14121F]">Border color
+                                        <input type="color" value={selectedImage.borderColor ?? '#6A4CFF'} onChange={(event) => updateSelected({ borderColor: event.target.value })} className="mt-1.5 h-9 w-full cursor-pointer rounded-lg border border-[#14121F]/20 p-0" />
+                                    </label>
+                                    <button
+                                        type="button"
+                                        onClick={() => setImages((current) => current.map((clip) => ({ ...clip, borderEffect: selectedImage.borderEffect, borderColor: selectedImage.borderColor })))}
+                                        className="w-full rounded-xl border border-[#14121F]/15 bg-[#F7F6FB] px-3 py-2 text-xs font-semibold text-[#14121F]/80 transition hover:border-[#6A4CFF]"
+                                    >
+                                        Apply border to all clips
+                                    </button>
+                                </>
+                            )}
+
                             <input
                                 aria-label="Badge text"
                                 value={selectedImage.badgeText ?? ''}
@@ -1998,6 +2096,73 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
                         </>
                     ) : (
                         <p className="rounded-xl border border-dashed border-[#14121F]/20 px-3.5 py-4 text-center text-xs font-medium text-[#14121F]/50">Select a clip to add effects.</p>
+                    )}
+                </section>
+
+                {/* ---------------- Wow effects ---------------- */}
+                <section className={CARD_CLASS}>
+                    <h2 className="text-xs font-bold uppercase tracking-wider text-[#14121F]/70">✨ Wow effects</h2>
+                    {selectedImage ? (
+                        <>
+                            <p className="text-[10px] font-bold uppercase tracking-wider text-[#14121F]/50">One-click packs</p>
+                            <div className="grid grid-cols-2 gap-2">
+                                {FX_PRESETS.map((preset) => (
+                                    <button
+                                        key={preset.id}
+                                        type="button"
+                                        onClick={() => applyFxPreset(preset.fx, false)}
+                                        className="rounded-xl border border-[#14121F]/10 bg-[#F7F6FB] p-2.5 text-left transition hover:border-[#6A4CFF]/60"
+                                    >
+                                        <span className="block text-sm">{preset.emoji}</span>
+                                        <span className="block text-xs font-bold text-[#14121F]">{preset.label}</span>
+                                        <span className="block text-[10px] leading-snug text-[#14121F]/55">{preset.blurb}</span>
+                                    </button>
+                                ))}
+                            </div>
+
+                            {(['Motion', 'Hit', 'Particles', 'Look'] as const).map((group) => (
+                                <div key={group} className="space-y-1.5">
+                                    <p className="text-[10px] font-bold uppercase tracking-wider text-[#14121F]/50">{group}</p>
+                                    <div className="flex flex-wrap gap-1.5">
+                                        {FX_LIST.filter((item) => item.group === group).map((item) => {
+                                            const on = (selectedImage.fx ?? []).includes(item.id);
+                                            return (
+                                                <button
+                                                    key={item.id}
+                                                    type="button"
+                                                    onClick={() => toggleFx(item.id)}
+                                                    className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition ${on ? 'border-[#6A4CFF] bg-[#6A4CFF] text-white' : 'border-[#14121F]/15 bg-white text-[#14121F]/80 hover:border-[#6A4CFF]/60'}`}
+                                                >
+                                                    {item.emoji} {item.label}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            ))}
+
+                            <RangeField label="Beat speed" display={`${fxBpm} BPM`} min={60} max={180} value={fxBpm} onChange={setFxBpm} />
+
+                            <div className="flex gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => applyFxPreset(selectedImage.fx ?? [], true)}
+                                    className="flex-1 rounded-xl border border-[#14121F]/15 bg-[#F7F6FB] px-3 py-2 text-xs font-semibold text-[#14121F]/80 transition hover:border-[#6A4CFF]"
+                                >
+                                    Apply to all clips
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => applyFxPreset([], false)}
+                                    className="flex-1 rounded-xl border border-[#14121F]/15 bg-[#F7F6FB] px-3 py-2 text-xs font-semibold text-[#14121F]/80 transition hover:border-red-400 hover:text-red-600"
+                                >
+                                    Clear effects
+                                </button>
+                            </div>
+                            <p className="text-[10px] italic text-[#14121F]/50">💡 Tip: match "Beat speed" to your music. RGB split appears in the exported video, everything else shows live in the preview.</p>
+                        </>
+                    ) : (
+                        <p className="rounded-xl border border-dashed border-[#14121F]/20 px-3.5 py-4 text-center text-xs font-medium text-[#14121F]/50">Select a clip to add wow effects.</p>
                     )}
                 </section>
 
@@ -2030,9 +2195,26 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
                         <h2 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#14121F]/70"><Music2 className="h-4 w-4 text-[#6A4CFF]" /> Background music</h2>
                         {music && <button type="button" onClick={() => { URL.revokeObjectURL(music.url); setMusic(null); }} className="text-xs font-semibold text-[#14121F]/50 hover:text-red-600">Remove</button>}
                     </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                        {DEFAULT_TRACKS.map((track) => (
+                            <button
+                                key={track.id}
+                                type="button"
+                                onClick={() => void pickDefaultTrack(track.id)}
+                                disabled={loadingTrack !== null}
+                                className={`rounded-xl border p-2.5 text-left transition disabled:opacity-60 ${music?.file.name === `${track.label}.wav` ? 'border-[#6A4CFF] bg-[#6A4CFF]/5' : 'border-[#14121F]/10 bg-[#F7F6FB] hover:border-[#6A4CFF]/50'}`}
+                            >
+                                <span className="block text-sm">{loadingTrack === track.id ? '⏳' : track.emoji}</span>
+                                <span className="block text-xs font-bold text-[#14121F]">{track.label}</span>
+                                <span className="block text-[10px] text-[#14121F]/55">{track.mood}</span>
+                            </button>
+                        ))}
+                    </div>
+
                     <input ref={musicInputRef} type="file" accept="audio/*" onChange={setMusicFile} className="hidden" />
                     <button type="button" onClick={() => musicInputRef.current?.click()} className="w-full rounded-xl border border-[#14121F]/15 bg-[#F7F6FB] px-3.5 py-2.5 text-left text-xs font-semibold text-[#14121F] shadow-xs transition hover:border-[#6A4CFF]">
-                        {music ? music.file.name : 'Choose music track'}
+                        {music ? music.file.name : 'Or upload your own track'}
                     </button>
                     {music && (
                         <>
@@ -2051,50 +2233,62 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
                         <p className="text-xs font-medium text-[#14121F]/50">{images.length} clips · {durationLabel}</p>
                     </div>
                     {images.length > 0 && (
-                        <button type="button" onClick={togglePreview} className="flex items-center gap-2 rounded-xl border border-[#14121F]/15 bg-white px-4 py-2 text-xs font-semibold text-[#14121F] shadow-xs transition hover:border-[#6A4CFF]/40 hover:bg-gray-100">
-                            <Play className="h-3.5 w-3.5 text-[#6A4CFF]" />
-                            {isPreviewPlaying ? 'Pause preview' : 'Play preview'}
-                        </button>
+                        <div className="flex items-center gap-2">
+                            <button type="button" onClick={togglePreview} className="flex items-center gap-2 rounded-xl border border-[#14121F]/15 bg-white px-4 py-2 text-xs font-semibold text-[#14121F] shadow-xs transition hover:border-[#6A4CFF]/40 hover:bg-gray-100">
+                                <Play className="h-3.5 w-3.5 text-[#6A4CFF]" />
+                                {isPreviewPlaying ? 'Pause preview' : 'Play preview'}
+                            </button>
+                            <button type="button" onClick={() => void toggleFullscreen()} className="flex items-center gap-2 rounded-xl border border-[#14121F]/15 bg-white px-4 py-2 text-xs font-semibold text-[#14121F] shadow-xs transition hover:border-[#6A4CFF]/40 hover:bg-gray-100">
+                                <Maximize className="h-3.5 w-3.5 text-[#6A4CFF]" /> Fullscreen
+                            </button>
+                        </div>
                     )}
                 </div>
 
-                <div className="relative flex max-h-[65dvh] min-h-80 w-full max-w-4xl select-none items-center justify-center overflow-hidden rounded-3xl border border-[#14121F]/10 bg-[#F7F6FB] p-5 shadow-sm">
+                <div
+                    ref={stageRef}
+                    className={`relative flex select-none items-center justify-center overflow-hidden ${isFullscreen
+                        ? 'h-dvh w-dvw bg-black'
+                        : 'max-h-[65dvh] min-h-80 w-full max-w-4xl rounded-3xl border border-[#14121F]/10 bg-[#F7F6FB] p-5 shadow-sm'}`}
+                >
                     <div
                         ref={frameRef}
                         className={`relative flex items-center justify-center overflow-hidden rounded-2xl shadow-xl ${frameSizeClass}`}
                         style={{ backgroundColor, containerType: 'inline-size', ...transitionStyle }}
                     >
-                        {(() => {
-                            const isSaaSMode = productTemplateId === 'saas' || aspectRatio === '16:9';
-                            if (isSaaSMode && activeImage?.type === 'image') {
+                        <div className="h-full w-full" style={{ transform: cameraCss(activeImage?.fx, activeClipSeconds, fxBpm), transformOrigin: 'center' }}>
+                            {(() => {
+                                const isSaaSMode = productTemplateId === 'saas' || aspectRatio === '16:9';
+                                if (isSaaSMode && activeImage?.type === 'image') {
+                                    return (
+                                        <div className="flex flex-col h-full w-full bg-[#1e1e2e] rounded-xl overflow-hidden shadow-2xl border border-white/10" style={mediaStyle}>
+                                            <div className="flex items-center gap-1.5 px-3 py-2 bg-[#181824] shrink-0">
+                                                <div className="w-2.5 h-2.5 rounded-full bg-red-500" />
+                                                <div className="w-2.5 h-2.5 rounded-full bg-amber-500" />
+                                                <div className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+                                            </div>
+                                            <div className="relative flex-1 overflow-hidden bg-black">
+                                                <img src={activeImage.url} alt="" className="h-full w-full object-fill" />
+                                            </div>
+                                        </div>
+                                    );
+                                }
+                                if (activeImage?.type === 'video') {
+                                    return <video key={activeImage.id} ref={previewVideoRef} src={activeImage.url} muted playsInline preload="auto" className="h-full w-full object-contain" style={mediaStyle} />;
+                                }
+                                if (activeImage && activeDepth) {
+                                    return <DepthPreview clip={activeImage} depth={activeDepth} progress={activeClipProgress} aspectRatio={aspectRatio} filter={filterStyle} backgroundColor={backgroundColor} scale={activeScale} softEdges={activeImage.softEdges !== false} />;
+                                }
+                                if (activeImage) {
+                                    return <img src={activeImage.url} alt="" className="h-full w-full object-contain" style={mediaStyle} />;
+                                }
                                 return (
-                                    <div className="flex flex-col h-full w-full bg-[#1e1e2e] rounded-xl overflow-hidden shadow-2xl border border-white/10" style={mediaStyle}>
-                                        <div className="flex items-center gap-1.5 px-3 py-2 bg-[#181824] shrink-0">
-                                            <div className="w-2.5 h-2.5 rounded-full bg-red-500" />
-                                            <div className="w-2.5 h-2.5 rounded-full bg-amber-500" />
-                                            <div className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-                                        </div>
-                                        <div className="relative flex-1 overflow-hidden bg-black">
-                                            <img src={activeImage.url} alt="" className="h-full w-full object-fill" />
-                                        </div>
+                                    <div className="flex h-full items-center justify-center text-center text-xs font-semibold text-black/40">
+                                        <span><ImagePlus className="mx-auto mb-3 h-8 w-8 text-black/30" />Add product photos or videos</span>
                                     </div>
                                 );
-                            }
-                            if (activeImage?.type === 'video') {
-                                return <video key={activeImage.id} ref={previewVideoRef} src={activeImage.url} muted playsInline preload="auto" className="h-full w-full object-contain" style={mediaStyle} />;
-                            }
-                            if (activeImage && activeDepth) {
-                                return <DepthPreview clip={activeImage} depth={activeDepth} progress={activeClipProgress} aspectRatio={aspectRatio} filter={filterStyle} backgroundColor={backgroundColor} scale={activeScale} softEdges={activeImage.softEdges !== false} />;
-                            }
-                            if (activeImage) {
-                                return <img src={activeImage.url} alt="" className="h-full w-full object-contain" style={mediaStyle} />;
-                            }
-                            return (
-                                <div className="flex h-full items-center justify-center text-center text-xs font-semibold text-black/40">
-                                    <span><ImagePlus className="mx-auto mb-3 h-8 w-8 text-black/30" />Add product photos or videos</span>
-                                </div>
-                            );
-                        })()}
+                            })()}
+                        </div>
 
                         {activeDepthLoading && (
                             <div className="pointer-events-none absolute left-1/2 top-3 z-10 flex -translate-x-1/2 items-center gap-2 rounded-full bg-black/70 px-3.5 py-1.5 text-xs font-semibold text-white backdrop-blur-md">
@@ -2103,7 +2297,7 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
                         )}
 
                         {activeImage && (
-                            <EffectsOverlay clip={activeImage} progress={activeClipProgress} aspectRatio={aspectRatio} logoImage={logoImage} logoCorner={logoCorner} logoSize={logoSize} />
+                            <EffectsOverlay clip={activeImage} progress={activeClipProgress} seconds={activeClipSeconds} aspectRatio={aspectRatio} logoImage={logoImage} logoCorner={logoCorner} logoSize={logoSize} />
                         )}
 
                         {activeImage?.overlayText && (
@@ -2115,6 +2309,13 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
                             />
                         )}
                     </div>
+
+                    {isFullscreen && (
+                        <div className="absolute bottom-6 left-1/2 z-20 flex -translate-x-1/2 items-center gap-3 rounded-full bg-black/60 px-4 py-2 backdrop-blur">
+                            <button type="button" onClick={togglePreview} aria-label="Play or pause" className="rounded-full p-2 text-white hover:bg-white/15"><Play className="h-4 w-4" /></button>
+                            <button type="button" onClick={() => void toggleFullscreen()} aria-label="Exit fullscreen" className="rounded-full p-2 text-white hover:bg-white/15"><Minimize className="h-4 w-4" /></button>
+                        </div>
+                    )}
                 </div>
 
                 {images.length > 0 && (
