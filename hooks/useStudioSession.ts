@@ -41,7 +41,7 @@ const DEFAULT_SETTINGS: StudioSettings = {
     scriptText: 'Type or paste your script here...\n\nWelcome to your new video studio. Keep your eyes on the camera lens while reading smoothly.'
 };
 
-export const FREE_RECORDING_LIMIT_SECONDS = 60;
+export const FREE_RECORDING_LIMIT_SECONDS = 300;
 
 export function useStudioSession(enabled = true, screenShareStream: MediaStream | null = null) {
     const [settings, setSettings] = useState<StudioSettings>(DEFAULT_SETTINGS);

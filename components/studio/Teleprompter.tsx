@@ -1,8 +1,7 @@
 'use client';
 
-import React from 'react';
-import { useState } from 'react';
-import { Loader2, Sparkles } from 'lucide-react';
+import React, { useRef, useState } from 'react';
+import { GripHorizontal, Loader2, Sparkles } from 'lucide-react';
 import { ScriptLanguage } from '@/types/studio';
 
 interface TeleprompterProps {
@@ -17,12 +16,20 @@ const LANGUAGE_OPTIONS: Array<[ScriptLanguage, string]> = [
     ['bn', 'Bengali · বাংলা'], ['mr', 'Marathi · मराठी'], ['ta', 'Tamil · தமிழ்'], ['te', 'Telugu · తెలుగు'],
 ];
 
+const MIN_HEIGHT = 96;
+const MAX_HEIGHT = 520;
+const DEFAULT_HEIGHT = 168;
+
 export function Teleprompter({ scriptText, language, onLanguageChange, onScriptChange }: TeleprompterProps) {
     const [topic, setTopic] = useState('');
     const [tone, setTone] = useState('Warm and confident');
     const [seconds, setSeconds] = useState(30);
     const [isGenerating, setIsGenerating] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [height, setHeight] = useState(DEFAULT_HEIGHT);
+    const dragRef = useRef<{ startY: number; startHeight: number } | null>(null);
+
+    const clampHeight = (value: number) => Math.max(MIN_HEIGHT, Math.min(MAX_HEIGHT, value));
 
     const generateScript = async () => {
         if (!topic.trim() || isGenerating) return;
@@ -54,14 +61,46 @@ export function Teleprompter({ scriptText, language, onLanguageChange, onScriptC
                     {LANGUAGE_OPTIONS.map(([code, name]) => <option key={code} value={code}>{name}</option>)}
                 </select>
             </div>
-            <textarea
-                value={scriptText}
-                onChange={(e) => onScriptChange(e.target.value)}
-                id="teleprompter-script"
-                placeholder="Write, paste, or generate your script…"
-                rows={7}
-                className="w-full resize-y rounded-2xl border border-[#14121F]/10 bg-[#F7F6FB] p-3.5 text-sm leading-relaxed text-[#14121F] placeholder:text-[#14121F]/40 focus:border-[#6A4CFF] focus:bg-white focus:outline-none"
-            />
+
+            <div>
+                <textarea
+                    value={scriptText}
+                    onChange={(e) => onScriptChange(e.target.value)}
+                    id="teleprompter-script"
+                    placeholder="Write, paste, or generate your script…"
+                    style={{ height }}
+                    className="block w-full resize-none rounded-t-2xl border border-b-0 border-[#14121F]/10 bg-[#F7F6FB] p-3.5 text-sm leading-relaxed text-[#14121F] placeholder:text-[#14121F]/40 focus:border-[#6A4CFF] focus:bg-white focus:outline-none"
+                />
+                {/* Drag handle: mouse and touch */}
+                <div
+                    role="separator"
+                    aria-orientation="horizontal"
+                    aria-label="Drag to change script box height"
+                    aria-valuemin={MIN_HEIGHT}
+                    aria-valuemax={MAX_HEIGHT}
+                    aria-valuenow={height}
+                    tabIndex={0}
+                    title="Drag up or down to resize"
+                    onPointerDown={(event) => {
+                        dragRef.current = { startY: event.clientY, startHeight: height };
+                        event.currentTarget.setPointerCapture(event.pointerId);
+                    }}
+                    onPointerMove={(event) => {
+                        if (!dragRef.current) return;
+                        setHeight(clampHeight(dragRef.current.startHeight + (event.clientY - dragRef.current.startY)));
+                    }}
+                    onPointerUp={() => { dragRef.current = null; }}
+                    onPointerCancel={() => { dragRef.current = null; }}
+                    onDoubleClick={() => setHeight(DEFAULT_HEIGHT)}
+                    onKeyDown={(event) => {
+                        if (event.key === 'ArrowDown') { event.preventDefault(); setHeight((h) => clampHeight(h + 24)); }
+                        if (event.key === 'ArrowUp') { event.preventDefault(); setHeight((h) => clampHeight(h - 24)); }
+                    }}
+                    className="flex h-5 w-full cursor-ns-resize touch-none items-center justify-center rounded-b-2xl border border-[#14121F]/10 bg-[#14121F]/5 text-[#14121F]/40 transition-colors hover:bg-[#6A4CFF]/15 hover:text-[#6A4CFF] focus:border-[#6A4CFF] focus:outline-none">
+                    <GripHorizontal className="h-4 w-4" />
+                </div>
+            </div>
+
             <details className="rounded-2xl border border-[#14121F]/10 bg-[#F7F6FB] p-3.5">
                 <summary className="flex cursor-pointer list-none items-center gap-2 text-xs font-semibold text-[#6A4CFF]"><Sparkles className="h-3.5 w-3.5" /> AI script builder</summary>
                 <div className="mt-3.5 space-y-3">
