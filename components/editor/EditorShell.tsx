@@ -1,14 +1,15 @@
 'use client';
 
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react'; // CUT: useEffect
 import { Download, ArrowLeft, Loader2, Volume2, VolumeX, Bookmark, MoreHorizontal, ChevronDown } from 'lucide-react';
 import { useEditorProject } from '@/hooks/useEditorProject';
 import { PreviewCanvas } from './PreviewCanvas';
 import { Timeline } from './Timeline';
+import { TranscriptPanel } from './TranscriptPanel'; // CUT
 import { EditorSidebar } from './EditorSidebar';
 import { buildColorGradeFilter } from './colorGrade';
 import { saveEditorDraft } from './drafts';
-import { EditorProject } from '@/types/editor';
+import { EditorProject, TimeRange } from '@/types/editor'; // CUT: TimeRange
 import { createExportRecorder, getExportDimensions, getFrameCrop, getRecordingDimensions, RECORDING_FRAME_RATE, ExportFormat, ExportResolution } from '@/components/recordingQuality';
 import { AspectRatioType } from '@/types/studio';
 import { CameraArtEffect, ScriptLanguage } from '@/types/studio';
@@ -21,6 +22,7 @@ import { drawActiveOverlays } from './overlayRendering';
 import { getZoomScale } from './zoom';
 import { createTransitionRenderer, TransitionRenderer } from './transitionRenderer';
 import { drawTransitionFrame, getInitialPerformanceMode, storePerformanceMode, TransitionSnapshots } from './transitions';
+import { addDeletedRange, removeDeletedRange, getKeepRanges, skipTarget, sourceToOutput } from '@/lib/cuts'; // CUT
 
 interface EditorShellProps {
     sourceVideoUrl: string;
@@ -103,6 +105,31 @@ export function EditorShell({ sourceVideoUrl, aspectRatio, initialScript, initia
         if (!isPlaying) togglePlay();
     };
 
+    // CUT: remove a section and join the rest
+    const handleDeleteRange = (range: TimeRange) => {
+        if (!project) return;
+        const { trimStartMs, trimEndMs, deletedRanges } = project.videoEdit;
+        const next = addDeletedRange(deletedRanges ?? [], range);
+        const keptMs = getKeepRanges(trimStartMs, trimEndMs, next).reduce((sum, k) => sum + k.endMs - k.startMs, 0);
+        if (keptMs < 250) return; // never delete everything
+        beginVideoEdit();
+        updateVideoEdit({ deletedRanges: next });
+    };
+
+    // CUT: bring a removed section back
+    const handleRestoreRange = (atMs: number) => {
+        if (!project) return;
+        beginVideoEdit();
+        updateVideoEdit({ deletedRanges: removeDeletedRange(project.videoEdit.deletedRanges ?? [], atMs) });
+    };
+
+    // CUT: preview jumps over removed sections while playing
+    useEffect(() => {
+        if (!project || !isPlaying || isExporting) return;
+        const target = skipTarget(playheadMs, project.videoEdit.deletedRanges);
+        if (target !== null) seekTo(target);
+    }, [playheadMs, isPlaying, isExporting, project, seekTo]);
+
     const handleSaveDraft = async () => {
         if (!project || isSavingDraft) return;
         setIsSavingDraft(true);
@@ -137,9 +164,11 @@ export function EditorShell({ sourceVideoUrl, aspectRatio, initialScript, initia
         const wasPlaying = !video.paused;
         const trimStartMs = project.videoEdit.trimStartMs;
         const trimEndMs = project.videoEdit.trimEndMs;
-        const trimmedDurationMs = Math.max(1, trimEndMs - trimStartMs);
-        if (trimmedDurationMs > FREE_VIDEO_LIMIT_MS) {
-            setExportError('The free plan supports exports up to 60 seconds. Trim the clip in the timeline or upgrade when billing is configured.');
+        // CUT: length after removed sections
+        const keep = getKeepRanges(trimStartMs, trimEndMs, project.videoEdit.deletedRanges);
+        const keptDurationMs = Math.max(1, keep.reduce((sum, k) => sum + k.endMs - k.startMs, 0));
+        if (keptDurationMs > FREE_VIDEO_LIMIT_MS) {
+            setExportError('The free plan supports exports up to 60 seconds. Trim or cut the clip in the timeline or upgrade when billing is configured.');
             setExportStage('error');
             return;
         }
@@ -234,6 +263,14 @@ export function EditorShell({ sourceVideoUrl, aspectRatio, initialScript, initia
                     return;
                 }
 
+                // CUT: skip removed sections, so picture and audio are both cut
+                const jumpMs = skipTarget(video.currentTime * 1000, project.videoEdit.deletedRanges);
+                if (jumpMs !== null) {
+                    video.currentTime = jumpMs / 1000;
+                    animationFrameId = requestAnimationFrame(renderExportFrame);
+                    return;
+                }
+
                 ctx.save();
                 ctx.clearRect(0, 0, exportCanvas.width, exportCanvas.height);
                 const currentMs = video.currentTime * 1000;
@@ -255,7 +292,9 @@ export function EditorShell({ sourceVideoUrl, aspectRatio, initialScript, initia
                 applyArtisticEffect(exportCanvas, project.cameraArtEffect);
                 drawFreeTierWatermark(ctx, exportCanvas.width, exportCanvas.height);
 
-                const percent = Math.min(85, Math.floor(((video.currentTime * 1000 - trimStartMs) / trimmedDurationMs) * 85));
+                // CUT: progress measured on the joined timeline
+                const outputMs = sourceToOutput(currentMs, keep) ?? 0;
+                const percent = Math.min(85, Math.floor((outputMs / keptDurationMs) * 85));
                 if (percent !== lastPercent) {
                     lastPercent = percent;
                     setExportProgress(percent);
@@ -546,9 +585,24 @@ export function EditorShell({ sourceVideoUrl, aspectRatio, initialScript, initia
                             onRemoveSplit={removeVideoSplit}
                             onSetTransition={setTransitionAt}
                             onPreviewTransition={handlePreviewTransition}
+                            onDeleteRange={handleDeleteRange}   // CUT
+                            onRestoreRange={handleRestoreRange} // CUT
                             performanceMode={performanceMode}
                             onPerformanceModeChange={handlePerformanceModeChange}
                         />
+                        {/* CUT: clickable script, shown once captions exist */}
+                        {project.tracks.captions.length > 0 && (
+                            <div className="max-h-40 shrink-0 overflow-y-auto">
+                                <TranscriptPanel
+                                    words={project.tracks.captions.map((cue) => ({ text: cue.text, startMs: cue.startMs, endMs: cue.endMs }))}
+                                    playheadMs={playheadMs}
+                                    deleted={project.videoEdit.deletedRanges ?? []}
+                                    onSeek={seekTo}
+                                    onDelete={handleDeleteRange}
+                                    onRestore={handleRestoreRange}
+                                />
+                            </div>
+                        )}
                     </div>
                 ) : projectLoadError ? (
                     <div className="flex flex-1 items-center justify-center p-6">

@@ -9,6 +9,11 @@ export interface BaseClip {
     endMs: number;
 }
 
+export interface TimeRange {
+    startMs: number;
+    endMs: number;
+}
+
 export interface OverlayClip extends BaseClip {
     type: OverlayType;
     content: string;           // text string, or icon identifier
@@ -42,6 +47,7 @@ export interface VideoEditState {
     trimEndMs: number;
     splitPointsMs: number[];
     transitions?: ClipTransition[];
+    deletedRanges?: TimeRange[]; // source-time sections cut out; sorted, non-overlapping
 }
 
 export type BackgroundKind = 'none' | 'color' | 'gradient' | 'image';
@@ -68,6 +74,12 @@ export interface ColorGradeSettings {
     contrast: number;
     saturation: number;
     temperature: number; // -100 (cool) to 100 (warm)
+}
+
+export interface ZoomKeyframe {
+    id: string;
+    atMs: number;
+    scale: number; // 1 = 100% (no zoom), 1.5 = 150%, etc.
 }
 
 export interface EditorTracks {
@@ -100,12 +112,15 @@ export const DEFAULT_COLOR_GRADE: ColorGradeSettings = {
     saturation: 100,
     temperature: 0,
 };
-export interface ZoomKeyframe {
-    id: string;
-    atMs: number;
-    scale: number; // 1 = 100% (no zoom), 1.5 = 150%, etc.
-}
-export function createEmptyProject(sourceVideoUrl: string, durationMs: number, aspectRatio: AspectRatioType = '16:9', teleprompterScript = '', scriptLanguage: ScriptLanguage = 'en', cameraArtEffect: CameraArtEffect = 'none'): EditorProject {
+
+export function createEmptyProject(
+    sourceVideoUrl: string,
+    durationMs: number,
+    aspectRatio: AspectRatioType = '16:9',
+    teleprompterScript = '',
+    scriptLanguage: ScriptLanguage = 'en',
+    cameraArtEffect: CameraArtEffect = 'none',
+): EditorProject {
     return {
         title: 'Untitled creator project',
         sourceVideoUrl,
@@ -115,7 +130,7 @@ export function createEmptyProject(sourceVideoUrl: string, durationMs: number, a
         scriptLanguage,
         cameraArtEffect,
         captionStyle: 'classic',
-        videoEdit: { trimStartMs: 0, trimEndMs: durationMs, splitPointsMs: [] },
+        videoEdit: { trimStartMs: 0, trimEndMs: durationMs, splitPointsMs: [], deletedRanges: [] },
         muteOriginalAudio: false,
         tracks: {
             background: [],

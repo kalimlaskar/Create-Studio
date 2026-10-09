@@ -12,7 +12,7 @@ export async function consumeAiCredit(): Promise<Response | null> {
     // Demo auth (no Supabase configured) has no per-user storage, so it is not limited.
     if (!supabase) return null;
 
-    const freeLimit = readLimit('AI_DAILY_LIMIT', 2);
+    const freeLimit = readLimit('AI_DAILY_LIMIT', 12);
     const proLimit = readLimit('AI_PRO_DAILY_LIMIT', 200);
     const { data, error } = await supabase.rpc('consume_ai_credit', { free_limit: freeLimit, pro_limit: proLimit });
     if (error) {
