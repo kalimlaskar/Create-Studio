@@ -1,4 +1,13 @@
-import { ReelImage } from '@/types/studio';
+/**
+ * Local clip definition to ensure type safety without relying on external export names.
+ */
+export interface SaasClip {
+    focusX?: number;
+    focusY?: number;
+    scale?: number;
+    clickEffect?: boolean;
+    [key: string]: any;
+}
 
 /**
  * Renders the high-end SaaS window frame, smooth focus zoom, 3D perspective tilt, 
@@ -6,7 +15,7 @@ import { ReelImage } from '@/types/studio';
  */
 export function drawSaasDemoEffect(
     ctx: CanvasRenderingContext2D,
-    clip: ReelImage,
+    clip: SaasClip,
     element: CanvasImageSource,
     width: number,
     height: number,

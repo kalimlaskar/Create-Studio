@@ -1,21 +1,22 @@
 /* -------------------------------------------------------------------------- */
 /* Trending "wow" effects for PhotoReelStudio                                 */
 /*                                                                            */
-/*  - Camera effects (punch zoom, beat pulse, shake, 3D tilts/zooms) are      */
-/*    transforms applied to media. CSS in the preview, ctx transform in export.*/
+/*  - Camera effects (punch zoom, beat pulse, shake, 3D tilts/zooms, 360-spin)*/
+/*    are transforms applied to media. CSS in the preview, ctx transform in export.*/
 /*  - Overlay effects are drawn on a canvas on top of the frame. The same     */
 /*    code runs in the live preview and in the export.                        */
 /*  - RGB split is a pixel effect and is applied in the export only.          */
 /* -------------------------------------------------------------------------- */
 
 export type FxId =
-    | 'whip-zoom' | 'beat-pulse' | 'shake' | 'click-pop' | 'cursor-click'
+    | '360-spin' | 'whip-zoom' | 'beat-pulse' | 'shake' | 'click-pop' | 'cursor-click'
     | 'tilt-left' | 'tilt-right' | 'tilt-both' | 'zoom-tilt-left' | 'zoom-tilt-right'
     | 'flash' | 'glitch' | 'rgb-split' | 'speed-lines'
     | 'sparks' | 'bokeh' | 'confetti'
     | 'light-leak' | 'bloom' | 'film-grain' | 'scanlines' | 'letterbox';
 
-export const FX_LIST: Array<{ id: FxId; label: string; emoji: string; group: 'Motion' | 'Hit' | 'Particles' | 'Look' }> = [
+export const FX_LIST: Array<{ id: FxId; label: string; emoji: string; group: 'Motion' | 'Hit' | 'Particles' | 'Look'; blurb?: string }> = [
+    { id: '360-spin', label: '360° 3D Turntable Spin', emoji: '🔄', group: 'Motion', blurb: 'Continuous 3D horizontal turntable rotation' },
     { id: 'cursor-click', label: 'Cursor Click & Glow', emoji: '🖱️', group: 'Motion' },
     { id: 'click-pop', label: 'Click & Pop', emoji: '👆', group: 'Motion' },
     { id: 'whip-zoom', label: 'Punch-in zoom', emoji: '🎯', group: 'Motion' },
@@ -71,8 +72,9 @@ export interface CameraTransform {
     scale: number;
     dx: number; // fraction of frame width
     dy: number; // fraction of frame height
-    rot: number; // radians
-    tiltY?: number; // Y-axis 3D perspective rotation
+    rot: number; // Z-axis rotation radians
+    tiltY: number; // Y-axis 3D perspective tilt
+    spinY: number; // True 3D horizontal 360-degree spin angle (radians)
 }
 
 export function getCameraTransform(fx: FxId[] | undefined, seconds: number, bpm = 120): CameraTransform {
@@ -81,9 +83,15 @@ export function getCameraTransform(fx: FxId[] | undefined, seconds: number, bpm 
     let dy = 0;
     let rot = 0;
     let tiltY = 0;
+    let spinY = 0;
 
-    if (!fx || fx.length === 0) return { scale, dx, dy, rot, tiltY };
+    if (!fx || fx.length === 0) return { scale, dx, dy, rot, tiltY, spinY };
 
+    if (has(fx, '360-spin')) {
+        const spinDuration = (60 / bpm) * 4; // Complete 360-degree rotation every 4 beats
+        spinY = (seconds % spinDuration) * ((Math.PI * 2) / spinDuration);
+        scale *= 1.15; // Slightly zoom in so edges look clean during 3D rotation
+    }
     if (has(fx, 'whip-zoom')) {
         const e = Math.exp(-seconds * 6.5);
         scale *= 1 + 0.4 * e;
@@ -139,15 +147,22 @@ export function getCameraTransform(fx: FxId[] | undefined, seconds: number, bpm 
             scale *= 1.02;
         }
     }
-    return { scale, dx, dy, rot, tiltY };
+    return { scale, dx, dy, rot, tiltY, spinY };
 }
 
 export function applyCameraFx(ctx: CanvasRenderingContext2D, fx: FxId[] | undefined, w: number, h: number, seconds: number, bpm = 120) {
     const t = getCameraTransform(fx, seconds, bpm);
-    if (t.scale === 1 && t.dx === 0 && t.dy === 0 && t.rot === 0 && !t.tiltY) return;
+    if (t.scale === 1 && t.dx === 0 && t.dy === 0 && t.rot === 0 && !t.tiltY && t.spinY === 0) return;
 
     ctx.translate(w / 2 + t.dx * w, h / 2 + t.dy * h);
     ctx.rotate(t.rot);
+
+    if (t.spinY !== 0) {
+        const cosY = Math.cos(t.spinY);
+        // Using absolute cosine ensures the object maintains 3D solidity volume instead of collapsing completely flat
+        const effectiveWidthScale = Math.max(0.15, Math.abs(cosY));
+        ctx.scale(effectiveWidthScale, 1);
+    }
 
     if (t.tiltY) {
         const skewAmount = Math.sin(t.tiltY) * 0.6;
@@ -161,15 +176,18 @@ export function applyCameraFx(ctx: CanvasRenderingContext2D, fx: FxId[] | undefi
 
 export function cameraCss(fx: FxId[] | undefined, seconds: number, bpm = 120): string {
     const t = getCameraTransform(fx, seconds, bpm);
-    if (t.scale === 1 && t.dx === 0 && t.dy === 0 && t.rot === 0 && !t.tiltY) return 'none';
+    if (t.scale === 1 && t.dx === 0 && t.dy === 0 && t.rot === 0 && !t.tiltY && t.spinY === 0) return 'none';
 
-    const perspective = 'perspective(900px)';
+    const perspective = 'perspective(1200px)';
     const translate = `translate(${(t.dx * 100).toFixed(3)}%, ${(t.dy * 100).toFixed(3)}%)`;
-    const rotateY = `rotateY(${(t.tiltY || 0).toFixed(4)}rad)`;
+
+    // Rotate Y for 3D spin, but add a slight scaleX buffer or depth translation so it doesn't vanish into a paper-thin line
+    const rotateY3D = `rotateY(${t.spinY.toFixed(4)}rad)`;
+    const tiltRotateY = `rotateY(${(t.tiltY || 0).toFixed(4)}rad)`;
     const rotateZ = `rotate(${t.rot.toFixed(4)}rad)`;
     const scale = `scale(${t.scale.toFixed(4)})`;
 
-    return `${perspective} ${translate} ${rotateY} ${rotateZ} ${scale}`;
+    return `${perspective} ${translate} ${rotateY3D} ${tiltRotateY} ${rotateZ} ${scale}`;
 }
 
 /* ------------------------------ pixel FX (export) ------------------------- */
@@ -252,24 +270,19 @@ const getGrainTile = () => {
     return grainTile;
 };
 
-/** 
- * drawOverlayFx now accepts explicit targetX and targetY fractions (0 to 1) 
- * so you can pass custom interactive coordinates or connect it to user drag/selection state!
- */
 export function drawOverlayFx(
     ctx: CanvasRenderingContext2D,
     fx: FxId[] | undefined,
     w: number,
     h: number,
     seconds: number,
-    targetX = 0.5, // e.g. 0.5 is center horizontally
-    targetY = 0.4  // e.g. 0.4 is 40% down from the top
+    targetX = 0.5,
+    targetY = 0.4
 ) {
     if (!fx || fx.length === 0) return;
     const u = w / 540;
     ctx.save();
 
-    // --- Precise Cursor Glide & Glowing Click Effect ---
     if (has(fx, 'cursor-click')) {
         const animTime = seconds % 3.0;
         let cursorX = w * 0.5;
@@ -291,7 +304,7 @@ export function drawOverlayFx(
             cursorY = destY;
             const clickProgress = animTime - 0.9;
             if (clickProgress < 0.2) {
-                scale = 0.85; // Click press-down scale
+                scale = 0.85;
             } else {
                 scale = 1;
                 const waveTime = clickProgress - 0.2;
@@ -300,7 +313,6 @@ export function drawOverlayFx(
             }
         }
 
-        // Draw Glowing Click Ripple Ring
         if (ringAlpha > 0) {
             ctx.save();
             ctx.beginPath();
@@ -313,7 +325,6 @@ export function drawOverlayFx(
             ctx.restore();
         }
 
-        // Draw Correctly-Oriented Professional Pointer Arrow Icon
         ctx.save();
         ctx.translate(cursorX, cursorY);
         ctx.scale(scale, scale);
@@ -325,13 +336,13 @@ export function drawOverlayFx(
         ctx.shadowBlur = 6 * u;
 
         ctx.beginPath();
-        ctx.moveTo(0, 0);                   // Top-left tip (hotspot)
-        ctx.lineTo(0, 24 * u);              // Vertical left edge
-        ctx.lineTo(7 * u, 18 * u);          // Inner slant
-        ctx.lineTo(13 * u, 28 * u);         // Pointer tail bottom edge
-        ctx.lineTo(16 * u, 26 * u);         // Pointer tail side
-        ctx.lineTo(10 * u, 16 * u);         // Inner slant right
-        ctx.lineTo(18 * u, 16 * u);         // Outer right edge
+        ctx.moveTo(0, 0);
+        ctx.lineTo(0, 24 * u);
+        ctx.lineTo(7 * u, 18 * u);
+        ctx.lineTo(13 * u, 28 * u);
+        ctx.lineTo(16 * u, 26 * u);
+        ctx.lineTo(10 * u, 16 * u);
+        ctx.lineTo(18 * u, 16 * u);
         ctx.closePath();
         ctx.fill();
         ctx.stroke();

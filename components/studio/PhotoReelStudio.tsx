@@ -2325,7 +2325,20 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
                             className={`relative flex items-center justify-center overflow-hidden rounded-2xl shadow-xl ${frameSizeClass}`}
                             style={{ backgroundColor, containerType: 'inline-size', ...transitionStyle }}
                         >
-                            <div className="h-full w-full" style={{ transform: cameraCss(activeImage?.fx, activeClipSeconds, fxBpm), transformOrigin: 'center' }}>
+                            {/* 
+                          --- TRUE 3D TURNTABLE TRANSFORMATION WRAPPER --- 
+                          Added perspective, transformOrigin, and backfaceVisibility 
+                          so the product rotates smoothly around its center axis in 3D space.
+                        */}
+                            <div
+                                className="h-full w-full"
+                                style={{
+                                    transform: cameraCss(activeImage?.fx, activeClipSeconds, fxBpm),
+                                    transformOrigin: 'center center',
+                                    backfaceVisibility: 'visible',
+                                    perspective: '1200px'
+                                }}
+                            >
                                 {(() => {
                                     const isSaaSMode = productTemplateId === 'saas' || aspectRatio === '16:9';
                                     if (isSaaSMode && activeImage?.type === 'image') {
@@ -2382,7 +2395,7 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
                         {isFullscreen && (
                             <div className="absolute bottom-6 left-1/2 z-20 flex -translate-x-1/2 items-center gap-3 rounded-full bg-black/60 px-4 py-2 backdrop-blur">
                                 <button type="button" onClick={togglePreview} aria-label="Play or pause" className="rounded-full p-2 text-white hover:bg-white/15"><Play className="h-4 w-4" /></button>
-                                <button type="button" onClick={() => void toggleFullscreen()} aria-label="Exit fullscreen" className="rounded-full p-2 text-white hover:bg-white/15"><Minimize className="h-4 w-4" /></button>
+                                <button type="button" onClick={() => void toggleFullscreen()} aria-label="Exit fullscreen" className="rounded-full p-2 text-white hover:bg-white/15"><Maximize className="h-4 w-4" /></button>
                             </div>
                         )}
                     </div>
@@ -2491,7 +2504,7 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
                                     max={Math.max(0.6, Math.floor(((selectedImage.sourceDurationMs ?? selectedImage.durationMs) / (selectedImage.speed ?? 1) / 1000) * 10) / 10)}
                                     step={0.1}
                                     value={selectedImage.durationMs / 1000}
-                                    onChange={(value) => updateSelected({ durationMs: Math.round(value * 1000) })}
+                                    onChange={(value: number) => updateSelected({ durationMs: Math.round(value * 1000) })}
                                 />
                             )}
 
