@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, ArrowDown, ArrowUp, Download, FolderOpen, ImagePlus, Loader2, Maximize, Minimize, Music2, Play, Save, Trash2, ChevronDown, ZoomIn, ZoomOut } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Download, FolderOpen, Gauge, ImagePlus, Loader2, Maximize, Minimize, Music2, Play, Save, Trash2, ChevronDown, ZoomIn, ZoomOut } from 'lucide-react';
 import { AspectRatioType } from '@/types/studio';
 import { createExportRecorder, getExportDimensions, RECORDING_FRAME_RATE } from '@/components/recordingQuality';
 import { drawFreeTierWatermark, FREE_VIDEO_LIMIT_MS } from '@/components/freeTier';
@@ -50,6 +50,7 @@ interface ReelImage {
     borderEffect?: BorderEffect;           // animated glowing / glitter border
     borderColor?: string;                  // border accent color (hex)
     fx?: FxId[];                           // trending wow effects
+    speed?: number;                        // playback speed (0.25 – 4). Photos: shorter + faster motion. Videos: playback rate
     autoCaption?: boolean;                 // caption came from the template (safe to replace)
     scale?: number;                        // image zoom (0.5 – 2.5)
     motion: 'none' | 'zoom-in' | 'zoom-out' | 'pan-left' | 'pan-right' | DepthMotion;
@@ -323,6 +324,16 @@ const makeId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 const getDefaultTextColor = (style: TextOverlayStyle) => (style === 'highlight' ? '#111111' : '#ffffff');
 
+const SPEED_PRESETS = [0.25, 0.5, 1, 1.5, 2, 3, 4];
+
+/** Returns the clip with a new speed. For videos the amount of source footage that is used stays the same, so the clip gets shorter or longer. */
+const withSpeed = (clip: ReelImage, next: number): ReelImage => {
+    const speed = clamp(Math.round(next * 100) / 100, 0.25, 4);
+    if (clip.type !== 'video') return { ...clip, speed };
+    const used = clip.durationMs * (clip.speed ?? 1);
+    return { ...clip, speed, durationMs: Math.max(300, used / speed) };
+};
+
 /* -------------------------------------------------------------------------- */
 /* Small reusable UI pieces                                                   */
 /* -------------------------------------------------------------------------- */
@@ -552,7 +563,7 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
     const previewTimeRef = useRef(0);
 
     /* ---- derived ---- */
-    const getClipDurationMs = (clip: ReelImage) => (clip.type === 'image' ? secondsPerImage * 1000 : clip.durationMs);
+    const getClipDurationMs = (clip: ReelImage) => (clip.type === 'image' ? (secondsPerImage * 1000) / (clip.speed ?? 1) : clip.durationMs);
     const durationMs = images.reduce((total, clip) => total + getClipDurationMs(clip), 0);
     const getStartAtIndex = (targetIndex: number) => images.slice(0, targetIndex).reduce((total, clip) => total + getClipDurationMs(clip), 0);
     const getIndexAtTime = (timeMs: number) => {
@@ -576,6 +587,18 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
     const updateSelected = (patch: Partial<ReelImage>) => {
         if (selectedImageId) updateClip(selectedImageId, patch);
     };
+
+    const setClipSpeed = (id: string, next: number) =>
+        setImages((current) => current.map((clip) => (clip.id === id ? withSpeed(clip, next) : clip)));
+
+    const setAllClipSpeeds = (next: number) =>
+        setImages((current) => current.map((clip) => withSpeed(clip, next)));
+
+    // Keep the selected clip visible in the horizontal timeline
+    useEffect(() => {
+        if (!selectedImageId) return;
+        document.getElementById(`clip-tile-${selectedImageId}`)?.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
+    }, [selectedImageId]);
 
     const toggleFx = (id: FxId) => {
         if (!selectedImage) return;
@@ -680,7 +703,7 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
         }
         const video = previewVideoRef.current;
         if (video && activeImage?.type === 'video' && video.readyState >= HTMLMediaElement.HAVE_METADATA) {
-            const localTime = Math.max(0, (nextTime - activeClipStartMs) / 1000);
+            const localTime = Math.max(0, ((nextTime - activeClipStartMs) / 1000) * (activeImage.speed ?? 1));
             video.currentTime = Math.min(localTime, Math.max(0, (video.duration || localTime) - 0.05));
         }
     };
@@ -772,15 +795,16 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
         const video = previewVideoRef.current;
         if (!video) return;
         video.muted = true;
+        video.playbackRate = activeImage.speed ?? 1;
         if (video.readyState >= HTMLMediaElement.HAVE_METADATA) {
-            const localTime = Math.max(0, (previewTimeRef.current - activeClipStartMs) / 1000);
+            const localTime = Math.max(0, ((previewTimeRef.current - activeClipStartMs) / 1000) * (activeImage.speed ?? 1));
             video.currentTime = Math.min(localTime, Math.max(0, (video.duration || localTime) - 0.05));
         }
         if (isPreviewPlaying) video.play().catch(() => setError('This video clip could not play in the preview.'));
         else video.pause();
         return () => video.pause();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [activeImage?.id, activeImage?.type, activeClipStartMs, isPreviewPlaying]);
+    }, [activeImage?.id, activeImage?.type, activeImage?.speed, activeClipStartMs, isPreviewPlaying]);
 
     /* ---------------------------------------------------------------------- */
     /* Clip management                                                        */
@@ -1351,6 +1375,7 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
                     borderEffect: clip.borderEffect,
                     borderColor: clip.borderColor,
                     fx: clip.fx,
+                    speed: clip.speed,
                     scale: clip.scale,
                     motion: clip.motion,
                     transition: clip.transition,
@@ -1638,7 +1663,7 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
                     video.muted = true;
                     if (activeVideoId !== clip.id) {
                         videoCacheRef.current.forEach((item, id) => { if (id !== clip.id) item.pause(); });
-                        const targetTime = Math.min(localTimeMs / 1000, Math.max(0, video.duration - 0.05));
+                        const targetTime = Math.min((localTimeMs / 1000) * (clip.speed ?? 1), Math.max(0, video.duration - 0.05));
                         if (Math.abs(video.currentTime - targetTime) > 0.08) {
                             const seeked = new Promise<void>((resolve) => {
                                 const timeout = window.setTimeout(() => resolve(), 1500);
@@ -1647,6 +1672,7 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
                             video.currentTime = targetTime;
                             await seeked;
                         }
+                        video.playbackRate = clip.speed ?? 1;
                         await video.play();
                         await waitForVideoFrame(video, clip.file.name, 1500);
                         activeVideoId = clip.id;
@@ -1738,7 +1764,7 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
     const activeDepth = activeUsesDepth && depthStatus[activeImage!.id] === 'ready' ? depthMaps[activeImage!.id] ?? null : null;
     const activeDepthLoading = activeUsesDepth && !depthStatus[activeImage!.id];
 
-    const frameH = isFullscreen ? 'h-[92dvh]' : 'h-[min(62dvh,38rem)]';
+    const frameH = isFullscreen ? 'h-[92dvh]' : 'h-[min(46dvh,34rem)]';
     const frameSizeClass = aspectRatio === '9:16' ? `${frameH} aspect-9/16`
         : aspectRatio === '1:1' ? `${frameH} aspect-square`
             : aspectRatio === '4:5' ? `${frameH} aspect-4/5`
@@ -1857,28 +1883,11 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
                         </div>
                     )}
 
-                    <div className="space-y-2">
-                        {images.map((image, index) => (
-                            <div key={image.id} className={`flex items-center gap-2 rounded-xl border p-2.5 shadow-xs ${selectedImageId === image.id ? 'border-[#6A4CFF]/60 bg-[#6A4CFF]/5' : 'border-[#14121F]/10 bg-white'}`}>
-                                <button
-                                    type="button"
-                                    onClick={() => { setSelectedImageId(image.id); setIsPreviewPlaying(false); seekPreview(getStartAtIndex(index)); }}
-                                    className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
-                                >
-                                    {image.type === 'video'
-                                        ? <video src={image.url} muted playsInline className="h-10 w-10 shrink-0 rounded-lg bg-black/5 object-contain shadow-xs" />
-                                        : <img src={image.url} alt="" className="h-10 w-10 shrink-0 rounded-lg bg-black/5 object-contain shadow-xs" />}
-                                    <span className="min-w-0">
-                                        <span className="block text-xs font-semibold text-[#14121F]">Clip {index + 1}</span>
-                                        <span className="block truncate text-[10px] font-medium text-[#14121F]/50">{image.file.name}</span>
-                                    </span>
-                                </button>
-                                <button type="button" onClick={() => moveImage(image.id, -1)} disabled={index === 0} aria-label="Move up" className="rounded-lg p-1.5 text-[#14121F]/50 hover:bg-[#14121F]/10 disabled:opacity-30"><ArrowUp className="h-3.5 w-3.5" /></button>
-                                <button type="button" onClick={() => moveImage(image.id, 1)} disabled={index === images.length - 1} aria-label="Move down" className="rounded-lg p-1.5 text-[#14121F]/50 hover:bg-[#14121F]/10 disabled:opacity-30"><ArrowDown className="h-3.5 w-3.5" /></button>
-                                <button type="button" onClick={() => removeImage(image.id)} aria-label="Remove clip" className="rounded-lg p-1.5 text-[#14121F]/40 transition hover:bg-red-50 hover:text-red-600"><Trash2 className="h-3.5 w-3.5" /></button>
-                            </div>
-                        ))}
-                    </div>
+                    {images.length > 0 && (
+                        <p className="rounded-xl bg-[#6A4CFF]/5 px-3 py-2 text-[11px] font-medium leading-relaxed text-[#14121F]/60">
+                            Your clips are in the timeline under the preview. Click one to edit it, and use the arrows to reorder.
+                        </p>
+                    )}
                 </section>
 
                 {/* ---------------- Image look ---------------- */}
@@ -2226,120 +2235,239 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
             </aside>
 
             {/* ---------------- Preview ---------------- */}
-            <section className="flex min-h-[70dvh] min-w-0 flex-1 flex-col items-center justify-center gap-4 p-4 lg:min-h-0 lg:p-8">
-                <div className="flex w-full max-w-4xl items-center justify-between gap-3">
-                    <div>
-                        <h2 className="text-base font-bold uppercase tracking-wider text-[#14121F]/70">Reel preview</h2>
-                        <p className="text-xs font-medium text-[#14121F]/50">{images.length} clips · {durationLabel}</p>
+            <section className="flex min-h-[70dvh] min-w-0 flex-1 flex-col items-center overflow-y-auto p-4 lg:min-h-0 lg:p-8">
+                <div className="my-auto flex w-full flex-col items-center gap-4">
+                    <div className="flex w-full max-w-4xl items-center justify-between gap-3">
+                        <div>
+                            <h2 className="text-base font-bold uppercase tracking-wider text-[#14121F]/70">Reel preview</h2>
+                            <p className="text-xs font-medium text-[#14121F]/50">{images.length} clips · {durationLabel}</p>
+                        </div>
+                        {images.length > 0 && (
+                            <div className="flex items-center gap-2">
+                                <button type="button" onClick={togglePreview} className="flex items-center gap-2 rounded-xl border border-[#14121F]/15 bg-white px-4 py-2 text-xs font-semibold text-[#14121F] shadow-xs transition hover:border-[#6A4CFF]/40 hover:bg-gray-100">
+                                    <Play className="h-3.5 w-3.5 text-[#6A4CFF]" />
+                                    {isPreviewPlaying ? 'Pause preview' : 'Play preview'}
+                                </button>
+                                <button type="button" onClick={() => void toggleFullscreen()} className="flex items-center gap-2 rounded-xl border border-[#14121F]/15 bg-white px-4 py-2 text-xs font-semibold text-[#14121F] shadow-xs transition hover:border-[#6A4CFF]/40 hover:bg-gray-100">
+                                    <Maximize className="h-3.5 w-3.5 text-[#6A4CFF]" /> Fullscreen
+                                </button>
+                            </div>
+                        )}
                     </div>
+
+                    <div
+                        ref={stageRef}
+                        className={`relative flex select-none items-center justify-center overflow-hidden ${isFullscreen
+                            ? 'h-dvh w-dvw bg-black'
+                            : 'max-h-[54dvh] min-h-72 w-full max-w-4xl rounded-3xl border border-[#14121F]/10 bg-[#F7F6FB] p-5 shadow-sm'}`}
+                    >
+                        <div
+                            ref={frameRef}
+                            className={`relative flex items-center justify-center overflow-hidden rounded-2xl shadow-xl ${frameSizeClass}`}
+                            style={{ backgroundColor, containerType: 'inline-size', ...transitionStyle }}
+                        >
+                            <div className="h-full w-full" style={{ transform: cameraCss(activeImage?.fx, activeClipSeconds, fxBpm), transformOrigin: 'center' }}>
+                                {(() => {
+                                    const isSaaSMode = productTemplateId === 'saas' || aspectRatio === '16:9';
+                                    if (isSaaSMode && activeImage?.type === 'image') {
+                                        return (
+                                            <div className="flex flex-col h-full w-full bg-[#1e1e2e] rounded-xl overflow-hidden shadow-2xl border border-white/10" style={mediaStyle}>
+                                                <div className="flex items-center gap-1.5 px-3 py-2 bg-[#181824] shrink-0">
+                                                    <div className="w-2.5 h-2.5 rounded-full bg-red-500" />
+                                                    <div className="w-2.5 h-2.5 rounded-full bg-amber-500" />
+                                                    <div className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+                                                </div>
+                                                <div className="relative flex-1 overflow-hidden bg-black">
+                                                    <img src={activeImage.url} alt="" className="h-full w-full object-fill" />
+                                                </div>
+                                            </div>
+                                        );
+                                    }
+                                    if (activeImage?.type === 'video') {
+                                        return <video key={activeImage.id} ref={previewVideoRef} src={activeImage.url} muted playsInline preload="auto" className="h-full w-full object-contain" style={mediaStyle} />;
+                                    }
+                                    if (activeImage && activeDepth) {
+                                        return <DepthPreview clip={activeImage} depth={activeDepth} progress={activeClipProgress} aspectRatio={aspectRatio} filter={filterStyle} backgroundColor={backgroundColor} scale={activeScale} softEdges={activeImage.softEdges !== false} />;
+                                    }
+                                    if (activeImage) {
+                                        return <img src={activeImage.url} alt="" className="h-full w-full object-contain" style={mediaStyle} />;
+                                    }
+                                    return (
+                                        <div className="flex h-full items-center justify-center text-center text-xs font-semibold text-black/40">
+                                            <span><ImagePlus className="mx-auto mb-3 h-8 w-8 text-black/30" />Add product photos or videos</span>
+                                        </div>
+                                    );
+                                })()}
+                            </div>
+
+                            {activeDepthLoading && (
+                                <div className="pointer-events-none absolute left-1/2 top-3 z-10 flex -translate-x-1/2 items-center gap-2 rounded-full bg-black/70 px-3.5 py-1.5 text-xs font-semibold text-white backdrop-blur-md">
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" /> Rendering 3D camera angles…
+                                </div>
+                            )}
+
+                            {activeImage && (
+                                <EffectsOverlay clip={activeImage} progress={activeClipProgress} seconds={activeClipSeconds} aspectRatio={aspectRatio} logoImage={logoImage} logoCorner={logoCorner} logoSize={logoSize} />
+                            )}
+
+                            {activeImage?.overlayText && (
+                                <CaptionOverlay
+                                    clip={activeImage}
+                                    onPointerDown={handleCaptionPointerDown}
+                                    onPointerMove={handleCaptionPointerMove}
+                                    onPointerUp={handleCaptionPointerUp}
+                                />
+                            )}
+                        </div>
+
+                        {isFullscreen && (
+                            <div className="absolute bottom-6 left-1/2 z-20 flex -translate-x-1/2 items-center gap-3 rounded-full bg-black/60 px-4 py-2 backdrop-blur">
+                                <button type="button" onClick={togglePreview} aria-label="Play or pause" className="rounded-full p-2 text-white hover:bg-white/15"><Play className="h-4 w-4" /></button>
+                                <button type="button" onClick={() => void toggleFullscreen()} aria-label="Exit fullscreen" className="rounded-full p-2 text-white hover:bg-white/15"><Minimize className="h-4 w-4" /></button>
+                            </div>
+                        )}
+                    </div>
+
                     {images.length > 0 && (
-                        <div className="flex items-center gap-2">
-                            <button type="button" onClick={togglePreview} className="flex items-center gap-2 rounded-xl border border-[#14121F]/15 bg-white px-4 py-2 text-xs font-semibold text-[#14121F] shadow-xs transition hover:border-[#6A4CFF]/40 hover:bg-gray-100">
-                                <Play className="h-3.5 w-3.5 text-[#6A4CFF]" />
-                                {isPreviewPlaying ? 'Pause preview' : 'Play preview'}
-                            </button>
-                            <button type="button" onClick={() => void toggleFullscreen()} className="flex items-center gap-2 rounded-xl border border-[#14121F]/15 bg-white px-4 py-2 text-xs font-semibold text-[#14121F] shadow-xs transition hover:border-[#6A4CFF]/40 hover:bg-gray-100">
-                                <Maximize className="h-3.5 w-3.5 text-[#6A4CFF]" /> Fullscreen
-                            </button>
+                        <div className="w-full max-w-4xl rounded-2xl border border-[#14121F]/10 bg-white p-4 shadow-xs">
+                            <div className="mb-2.5 flex justify-between font-mono text-xs font-semibold text-[#14121F]/70">
+                                <span>Clip {safePreviewIndex + 1} of {images.length}</span>
+                                <span>{(previewTimeMs / 1000).toFixed(1)}s / {(durationMs / 1000).toFixed(1)}s</span>
+                            </div>
+                            <input type="range" min={0} max={Math.max(durationMs, 1)} step={100} value={Math.min(previewTimeMs, durationMs)} onChange={(event) => seekPreview(Number(event.target.value))} className="h-1.5 w-full cursor-pointer rounded-full bg-[#14121F]/10 accent-[#6A4CFF]" />
                         </div>
                     )}
-                </div>
 
-                <div
-                    ref={stageRef}
-                    className={`relative flex select-none items-center justify-center overflow-hidden ${isFullscreen
-                        ? 'h-dvh w-dvw bg-black'
-                        : 'max-h-[65dvh] min-h-80 w-full max-w-4xl rounded-3xl border border-[#14121F]/10 bg-[#F7F6FB] p-5 shadow-sm'}`}
-                >
-                    <div
-                        ref={frameRef}
-                        className={`relative flex items-center justify-center overflow-hidden rounded-2xl shadow-xl ${frameSizeClass}`}
-                        style={{ backgroundColor, containerType: 'inline-size', ...transitionStyle }}
-                    >
-                        <div className="h-full w-full" style={{ transform: cameraCss(activeImage?.fx, activeClipSeconds, fxBpm), transformOrigin: 'center' }}>
-                            {(() => {
-                                const isSaaSMode = productTemplateId === 'saas' || aspectRatio === '16:9';
-                                if (isSaaSMode && activeImage?.type === 'image') {
+                    {/* ---------------- Horizontal timeline ---------------- */}
+                    {images.length > 0 && (
+                        <div className="w-full max-w-4xl rounded-2xl border border-[#14121F]/10 bg-white p-4 shadow-xs">
+                            <div className="mb-3 flex items-center justify-between">
+                                <h3 className="text-xs font-bold uppercase tracking-wider text-[#14121F]/70">Timeline <span className="text-[#14121F]/40">({images.length}/{MAX_IMAGES})</span></h3>
+                                <span className="font-mono text-xs font-semibold text-[#14121F]/60">{durationLabel}</span>
+                            </div>
+                            <div className="flex gap-3 overflow-x-auto pb-2">
+                                {images.map((image, index) => {
+                                    const speed = image.speed ?? 1;
+                                    const selected = selectedImageId === image.id;
                                     return (
-                                        <div className="flex flex-col h-full w-full bg-[#1e1e2e] rounded-xl overflow-hidden shadow-2xl border border-white/10" style={mediaStyle}>
-                                            <div className="flex items-center gap-1.5 px-3 py-2 bg-[#181824] shrink-0">
-                                                <div className="w-2.5 h-2.5 rounded-full bg-red-500" />
-                                                <div className="w-2.5 h-2.5 rounded-full bg-amber-500" />
-                                                <div className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-                                            </div>
-                                            <div className="relative flex-1 overflow-hidden bg-black">
-                                                <img src={activeImage.url} alt="" className="h-full w-full object-fill" />
+                                        <div
+                                            id={`clip-tile-${image.id}`}
+                                            key={image.id}
+                                            className={`w-28 shrink-0 rounded-xl border p-1.5 transition ${selected ? 'border-[#6A4CFF] bg-[#6A4CFF]/5 ring-2 ring-[#6A4CFF]/30' : 'border-[#14121F]/10 bg-white hover:border-[#6A4CFF]/40'}`}
+                                        >
+                                            <button
+                                                type="button"
+                                                onClick={() => { setSelectedImageId(image.id); setIsPreviewPlaying(false); seekPreview(getStartAtIndex(index)); }}
+                                                aria-label={`Select clip ${index + 1}`}
+                                                className="relative block h-20 w-full overflow-hidden rounded-lg bg-[#14121F]/5"
+                                            >
+                                                {image.type === 'video'
+                                                    ? <video src={image.url} muted playsInline className="h-full w-full object-cover" />
+                                                    : <img src={image.url} alt="" className="h-full w-full object-cover" />}
+                                                <span className="absolute left-1 top-1 rounded-md bg-black/70 px-1.5 py-0.5 text-[10px] font-bold text-white">{index + 1}</span>
+                                                {speed !== 1 && <span className="absolute right-1 top-1 rounded-md bg-[#6A4CFF] px-1.5 py-0.5 text-[10px] font-bold text-white">{Number(speed.toFixed(2))}x</span>}
+                                                {image.type === 'video' && <span className="absolute bottom-1 left-1 rounded-md bg-black/70 px-1.5 py-0.5 text-[10px] font-bold text-white">🎥</span>}
+                                                <span className="absolute bottom-1 right-1 rounded-md bg-black/70 px-1.5 py-0.5 font-mono text-[10px] font-bold text-white">{(getClipDurationMs(image) / 1000).toFixed(1)}s</span>
+                                            </button>
+                                            <div className="mt-1.5 flex items-center justify-between">
+                                                <button type="button" onClick={() => moveImage(image.id, -1)} disabled={index === 0} aria-label="Move earlier" className="rounded-md p-1 text-[#14121F]/50 hover:bg-[#14121F]/10 disabled:opacity-30"><ArrowLeft className="h-3.5 w-3.5" /></button>
+                                                <button type="button" onClick={() => removeImage(image.id)} aria-label="Remove clip" className="rounded-md p-1 text-[#14121F]/40 transition hover:bg-red-50 hover:text-red-600"><Trash2 className="h-3.5 w-3.5" /></button>
+                                                <button type="button" onClick={() => moveImage(image.id, 1)} disabled={index === images.length - 1} aria-label="Move later" className="rounded-md p-1 text-[#14121F]/50 hover:bg-[#14121F]/10 disabled:opacity-30"><ArrowRight className="h-3.5 w-3.5" /></button>
                                             </div>
                                         </div>
                                     );
-                                }
-                                if (activeImage?.type === 'video') {
-                                    return <video key={activeImage.id} ref={previewVideoRef} src={activeImage.url} muted playsInline preload="auto" className="h-full w-full object-contain" style={mediaStyle} />;
-                                }
-                                if (activeImage && activeDepth) {
-                                    return <DepthPreview clip={activeImage} depth={activeDepth} progress={activeClipProgress} aspectRatio={aspectRatio} filter={filterStyle} backgroundColor={backgroundColor} scale={activeScale} softEdges={activeImage.softEdges !== false} />;
-                                }
-                                if (activeImage) {
-                                    return <img src={activeImage.url} alt="" className="h-full w-full object-contain" style={mediaStyle} />;
-                                }
-                                return (
-                                    <div className="flex h-full items-center justify-center text-center text-xs font-semibold text-black/40">
-                                        <span><ImagePlus className="mx-auto mb-3 h-8 w-8 text-black/30" />Add product photos or videos</span>
-                                    </div>
-                                );
-                            })()}
-                        </div>
-
-                        {activeDepthLoading && (
-                            <div className="pointer-events-none absolute left-1/2 top-3 z-10 flex -translate-x-1/2 items-center gap-2 rounded-full bg-black/70 px-3.5 py-1.5 text-xs font-semibold text-white backdrop-blur-md">
-                                <Loader2 className="h-3.5 w-3.5 animate-spin" /> Rendering 3D camera angles…
+                                })}
+                                <button
+                                    type="button"
+                                    onClick={() => imageInputRef.current?.click()}
+                                    disabled={images.length >= MAX_IMAGES}
+                                    className="flex w-28 shrink-0 flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-[#14121F]/25 text-[11px] font-semibold text-[#14121F]/60 transition hover:border-[#6A4CFF] hover:bg-[#6A4CFF]/5 hover:text-[#6A4CFF] disabled:opacity-40"
+                                >
+                                    <ImagePlus className="h-5 w-5" /> Add clip
+                                </button>
                             </div>
-                        )}
-
-                        {activeImage && (
-                            <EffectsOverlay clip={activeImage} progress={activeClipProgress} seconds={activeClipSeconds} aspectRatio={aspectRatio} logoImage={logoImage} logoCorner={logoCorner} logoSize={logoSize} />
-                        )}
-
-                        {activeImage?.overlayText && (
-                            <CaptionOverlay
-                                clip={activeImage}
-                                onPointerDown={handleCaptionPointerDown}
-                                onPointerMove={handleCaptionPointerMove}
-                                onPointerUp={handleCaptionPointerUp}
-                            />
-                        )}
-                    </div>
-
-                    {isFullscreen && (
-                        <div className="absolute bottom-6 left-1/2 z-20 flex -translate-x-1/2 items-center gap-3 rounded-full bg-black/60 px-4 py-2 backdrop-blur">
-                            <button type="button" onClick={togglePreview} aria-label="Play or pause" className="rounded-full p-2 text-white hover:bg-white/15"><Play className="h-4 w-4" /></button>
-                            <button type="button" onClick={() => void toggleFullscreen()} aria-label="Exit fullscreen" className="rounded-full p-2 text-white hover:bg-white/15"><Minimize className="h-4 w-4" /></button>
                         </div>
                     )}
-                </div>
 
-                {images.length > 0 && (
-                    <div className="w-full max-w-4xl rounded-2xl border border-[#14121F]/10 bg-white p-4 shadow-xs">
-                        <div className="mb-2.5 flex justify-between font-mono text-xs font-semibold text-[#14121F]/70">
-                            <span>Clip {safePreviewIndex + 1} of {images.length}</span>
-                            <span>{(previewTimeMs / 1000).toFixed(1)}s / {(durationMs / 1000).toFixed(1)}s</span>
+                    {/* ---------------- Speed control for the selected clip ---------------- */}
+                    {selectedImage && (
+                        <div className="w-full max-w-4xl space-y-3 rounded-2xl border border-[#14121F]/10 bg-white p-4 shadow-xs">
+                            <div className="flex items-center justify-between">
+                                <h3 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#14121F]/70">
+                                    <Gauge className="h-4 w-4 text-[#6A4CFF]" /> Clip {images.findIndex((item) => item.id === selectedImage.id) + 1} speed
+                                </h3>
+                                <span className="font-mono text-sm font-bold text-[#6A4CFF]">{Number((selectedImage.speed ?? 1).toFixed(2))}x</span>
+                            </div>
+
+                            <div className="flex flex-wrap gap-1.5">
+                                {SPEED_PRESETS.map((value) => {
+                                    const on = Math.abs((selectedImage.speed ?? 1) - value) < 0.001;
+                                    return (
+                                        <button
+                                            key={value}
+                                            type="button"
+                                            onClick={() => setClipSpeed(selectedImage.id, value)}
+                                            className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${on ? 'border-[#6A4CFF] bg-[#6A4CFF] text-white' : 'border-[#14121F]/15 bg-white text-[#14121F]/80 hover:border-[#6A4CFF]/60'}`}
+                                        >
+                                            {value === 0.25 ? '0.25x 🐌' : value === 4 ? '4x 🚀' : `${value}x`}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+
+                            <input
+                                type="range"
+                                min={0.25}
+                                max={4}
+                                step={0.05}
+                                value={selectedImage.speed ?? 1}
+                                onChange={(event) => setClipSpeed(selectedImage.id, Number(event.target.value))}
+                                aria-label="Clip speed"
+                                className="h-1.5 w-full cursor-pointer rounded-full bg-[#14121F]/10 accent-[#6A4CFF]"
+                            />
+
+                            {selectedImage.type === 'video' && (
+                                <RangeField
+                                    label="Clip length"
+                                    display={`${(selectedImage.durationMs / 1000).toFixed(1)}s`}
+                                    min={0.5}
+                                    max={Math.max(0.6, Math.floor(((selectedImage.sourceDurationMs ?? selectedImage.durationMs) / (selectedImage.speed ?? 1) / 1000) * 10) / 10)}
+                                    step={0.1}
+                                    value={selectedImage.durationMs / 1000}
+                                    onChange={(value) => updateSelected({ durationMs: Math.round(value * 1000) })}
+                                />
+                            )}
+
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                                <p className="text-[11px] leading-relaxed text-[#14121F]/55">
+                                    {selectedImage.type === 'video'
+                                        ? 'Slow-mo or fast-forward. The clip length adjusts automatically, and you can trim it with the length slider.'
+                                        : 'Faster means a shorter clip with quicker camera motion. Slower gives a longer, calmer shot.'}
+                                </p>
+                                <button
+                                    type="button"
+                                    onClick={() => setAllClipSpeeds(selectedImage.speed ?? 1)}
+                                    className="rounded-xl border border-[#14121F]/15 bg-[#F7F6FB] px-3 py-2 text-xs font-semibold text-[#14121F]/80 transition hover:border-[#6A4CFF]"
+                                >
+                                    Apply speed to all clips
+                                </button>
+                            </div>
                         </div>
-                        <input type="range" min={0} max={Math.max(durationMs, 1)} step={100} value={Math.min(previewTimeMs, durationMs)} onChange={(event) => seekPreview(Number(event.target.value))} className="h-1.5 w-full cursor-pointer rounded-full bg-[#14121F]/10 accent-[#6A4CFF]" />
+                    )}
+
+                    <div className="flex w-full max-w-4xl flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#14121F]/10 bg-white p-4 shadow-xs">
+                        <div className="text-xs font-semibold text-[#14121F]/70">{durationLabel} total</div>
+                        <button type="button" onClick={() => void exportReel()} disabled={!images.length || isExporting} className="flex items-center gap-2 rounded-xl bg-[#6A4CFF] px-6 py-3 text-xs font-bold text-white shadow-md shadow-[#6A4CFF]/20 transition hover:bg-[#5839e0] disabled:opacity-50">
+                            {isExporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                            {isExporting ? `Rendering (${exportProgress}%)...` : 'Create & download reel'}
+                        </button>
                     </div>
-                )}
 
-                <div className="flex w-full max-w-4xl flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#14121F]/10 bg-white p-4 shadow-xs">
-                    <div className="text-xs font-semibold text-[#14121F]/70">{durationLabel} total</div>
-                    <button type="button" onClick={() => void exportReel()} disabled={!images.length || isExporting} className="flex items-center gap-2 rounded-xl bg-[#6A4CFF] px-6 py-3 text-xs font-bold text-white shadow-md shadow-[#6A4CFF]/20 transition hover:bg-[#5839e0] disabled:opacity-50">
-                        {isExporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-                        {isExporting ? `Rendering (${exportProgress}%)...` : 'Create & download reel'}
-                    </button>
+                    {isExporting && exportStatus && <p className="w-full max-w-4xl text-xs font-medium text-white/70">{exportStatus}</p>}
+                    {notice && <p role="status" className="w-full max-w-4xl rounded-2xl border border-amber-200 bg-amber-50 p-3.5 text-xs font-medium text-amber-800 shadow-xs">{notice}</p>}
+                    {error && <p role="alert" className="w-full max-w-4xl rounded-2xl border border-red-200 bg-red-50 p-3.5 text-xs font-medium text-red-600 shadow-xs">{error}</p>}
+                    <canvas ref={canvasRef} className="hidden" />
                 </div>
-
-                {isExporting && exportStatus && <p className="w-full max-w-4xl text-xs font-medium text-white/70">{exportStatus}</p>}
-                {notice && <p role="status" className="w-full max-w-4xl rounded-2xl border border-amber-200 bg-amber-50 p-3.5 text-xs font-medium text-amber-800 shadow-xs">{notice}</p>}
-                {error && <p role="alert" className="w-full max-w-4xl rounded-2xl border border-red-200 bg-red-50 p-3.5 text-xs font-medium text-red-600 shadow-xs">{error}</p>}
-                <canvas ref={canvasRef} className="hidden" />
             </section>
         </main>
     );
