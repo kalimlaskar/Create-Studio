@@ -1,23 +1,31 @@
 /* -------------------------------------------------------------------------- */
 /* Trending "wow" effects for PhotoReelStudio                                 */
 /*                                                                            */
-/*  - Camera effects (punch zoom, beat pulse, shake) are a transform that is  */
-/*    applied to the media. CSS in the preview, ctx transform in the export.  */
+/*  - Camera effects (punch zoom, beat pulse, shake, 3D tilts/zooms) are      */
+/*    transforms applied to media. CSS in the preview, ctx transform in export.*/
 /*  - Overlay effects are drawn on a canvas on top of the frame. The same     */
 /*    code runs in the live preview and in the export.                        */
 /*  - RGB split is a pixel effect and is applied in the export only.          */
 /* -------------------------------------------------------------------------- */
 
 export type FxId =
-    | 'whip-zoom' | 'beat-pulse' | 'shake'
+    | 'whip-zoom' | 'beat-pulse' | 'shake' | 'click-pop' | 'cursor-click'
+    | 'tilt-left' | 'tilt-right' | 'tilt-both' | 'zoom-tilt-left' | 'zoom-tilt-right'
     | 'flash' | 'glitch' | 'rgb-split' | 'speed-lines'
     | 'sparks' | 'bokeh' | 'confetti'
     | 'light-leak' | 'bloom' | 'film-grain' | 'scanlines' | 'letterbox';
 
 export const FX_LIST: Array<{ id: FxId; label: string; emoji: string; group: 'Motion' | 'Hit' | 'Particles' | 'Look' }> = [
+    { id: 'cursor-click', label: 'Cursor Click & Glow', emoji: '🖱️', group: 'Motion' },
+    { id: 'click-pop', label: 'Click & Pop', emoji: '👆', group: 'Motion' },
     { id: 'whip-zoom', label: 'Punch-in zoom', emoji: '🎯', group: 'Motion' },
     { id: 'beat-pulse', label: 'Beat pulse', emoji: '💓', group: 'Motion' },
     { id: 'shake', label: 'Handheld shake', emoji: '📳', group: 'Motion' },
+    { id: 'tilt-left', label: '3D Tilt Left', emoji: '📐', group: 'Motion' },
+    { id: 'tilt-right', label: '3D Tilt Right', emoji: '📐', group: 'Motion' },
+    { id: 'tilt-both', label: '3D Tilt Both', emoji: '🔄', group: 'Motion' },
+    { id: 'zoom-tilt-left', label: '3D Zoom Left', emoji: '🔍', group: 'Motion' },
+    { id: 'zoom-tilt-right', label: '3D Zoom Right', emoji: '🔎', group: 'Motion' },
     { id: 'flash', label: 'Flash on cut', emoji: '⚡', group: 'Hit' },
     { id: 'glitch', label: 'Glitch bursts', emoji: '👾', group: 'Hit' },
     { id: 'rgb-split', label: 'RGB split (export)', emoji: '🔴', group: 'Hit' },
@@ -64,6 +72,7 @@ export interface CameraTransform {
     dx: number; // fraction of frame width
     dy: number; // fraction of frame height
     rot: number; // radians
+    tiltY?: number; // Y-axis 3D perspective rotation
 }
 
 export function getCameraTransform(fx: FxId[] | undefined, seconds: number, bpm = 120): CameraTransform {
@@ -71,7 +80,9 @@ export function getCameraTransform(fx: FxId[] | undefined, seconds: number, bpm 
     let dx = 0;
     let dy = 0;
     let rot = 0;
-    if (!fx || fx.length === 0) return { scale, dx, dy, rot };
+    let tiltY = 0;
+
+    if (!fx || fx.length === 0) return { scale, dx, dy, rot, tiltY };
 
     if (has(fx, 'whip-zoom')) {
         const e = Math.exp(-seconds * 6.5);
@@ -84,11 +95,43 @@ export function getCameraTransform(fx: FxId[] | undefined, seconds: number, bpm 
         scale *= 1 + 0.055 * Math.exp(-phase * 7);
     }
     if (has(fx, 'shake')) {
-        scale *= 1.035; // hides the edges while shaking
+        scale *= 1.035;
         dx += (Math.sin(seconds * 31) + Math.sin(seconds * 53 + 1.3) * 0.6) * 0.004;
         dy += (Math.sin(seconds * 37 + 2) + Math.sin(seconds * 61) * 0.6) * 0.004;
         rot += Math.sin(seconds * 23) * 0.004;
     }
+    if (has(fx, 'click-pop')) {
+        const beat = 60 / bpm;
+        const phase = (seconds % beat) / beat;
+        const clickCycle = Math.exp(-phase * 10);
+        scale *= 1 - 0.08 * clickCycle;
+    }
+
+    if (has(fx, 'tilt-left')) {
+        tiltY = -0.42;
+        scale *= 1.08;
+    }
+    if (has(fx, 'tilt-right')) {
+        tiltY = 0.42;
+        scale *= 1.08;
+    }
+    if (has(fx, 'tilt-both')) {
+        const beat = 60 / bpm;
+        const phase = (seconds % beat) / beat;
+        tiltY = Math.sin(seconds * Math.PI * (bpm / 60) * 0.5) * 0.45;
+        scale *= 1.1;
+    }
+    if (has(fx, 'zoom-tilt-left')) {
+        const progress = Math.min(seconds / 2, 1);
+        tiltY = -0.35;
+        scale *= 1.05 + 0.25 * progress;
+    }
+    if (has(fx, 'zoom-tilt-right')) {
+        const progress = Math.min(seconds / 2, 1);
+        tiltY = 0.35;
+        scale *= 1.05 + 0.25 * progress;
+    }
+
     if (has(fx, 'glitch')) {
         const g = glitchState(seconds);
         if (g.active) {
@@ -96,24 +139,37 @@ export function getCameraTransform(fx: FxId[] | undefined, seconds: number, bpm 
             scale *= 1.02;
         }
     }
-    return { scale, dx, dy, rot };
+    return { scale, dx, dy, rot, tiltY };
 }
 
-/** Canvas version, call between ctx.save() and ctx.restore() before drawing the media. */
 export function applyCameraFx(ctx: CanvasRenderingContext2D, fx: FxId[] | undefined, w: number, h: number, seconds: number, bpm = 120) {
     const t = getCameraTransform(fx, seconds, bpm);
-    if (t.scale === 1 && t.dx === 0 && t.dy === 0 && t.rot === 0) return;
+    if (t.scale === 1 && t.dx === 0 && t.dy === 0 && t.rot === 0 && !t.tiltY) return;
+
     ctx.translate(w / 2 + t.dx * w, h / 2 + t.dy * h);
     ctx.rotate(t.rot);
+
+    if (t.tiltY) {
+        const skewAmount = Math.sin(t.tiltY) * 0.6;
+        const scaleX = Math.cos(t.tiltY);
+        ctx.transform(scaleX, 0, skewAmount, 1, 0, 0);
+    }
+
     ctx.scale(t.scale, t.scale);
     ctx.translate(-w / 2, -h / 2);
 }
 
-/** CSS version for the live preview. */
 export function cameraCss(fx: FxId[] | undefined, seconds: number, bpm = 120): string {
     const t = getCameraTransform(fx, seconds, bpm);
-    if (t.scale === 1 && t.dx === 0 && t.dy === 0 && t.rot === 0) return 'none';
-    return `translate(${(t.dx * 100).toFixed(3)}%, ${(t.dy * 100).toFixed(3)}%) rotate(${t.rot.toFixed(4)}rad) scale(${t.scale.toFixed(4)})`;
+    if (t.scale === 1 && t.dx === 0 && t.dy === 0 && t.rot === 0 && !t.tiltY) return 'none';
+
+    const perspective = 'perspective(900px)';
+    const translate = `translate(${(t.dx * 100).toFixed(3)}%, ${(t.dy * 100).toFixed(3)}%)`;
+    const rotateY = `rotateY(${(t.tiltY || 0).toFixed(4)}rad)`;
+    const rotateZ = `rotate(${t.rot.toFixed(4)}rad)`;
+    const scale = `scale(${t.scale.toFixed(4)})`;
+
+    return `${perspective} ${translate} ${rotateY} ${rotateZ} ${scale}`;
 }
 
 /* ------------------------------ pixel FX (export) ------------------------- */
@@ -121,7 +177,6 @@ export function cameraCss(fx: FxId[] | undefined, seconds: number, bpm = 120): s
 let rgbSource: HTMLCanvasElement | null = null;
 let rgbChannel: HTMLCanvasElement | null = null;
 
-/** Chromatic aberration: splits the finished frame into red / green / blue and offsets them. */
 export function drawRgbSplit(ctx: CanvasRenderingContext2D, fx: FxId[] | undefined, seconds: number, bpm = 120) {
     if (!has(fx, 'rgb-split')) return;
     const w = ctx.canvas.width;
@@ -197,11 +252,91 @@ const getGrainTile = () => {
     return grainTile;
 };
 
-/** Everything that is drawn on top of the picture. `seconds` is the time inside the current clip. */
-export function drawOverlayFx(ctx: CanvasRenderingContext2D, fx: FxId[] | undefined, w: number, h: number, seconds: number) {
+/** 
+ * drawOverlayFx now accepts explicit targetX and targetY fractions (0 to 1) 
+ * so you can pass custom interactive coordinates or connect it to user drag/selection state!
+ */
+export function drawOverlayFx(
+    ctx: CanvasRenderingContext2D,
+    fx: FxId[] | undefined,
+    w: number,
+    h: number,
+    seconds: number,
+    targetX = 0.5, // e.g. 0.5 is center horizontally
+    targetY = 0.4  // e.g. 0.4 is 40% down from the top
+) {
     if (!fx || fx.length === 0) return;
-    const u = w / 540; // scale unit so the preview and the 1080p export look the same
+    const u = w / 540;
     ctx.save();
+
+    // --- Precise Cursor Glide & Glowing Click Effect ---
+    if (has(fx, 'cursor-click')) {
+        const animTime = seconds % 3.0;
+        let cursorX = w * 0.5;
+        let cursorY = h * 1.1;
+        let scale = 1;
+        let ringAlpha = 0;
+        let ringRadius = 0;
+
+        const destX = w * targetX;
+        const destY = h * targetY;
+
+        if (animTime < 0.9) {
+            const p = Math.min(animTime / 0.8, 1);
+            const easeP = p < 0.5 ? 2 * p * p : -1 + (4 - 2 * p) * p;
+            cursorX = w * 0.5 + (destX - w * 0.5) * easeP;
+            cursorY = (h * 1.1) + (destY - (h * 1.1)) * easeP;
+        } else {
+            cursorX = destX;
+            cursorY = destY;
+            const clickProgress = animTime - 0.9;
+            if (clickProgress < 0.2) {
+                scale = 0.85; // Click press-down scale
+            } else {
+                scale = 1;
+                const waveTime = clickProgress - 0.2;
+                ringRadius = waveTime * w * 0.35;
+                ringAlpha = Math.max(0, 1 - waveTime * 1.5);
+            }
+        }
+
+        // Draw Glowing Click Ripple Ring
+        if (ringAlpha > 0) {
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(destX, destY, ringRadius, 0, Math.PI * 2);
+            ctx.strokeStyle = `rgba(59, 130, 246, ${ringAlpha})`;
+            ctx.lineWidth = 3.5 * u;
+            ctx.shadowColor = '#3b82f6';
+            ctx.shadowBlur = 12 * u;
+            ctx.stroke();
+            ctx.restore();
+        }
+
+        // Draw Correctly-Oriented Professional Pointer Arrow Icon
+        ctx.save();
+        ctx.translate(cursorX, cursorY);
+        ctx.scale(scale, scale);
+
+        ctx.fillStyle = '#ffffff';
+        ctx.strokeStyle = '#1e293b';
+        ctx.lineWidth = 2 * u;
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.35)';
+        ctx.shadowBlur = 6 * u;
+
+        ctx.beginPath();
+        ctx.moveTo(0, 0);                   // Top-left tip (hotspot)
+        ctx.lineTo(0, 24 * u);              // Vertical left edge
+        ctx.lineTo(7 * u, 18 * u);          // Inner slant
+        ctx.lineTo(13 * u, 28 * u);         // Pointer tail bottom edge
+        ctx.lineTo(16 * u, 26 * u);         // Pointer tail side
+        ctx.lineTo(10 * u, 16 * u);         // Inner slant right
+        ctx.lineTo(18 * u, 16 * u);         // Outer right edge
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+    }
 
     if (has(fx, 'light-leak')) {
         ctx.globalCompositeOperation = 'screen';
@@ -325,14 +460,9 @@ export function drawOverlayFx(ctx: CanvasRenderingContext2D, fx: FxId[] | undefi
         ctx.globalCompositeOperation = 'source-over';
         const step = Math.max(3, Math.round(4 * u));
         ctx.fillStyle = 'rgba(0,0,0,0.12)';
-        for (let y = 0; y < h; y += step) ctx.fillRect(0, y, w, step / 2);
-        const bandY = (((seconds * 0.25) % 1.3) - 0.15) * h;
-        const band = ctx.createLinearGradient(0, bandY, 0, bandY + h * 0.12);
-        band.addColorStop(0, 'rgba(255,255,255,0)');
-        band.addColorStop(0.5, 'rgba(255,255,255,0.07)');
-        band.addColorStop(1, 'rgba(255,255,255,0)');
-        ctx.fillStyle = band;
-        ctx.fillRect(0, bandY, w, h * 0.12);
+        for (let y = 0; y + step <= h; y += step) {
+            ctx.fillRect(0, y, w, step / 2);
+        }
     }
 
     if (has(fx, 'film-grain')) {
@@ -352,7 +482,7 @@ export function drawOverlayFx(ctx: CanvasRenderingContext2D, fx: FxId[] | undefi
     if (has(fx, 'flash') && seconds < 0.3) {
         const a = 1 - seconds / 0.3;
         ctx.globalCompositeOperation = 'source-over';
-        ctx.fillStyle = `rgba(255,255,255,${a * a * 0.85})`;
+        ctx.fillStyle = `rgba(255,255,255,${a * 0.85})`;
         ctx.fillRect(0, 0, w, h);
     }
 
