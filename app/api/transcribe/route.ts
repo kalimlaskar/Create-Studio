@@ -1,5 +1,4 @@
-import { hasAuthenticatedSupabaseUser } from '@/lib/supabase/authorization';
-import { consumeAiCredit } from '@/lib/supabase/ai-quota';
+import { consumeAiSeconds, getRequestUserId, limitReachedResponse, refundAiSeconds } from '@/lib/plans/server';
 
 // Gemini inline audio shares a ~20 MB request limit, and base64 adds ~33%
 const MAX_AUDIO_BYTES = 14 * 1024 * 1024;
@@ -20,36 +19,36 @@ const LANGUAGE_HINTS: Record<string, string> = {
     hinglish: 'The speech mixes Hindi and English (Hinglish). Keep spoken English words as they are and write Hindi words in Roman script.',
 };
 
+const fail = (error: string, status: number) => Response.json({ error }, { status });
+
 export async function POST(request: Request) {
-    if (!await hasAuthenticatedSupabaseUser()) {
-        return Response.json({ error: 'Sign in to generate captions.' }, { status: 401 });
-    }
+    const userId = await getRequestUserId();
+    if (!userId) return fail('Sign in to generate captions.', 401);
+
     const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-        return Response.json({ error: 'Automatic captions need a GEMINI_API_KEY configured on the server.' }, { status: 503 });
-    }
+    if (!apiKey) return fail('Automatic captions need a GEMINI_API_KEY configured on the server.', 503);
 
     let body: FormData;
     try {
         body = await request.formData();
     } catch {
-        return Response.json({ error: 'Upload a supported audio recording to generate captions.' }, { status: 400 });
+        return fail('Upload a supported audio recording to generate captions.', 400);
     }
 
     const file = body.get('file');
     const language = String(body.get('language') ?? 'auto');
-    if (!(file instanceof File) || file.size === 0) {
-        return Response.json({ error: 'The audio recording is empty.' }, { status: 400 });
-    }
-    if (file.size > MAX_AUDIO_BYTES) {
-        return Response.json({ error: 'Audio is too large for transcription. Trim the video and try again.' }, { status: 413 });
-    }
-    if (!LANGUAGE_CODES.has(language)) {
-        return Response.json({ error: 'Choose Auto, English, Hindi, or Hinglish.' }, { status: 400 });
-    }
+    if (!(file instanceof File) || file.size === 0) return fail('The audio recording is empty.', 400);
+    if (file.size > MAX_AUDIO_BYTES) return fail('Audio is too large for transcription. Trim the video and try again.', 413);
+    if (!LANGUAGE_CODES.has(language)) return fail('Choose Auto, English, Hindi, or Hinglish.', 400);
 
-    const limited = await consumeAiCredit();
-    if (limited) return limited;
+    // The client reports the length, but a file can't be shorter than its size allows.
+    const reported = Number(body.get('durationSeconds'));
+    const seconds = Math.max(Number.isFinite(reported) ? reported : 0, Math.ceil(file.size / 32000));
+
+    const usage = await consumeAiSeconds(userId, 'transcription', seconds).catch(() => null);
+    if (!usage) return fail('Could not check your usage. Please try again.', 503);
+    if (!usage.ok) return limitReachedResponse(usage, 'transcription');
+    const refund = () => refundAiSeconds(userId, 'transcription', usage.charged);
 
     const mimeType = (file.type || 'audio/webm').split(';')[0];
     const audioBase64 = Buffer.from(await file.arrayBuffer()).toString('base64');
@@ -105,10 +104,8 @@ export async function POST(request: Request) {
 
         const result = await response.json().catch(() => null) as GeminiResponse | null;
         if (!response.ok) {
-            return Response.json(
-                { error: result?.error?.message ?? `Transcription service returned ${response.status}.` },
-                { status: response.status === 413 ? 413 : 502 },
-            );
+            await refund();
+            return fail(result?.error?.message ?? `Transcription service returned ${response.status}.`, response.status === 413 ? 413 : 502);
         }
 
         const raw = result?.candidates?.[0]?.content?.parts?.map((part) => part.text ?? '').join('') ?? '';
@@ -116,7 +113,8 @@ export async function POST(request: Request) {
         try {
             parsed = JSON.parse(raw);
         } catch {
-            return Response.json({ error: 'The transcription came back in an unreadable format. Try again.' }, { status: 502 });
+            await refund();
+            return fail('The transcription came back in an unreadable format. Try again.', 502);
         }
 
         // Clean up: valid numbers, in order, no overlaps
@@ -135,6 +133,7 @@ export async function POST(request: Request) {
 
         return Response.json({ words, text: parsed.text ?? words.map((w) => w.word).join(' ') });
     } catch {
-        return Response.json({ error: 'Could not reach the transcription service. Check the server connection and try again.' }, { status: 502 });
+        await refund();
+        return fail('Could not reach the transcription service. Check the server connection and try again.', 502);
     }
 }

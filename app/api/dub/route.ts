@@ -1,11 +1,12 @@
-import { hasAuthenticatedSupabaseUser } from '@/lib/supabase/authorization';
-import { consumeAiCredit } from '@/lib/supabase/ai-quota';
+import { consumeAiSeconds, getRequestUserId, limitReachedResponse, refundAiSeconds } from '@/lib/plans/server';
 
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta';
 const TRANSLATE_MODEL = 'gemini-3.8-flash';
 const TTS_MODEL = 'gemini-3.8-flash-lite-tts';
 const DEFAULT_SAMPLE_RATE = 24000;
 const VOICES = { female: 'Kore', male: 'Puck' } as const;
+// Spoken text is roughly 15 characters per second, used to count voiceover minutes.
+const CHARS_PER_SECOND = 15;
 
 const LANGUAGE_LABELS: Record<string, string> = {
     en: 'English',
@@ -139,7 +140,8 @@ async function synthesizeSpeech(text: string, gender: VoiceGender, apiKey: strin
 }
 
 export async function POST(request: Request) {
-    if (!await hasAuthenticatedSupabaseUser()) return fail('Sign in to use dubbing.', 401);
+    const userId = await getRequestUserId();
+    if (!userId) return fail('Sign in to use dubbing.', 401);
 
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) return fail('Dubbing requires a GEMINI_API_KEY to be configured on the server.', 503);
@@ -162,8 +164,9 @@ export async function POST(request: Request) {
     }
     if (voiceGender !== 'female' && voiceGender !== 'male') return fail('Choose a female or male voice.', 400);
 
-    const limited = await consumeAiCredit();
-    if (limited) return limited;
+    const usage = await consumeAiSeconds(userId, 'voiceover', Math.max(3, Math.ceil(text.length / CHARS_PER_SECOND))).catch(() => null);
+    if (!usage) return fail('Could not check your usage. Please try again.', 503);
+    if (!usage.ok) return limitReachedResponse(usage, 'voiceover');
 
     try {
         const spokenText = sourceLanguage === targetLanguage
@@ -175,6 +178,7 @@ export async function POST(request: Request) {
             headers: { 'Content-Type': 'audio/wav', 'Cache-Control': 'no-store' },
         });
     } catch (error) {
+        await refundAiSeconds(userId, 'voiceover', usage.charged);
         if (error instanceof RouteError) return fail(error.message, error.status);
         return fail('The dubbing engine could not generate audio for the selected language.', 502);
     }

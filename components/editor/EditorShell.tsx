@@ -363,6 +363,7 @@ export function EditorShell({ sourceVideoUrl, aspectRatio, initialScript, initia
             const extension = audioBlob.type.includes('mp4') ? 'm4a' : 'webm';
             body.append('file', audioBlob, `creator-studio-audio.${extension}`);
             body.append('language', language);
+            body.append('durationSeconds', String(Math.round(project.durationMs / 1000)));
             const response = await fetch('/api/transcribe', { method: 'POST', body });
             const result = await response.json() as {
                 error?: string;

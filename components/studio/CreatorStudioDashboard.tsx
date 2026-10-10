@@ -700,6 +700,9 @@ export function CreatorStudioDashboard({ userEmail, initialDisplayName = '', ini
                 onStop={stopRecording}
                 onPause={pauseRecording}
                 onResume={resumeRecording}
+                getPreviewStream={() => canvasStreamRef.current}
+                airDrawing={settings}
+                onAirDrawingChange={updateSettings}
             />
             {showWelcome && <div className="fixed inset-0 z-100 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm"><section role="dialog" aria-modal="true" aria-labelledby="welcome-title" className="w-full max-w-lg rounded-3xl border border-neutral-700 bg-neutral-900 p-6 shadow-2xl sm:p-8"><div className="mb-4 inline-flex rounded-2xl bg-indigo-500/15 p-3 text-indigo-300"><FolderOpen className="h-6 w-6" /></div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-indigo-300">Your creator workspace</p><h2 id="welcome-title" className="mt-2 text-2xl font-bold text-white">Let’s make your first video.</h2><p className="mt-3 text-sm leading-relaxed text-neutral-400">Start with a ready-to-read Hinglish reel script, or jump straight into the studio. You can edit the script and language any time.</p><div className="mt-6 flex flex-col gap-2 sm:flex-row"><button onClick={() => dismissWelcome(true)} className="flex-1 rounded-xl bg-indigo-600 px-4 py-3 text-sm font-semibold text-white hover:bg-indigo-500">Try the sample template</button><button onClick={() => dismissWelcome(false)} className="flex-1 rounded-xl border border-neutral-700 px-4 py-3 text-sm font-semibold text-neutral-200 hover:bg-neutral-800">Start with my own script</button></div></section></div>}
         </div>
