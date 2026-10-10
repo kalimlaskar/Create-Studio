@@ -2,7 +2,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import type { CSSProperties } from 'react';
 import { Bricolage_Grotesque, Instrument_Sans } from 'next/font/google';
-import { ArrowRight, ScreenShare, Sparkles } from 'lucide-react';
+import { ArrowRight, Check, Eraser, EyeOff, Film, Hand, Languages, Layers, Mic, Pencil, Plus, Scissors, ScreenShare, Sparkles, Type } from 'lucide-react';
 
 const display = Bricolage_Grotesque({ subsets: ['latin'], variable: '--font-display', display: 'swap' });
 const body = Instrument_Sans({ subsets: ['latin'], variable: '--font-body', display: 'swap' });
@@ -12,52 +12,98 @@ const body = Instrument_Sans({ subsets: ['latin'], variable: '--font-body', disp
    paper   #F7F6FB   page background
    violet  #6A4CFF   primary accent
    pink    #FF3D81   secondary accent / playhead / REC
-   yellow  #FFE347   caption highlight (the one "loud" color, used on captions only)
+   yellow  #FFE347   highlight (captions, selections)
 */
 
 const D = 'font-[family-name:var(--font-display)]';
 const focus =
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6A4CFF]/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[#F7F6FB]';
 
-const captionWords = ['Aaj', 'chalo', 'Hyderabad', 'ghoomte', 'hain'];
 const prompterLines = [
-  'Namaste doston, aaj ka video',
-  'Hyderabad ke bare mein hai',
-  'Charminar se shuru karte hain',
-  'Phir biryani ki baat karenge',
+  'Hi everyone, welcome to the demo',
+  'This is where your team sees',
+  'every campaign in one place',
+  'Let me show you how it works',
 ];
 const languages = ['English', 'हिन्दी', 'Hinglish', 'বাংলা', 'मराठी', 'தமிழ்', 'తెలుగు'];
+const marqueeItems = ['Product demos', 'Tutorials', 'Course lessons', 'Pitch walkthroughs', 'Travel reels', 'Release notes', 'Customer onboarding', 'Explainers'];
 
-const effects = [
-  { name: 'Blur', bg: 'bg-[radial-gradient(circle_at_30%_30%,#e0e7ff,#818cf8)]' },
-  { name: 'Green screen', bg: 'bg-[#22c55e]' },
-  { name: 'Cutout', bg: 'bg-[linear-gradient(135deg,#FFE347,#FF3D81)]' },
-  { name: 'Your image', bg: 'bg-[linear-gradient(160deg,#ffb86b,#5b3df5)]' },
+const demoPoints = [
+  { title: 'A floating camera card', text: 'Your face stays on screen while you walk through the product, so viewers connect with you, not just your cursor.' },
+  { title: 'A teleprompter only you can see', text: 'Read your script right on the shared screen. It never shows up in the recording.' },
+  { title: 'Showcase frames', text: 'Wrap your screen in a browser window, a macOS window or a minimal card, on Aurora, Sunset, Midnight or Paper backgrounds.' },
+  { title: 'Point with your finger', text: 'Circle a button or underline a number by drawing in the air while you talk.' },
+];
+
+const frames = [
+  { name: 'Browser', bg: 'bg-[linear-gradient(135deg,#c7d2fe,#fbcfe8)]', bar: true },
+  { name: 'macOS', bg: 'bg-[linear-gradient(135deg,#ffb86b,#ff6a8b)]', bar: true },
+  { name: 'Minimal', bg: 'bg-[linear-gradient(135deg,#14121F,#3b2d8f)]', bar: false },
+];
+
+const editPoints = [
+  'Click any word to jump to that moment',
+  'Select a phrase and delete it. The video closes the gap',
+  'Mark in and out on the timeline to cut a section',
+  'Trim and split, and restore anything you removed',
+];
+
+const gestures = [
+  { icon: '☝️', label: 'Point to draw' },
+  { icon: '🤏', label: 'Pinch to write' },
+  { icon: '✌️', label: 'Two fingers to erase' },
+  { icon: '✊', label: 'Fist to undo' },
+  { icon: '🖐', label: 'Open palm to clear' },
+];
+
+const features = [
+  { icon: Type, color: 'bg-[#6A4CFF]', title: 'Captions that follow your voice', text: 'Word-by-word highlighting in English, Hindi and Hinglish, in sync with your speech.' },
+  { icon: Languages, color: 'bg-[#FF3D81]', title: 'AI scripts and dubbing', text: 'Type a topic, get a script in seven languages, and add an AI voiceover when you need one.' },
+  { icon: Layers, color: 'bg-[#14121F]', title: 'Backgrounds in one tap', text: 'Blur, green screen, clean cutout or your own image, without a green wall behind you.' },
+  { icon: Sparkles, color: 'bg-[#6A4CFF]', title: 'Hologram and cartoon looks', text: 'Turn yourself into a glowing hologram, a comic, a pencil sketch or an anime avatar.' },
+  { icon: Film, color: 'bg-[#FF3D81]', title: 'Sci-fi transitions', text: 'Particle dissolve, portal and warp transitions between the parts of your video.' },
+  { icon: Mic, color: 'bg-[#14121F]', title: 'Photo and clip reels', text: 'Mix photos and clips with music and narration, using templates for travel, birthdays and products.' },
 ];
 
 const steps = [
-  { n: '01', color: 'text-[#6A4CFF]', title: 'Start with an idea', text: 'Record a fresh take or bring the photos and clips you already have.' },
-  { n: '02', color: 'text-[#FF3D81]', title: 'Shape the story', text: 'Add a script, captions, designed text, music, transitions, or narration.' },
-  { n: '03', color: 'text-[#14121F]', title: 'Preview and export', text: 'Fine-tune the result, then download a video ready to share.' },
+  { n: '01', color: 'text-[#6A4CFF]', title: 'Record or upload', text: 'Record your screen and camera in one take, or bring a video you already have.' },
+  { n: '02', color: 'text-[#FF3D81]', title: 'Edit by reading', text: 'Delete words from the transcript, trim the ends, add captions, music and zooms.' },
+  { n: '03', color: 'text-[#14121F]', title: 'Export and share', text: 'Download a finished video, sized for reels, YouTube or the web.' },
 ];
 
 const useCases = [
-  { rule: 'border-[#6A4CFF]', title: 'Social & personal', text: 'Turn everyday moments, travel photos, and ideas into reels people will remember.' },
-  { rule: 'border-[#FF3D81]', title: 'Business & brands', text: 'Showcase a product, explain a service, or create a polished update for your audience.' },
-  { rule: 'border-[#14121F]', title: 'Learning & explaining', text: 'Break down a topic, share a presentation, or make a lesson easier to follow.' },
+  { rule: 'border-[#6A4CFF]', title: 'Product teams & founders', text: 'Record a clean demo, release walkthrough or customer onboarding video without a video editor.' },
+  { rule: 'border-[#FF3D81]', title: 'Teachers & creators', text: 'Explain a topic on camera, show your screen mid-take, and cut the stumbles by deleting words.' },
+  { rule: 'border-[#14121F]', title: 'Social & travel stories', text: 'Turn photos, clips and ideas into captioned reels in your own language.' },
+];
+
+const faqs = [
+  { q: 'Do I need to install anything?', a: 'No. Cliprame runs in your browser, so you can record, edit and export from one tab.' },
+  { q: 'Will viewers see my teleprompter?', a: 'No. The teleprompter is only on your screen while you record, and it is not part of the video.' },
+  { q: 'How does editing by transcript work?', a: 'Your video is transcribed word by word. Select words in the transcript and delete them, and that part of the video is cut. Anything you remove can be restored.' },
+  { q: 'Where are my videos stored?', a: 'Recordings and drafts stay on your device. Audio is only sent for processing when you ask for captions, a transcript or AI features.' },
+  { q: 'Is it free?', a: 'You can start for free. See the pricing page for plan details.' },
 ];
 
 const css = `
-.cap{display:inline-block;padding:.02em .22em;border-radius:.3em;animation:capHit 4.5s infinite;animation-delay:calc(var(--i)*.9s)}
-@keyframes capHit{0%,18%{background:#FFE347;color:#14121F;transform:translateY(-2px) scale(1.06)}24%,100%{background:rgba(255,227,71,0);color:#fff;transform:none}}
+.cap{display:inline-block;padding:.02em .22em;border-radius:.3em}
 @keyframes prompter{to{transform:translateY(-50%)}}
 .prompter{animation:prompter 16s linear infinite}
 .prompter-mask{-webkit-mask-image:linear-gradient(transparent,#000 28%,#000 72%,transparent);mask-image:linear-gradient(transparent,#000 28%,#000 72%,transparent)}
-@keyframes bar{0%,100%{transform:scaleY(.3)}50%{transform:scaleY(1)}}
-.bar{transform-origin:center;animation:bar 1s ease-in-out infinite;animation-delay:calc(var(--i)*.12s)}
 @keyframes rise{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
 .rise{opacity:0;animation:rise .8s cubic-bezier(.2,.7,.2,1) forwards;animation-delay:calc(var(--d,0)*90ms)}
-@media (prefers-reduced-motion:reduce){.cap,.prompter,.bar{animation:none}.rise{animation:none;opacity:1}}
+@keyframes floaty{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+.floaty{animation:floaty 6s ease-in-out infinite;animation-delay:calc(var(--i,0)*-1.5s)}
+@keyframes marquee{to{transform:translateX(-50%)}}
+.marquee{animation:marquee 34s linear infinite}
+.marquee-mask{-webkit-mask-image:linear-gradient(90deg,transparent,#000 12%,#000 88%,transparent);mask-image:linear-gradient(90deg,transparent,#000 12%,#000 88%,transparent)}
+@keyframes draw{0%{stroke-dashoffset:1}35%,85%{stroke-dashoffset:0}100%{stroke-dashoffset:1}}
+.draw{stroke-dasharray:1;stroke-dashoffset:1;animation:draw 6s ease-in-out infinite;animation-delay:calc(var(--i,0)*.5s)}
+@keyframes pulseSel{0%,100%{background:rgba(106,76,255,.18)}50%{background:rgba(106,76,255,.32)}}
+.sel{animation:pulseSel 2.4s ease-in-out infinite}
+.dots{background-image:radial-gradient(rgba(20,18,31,.1) 1px,transparent 1px);background-size:22px 22px;-webkit-mask-image:radial-gradient(ellipse at 50% 35%,#000 25%,transparent 70%);mask-image:radial-gradient(ellipse at 50% 35%,#000 25%,transparent 70%)}
+details summary::-webkit-details-marker{display:none}
+@media (prefers-reduced-motion:reduce){.prompter,.floaty,.marquee,.sel{animation:none}.draw{animation:none;stroke-dashoffset:0}.rise{animation:none;opacity:1}}
 `;
 
 function Wordmark() {
@@ -69,12 +115,20 @@ function Wordmark() {
   );
 }
 
+function Eyebrow({ children, tone = 'violet' }: { children: React.ReactNode; tone?: 'violet' | 'pink' | 'light' }) {
+  const styles = {
+    violet: 'bg-[#6A4CFF]/10 text-[#6A4CFF]',
+    pink: 'bg-[#FF3D81]/10 text-[#FF3D81]',
+    light: 'bg-white/10 text-white/80',
+  }[tone];
+  return <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ${styles}`}>{children}</span>;
+}
+
 const navLink = `rounded-full px-4 py-2 text-sm font-medium text-[#14121F]/65 transition-colors hover:bg-[#14121F]/[0.06] hover:text-[#14121F] ${focus}`;
 const mobileNavLink = 'shrink-0 rounded-full bg-white/70 px-3.5 py-1.5 text-xs font-medium text-[#14121F]/70 backdrop-blur transition-colors hover:text-[#14121F]';
 const h2 = `${D} text-4xl font-bold leading-[1.02] tracking-[-0.03em] text-[#14121F] sm:text-5xl lg:text-6xl`;
-const tile = 'relative overflow-hidden border border-[#14121F]/10 p-6 sm:p-8';
-const tileTitle = `${D} text-2xl font-bold leading-tight tracking-tight`;
-const tileText = 'mt-3 text-[15px] leading-7';
+const card = 'rounded-[2rem] border border-[#14121F]/10 bg-white shadow-[0_1px_0_rgba(20,18,31,0.04),0_24px_48px_-28px_rgba(20,18,31,0.28)]';
+const gradientText = 'bg-gradient-to-r from-[#6A4CFF] via-[#9a4cff] to-[#FF3D81] bg-clip-text text-transparent';
 
 export default function HomePage() {
   return (
@@ -86,9 +140,9 @@ export default function HomePage() {
         <div className="mx-auto flex h-14 max-w-5xl items-center justify-between gap-3 rounded-full border border-white/70 bg-white/70 pl-4 pr-2 shadow-[0_10px_30px_-10px_rgba(20,18,31,0.18)] backdrop-blur-xl sm:h-16 sm:pl-5">
           <Wordmark />
           <nav aria-label="Main navigation" className="hidden items-center gap-1 md:flex">
+            <a href="#demos" className={navLink}>Demos</a>
+            <a href="#edit" className={navLink}>Edit by text</a>
             <a href="#features" className={navLink}>Features</a>
-            <a href="#how-it-works" className={navLink}>How it works</a>
-            <a href="#use-cases" className={navLink}>Use cases</a>
             <Link href="/pricing" className={navLink}>Pricing</Link>
           </nav>
           <div className="flex shrink-0 items-center gap-1">
@@ -99,216 +153,321 @@ export default function HomePage() {
           </div>
         </div>
         <nav aria-label="Mobile main navigation" className="mx-auto mt-2 flex max-w-5xl gap-1.5 overflow-x-auto px-1 [scrollbar-width:none] md:hidden [&::-webkit-scrollbar]:hidden">
+          <a href="#demos" className={mobileNavLink}>Demos</a>
+          <a href="#edit" className={mobileNavLink}>Edit by text</a>
           <a href="#features" className={mobileNavLink}>Features</a>
-          <a href="#how-it-works" className={mobileNavLink}>How it works</a>
-          <a href="#use-cases" className={mobileNavLink}>Use cases</a>
           <Link href="/pricing" className={mobileNavLink}>Pricing</Link>
         </nav>
       </header>
 
-      {/* Hero: Compact height so it fits entirely in the first viewport */}
-      <section className="relative mx-auto grid max-w-7xl items-center gap-8 px-5 py-6 sm:px-8 lg:grid-cols-[1.05fr_.95fr] lg:gap-6 lg:px-12 lg:py-10">
-        <div>
-          <h1 className={`rise ${D} text-[2.4rem] font-extrabold leading-[0.96] tracking-[-0.04em] sm:text-5xl lg:text-[4.2rem]`} style={{ '--d': 0 } as CSSProperties}>
-            Record, caption and post from one browser tab.
+      {/* Hero */}
+      <section className="relative mx-auto grid max-w-7xl items-center gap-12 px-5 pb-16 pt-8 sm:px-8 lg:grid-cols-[1.02fr_.98fr] lg:gap-8 lg:px-12 lg:pb-24 lg:pt-14">
+        <div className="dots pointer-events-none absolute inset-x-0 top-0 -z-0 h-[640px]" aria-hidden="true" />
+        <div className="relative">
+          <div className="rise" style={{ '--d': 0 } as CSSProperties}>
+            <Eyebrow><Sparkles className="h-3.5 w-3.5" /> New: edit your video by deleting words</Eyebrow>
+          </div>
+          <h1 className={`rise mt-5 ${D} text-[2.6rem] font-extrabold leading-[0.96] tracking-[-0.04em] sm:text-6xl lg:text-[4.6rem]`} style={{ '--d': 1 } as CSSProperties}>
+            Record the demo.
+            <br />
+            Edit it <span className={gradientText}>like a doc.</span>
           </h1>
-          <p className="rise mt-4 max-w-xl text-sm leading-relaxed text-[#14121F]/65 sm:text-base sm:leading-7" style={{ '--d': 1 } as CSSProperties}>
-            A teleprompter, word-by-word captions and photo reels in one studio. Write scripts in seven Indian and global languages. No install, and no timeline to learn.
+          <p className="rise mt-5 max-w-xl text-base leading-7 text-[#14121F]/65 sm:text-lg sm:leading-8" style={{ '--d': 2 } as CSSProperties}>
+            Share your screen with your face in a floating card, read from a teleprompter only you can see, then fix mistakes by deleting words from the transcript. All in one browser tab.
           </p>
-          <div className="rise mt-6 flex flex-wrap items-center gap-3" style={{ '--d': 2 } as CSSProperties}>
-            <Link href="/login?setup=1" className={`group inline-flex items-center gap-2 rounded-full bg-[#14121F] px-5 py-3 text-sm font-semibold text-white shadow-[0_12px_30px_-10px_rgba(20,18,31,0.55)] transition hover:-translate-y-0.5 hover:bg-[#2c2742] ${focus}`}>
+          <div className="rise mt-7 flex flex-wrap items-center gap-3" style={{ '--d': 3 } as CSSProperties}>
+            <Link href="/login?setup=1" className={`group inline-flex items-center gap-2 rounded-full bg-[#14121F] px-6 py-3.5 text-sm font-semibold text-white shadow-[0_14px_34px_-10px_rgba(20,18,31,0.55)] transition hover:-translate-y-0.5 hover:bg-[#2c2742] ${focus}`}>
               Try the studio <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
             </Link>
-            <a href="#how-it-works" className={`inline-flex items-center rounded-full border border-[#14121F]/15 bg-white/60 px-5 py-3 text-sm font-semibold text-[#14121F] transition hover:bg-white ${focus}`}>
-              See how it works
+            <a href="#demos" className={`inline-flex items-center rounded-full border border-[#14121F]/15 bg-white/70 px-6 py-3.5 text-sm font-semibold text-[#14121F] backdrop-blur transition hover:bg-white ${focus}`}>
+              See it in action
             </a>
           </div>
-          <p className="rise mt-3 text-xs text-[#14121F]/55" style={{ '--d': 3 } as CSSProperties}>Free to start. Drafts stay on your device.</p>
-          <div className="rise mt-6" style={{ '--d': 4 } as CSSProperties}>
-            <p className="text-xs font-medium text-[#14121F]/70">AI script writing in</p>
-            <ul className="mt-2 flex flex-wrap gap-1.5">
-              {languages.map((l) => (
-                <li key={l} className="rounded-full border border-[#14121F]/10 bg-white px-3 py-1 text-xs font-medium text-[#14121F]/80">{l}</li>
+          <p className="rise mt-4 text-xs text-[#14121F]/55" style={{ '--d': 4 } as CSSProperties}>Free to start · No install · Drafts stay on your device</p>
+
+          <ul className="rise mt-8 grid max-w-xl gap-2.5 sm:grid-cols-3" style={{ '--d': 5 } as CSSProperties}>
+            {[
+              { icon: ScreenShare, label: 'Screen + camera in one take' },
+              { icon: EyeOff, label: 'Private teleprompter' },
+              { icon: Scissors, label: 'Cut video by cutting text' },
+            ].map((item) => (
+              <li key={item.label} className="flex items-center gap-2.5 rounded-2xl border border-[#14121F]/10 bg-white/80 px-3.5 py-3 text-xs font-semibold text-[#14121F]/80 backdrop-blur">
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#6A4CFF]/10 text-[#6A4CFF]"><item.icon className="h-3.5 w-3.5" /></span>
+                {item.label}
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        {/* Product moment */}
+        <div className="rise relative mx-auto w-full max-w-[600px] pb-12 pt-4" style={{ '--d': 3 } as CSSProperties}>
+          <div className="absolute -left-10 top-6 h-56 w-56 rounded-full bg-[#6A4CFF]/25 blur-3xl" />
+          <div className="absolute -right-6 bottom-10 h-56 w-56 rounded-full bg-[#FF3D81]/20 blur-3xl" />
+
+          <div className="relative rounded-[1.6rem] border border-[#14121F]/10 bg-white p-2 shadow-[0_40px_80px_-30px_rgba(20,18,31,0.4)]">
+            <div className="flex items-center gap-2 px-3 py-2.5">
+              <span className="h-2.5 w-2.5 rounded-full bg-[#FF5F57]" />
+              <span className="h-2.5 w-2.5 rounded-full bg-[#FEBC2E]" />
+              <span className="h-2.5 w-2.5 rounded-full bg-[#28C840]" />
+              <span className="mx-auto rounded-full bg-[#14121F]/[0.05] px-4 py-1 text-[10px] font-medium text-[#14121F]/50">yourproduct.com/dashboard</span>
+            </div>
+            <div className="relative aspect-[16/10] overflow-hidden rounded-2xl bg-[#F7F6FB]">
+              {/* fake dashboard */}
+              <div className="absolute inset-y-0 left-0 w-[15%] space-y-2 border-r border-[#14121F]/5 bg-white p-2.5">
+                <span className="block h-2 w-3/4 rounded bg-[#6A4CFF]" />
+                <span className="block h-2 w-full rounded bg-[#14121F]/10" />
+                <span className="block h-2 w-2/3 rounded bg-[#14121F]/10" />
+                <span className="block h-2 w-5/6 rounded bg-[#14121F]/10" />
+              </div>
+              <div className="absolute inset-y-0 left-[15%] right-0 p-[3%]">
+                <div className="flex h-[22%] gap-2">
+                  {['#6A4CFF', '#FF3D81', '#14121F'].map((c) => (
+                    <div key={c} className="flex-1 rounded-xl border border-[#14121F]/5 bg-white p-2">
+                      <span className="block h-1.5 w-1/2 rounded bg-[#14121F]/15" />
+                      <span className="mt-2 block h-3 w-3/4 rounded" style={{ background: c }} />
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-[4%] flex h-[56%] items-end gap-[3%] rounded-xl border border-[#14121F]/5 bg-white p-[3%]">
+                  {[40, 65, 50, 80, 62, 90, 74, 98].map((h, i) => (
+                    <span key={i} className="flex-1 rounded-t-md bg-[linear-gradient(180deg,#6A4CFF,#a995ff)]" style={{ height: `${h}%` }} />
+                  ))}
+                </div>
+              </div>
+              <span className="absolute left-3 top-3 inline-flex items-center gap-1.5 rounded-full bg-[#14121F]/80 px-2.5 py-1 text-[10px] font-semibold text-white">
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#FF3D81]" />REC 02:14
+              </span>
+              {/* hand-drawn annotation */}
+              <svg viewBox="0 0 400 250" className="pointer-events-none absolute inset-0 h-full w-full" fill="none" aria-hidden="true">
+                <ellipse className="draw" pathLength={1} cx="230" cy="40" rx="64" ry="33" stroke="#FF3D81" strokeWidth="4" strokeLinecap="round" />
+                <path className="draw" pathLength={1} style={{ '--i': 1 } as CSSProperties} d="M318 118 C 296 108, 280 92, 268 76 M268 76 L 281 80 M268 76 L 270 90" stroke="#FF3D81" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </div>
+          </div>
+
+          {/* PIP camera card */}
+          <div className="floaty absolute -bottom-2 -right-2 w-[32%] sm:-right-6" style={{ '--i': 1 } as CSSProperties}>
+            <div className="relative aspect-[4/3] overflow-hidden rounded-2xl bg-[linear-gradient(160deg,#ffb86b,#ff6a8b_55%,#6A4CFF)] shadow-[0_20px_40px_-12px_rgba(20,18,31,0.45)] ring-4 ring-white">
+              <span className="absolute left-1/2 top-[20%] h-[36%] w-[27%] -translate-x-1/2 rounded-full bg-[#FFE9A8]" />
+              <span className="absolute -bottom-[20%] left-1/2 h-[54%] w-[74%] -translate-x-1/2 rounded-[50%] bg-[#2a1a5e]" />
+              <span className="absolute left-2 top-2 rounded-full bg-black/40 px-2 py-0.5 text-[9px] font-bold text-white">YOU</span>
+            </div>
+          </div>
+
+          {/* Private teleprompter */}
+          <div className="floaty absolute -left-3 top-20 hidden w-48 sm:block lg:-left-12" style={{ '--i': 0 } as CSSProperties}>
+            <div className="rounded-2xl bg-[#14121F]/90 p-3 text-white shadow-[0_24px_48px_-14px_rgba(20,18,31,0.5)] backdrop-blur-xl">
+              <div className="mb-2 flex items-center justify-between text-[10px] font-semibold text-white/60">
+                <span>Teleprompter</span>
+                <span className="inline-flex items-center gap-1 text-[#FFE347]"><EyeOff className="h-2.5 w-2.5" />Only you</span>
+              </div>
+              <div className="prompter-mask h-[72px] overflow-hidden">
+                <div className="prompter text-[12px] font-medium leading-4">
+                  {[...prompterLines, ...prompterLines].map((line, i) => (
+                    <p key={i} className="pb-1">{line}</p>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Transcript chip */}
+          <div className="floaty absolute -bottom-6 left-2 hidden sm:block sm:left-6" style={{ '--i': 2 } as CSSProperties}>
+            <div className="rounded-2xl border border-[#14121F]/10 bg-white px-3.5 py-3 text-[12px] font-medium shadow-[0_20px_40px_-14px_rgba(20,18,31,0.3)]">
+              <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-[#14121F]/50">Transcript</p>
+              <p>
+                So <span className="rounded bg-red-50 px-1 text-red-500 line-through">um</span>{' '}
+                <span className="sel rounded px-1">this is</span> the dashboard
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Marquee */}
+      <section aria-label="What people make with Cliprame" className="relative border-y border-[#14121F]/10 bg-white/60 py-5 backdrop-blur">
+        <div className="marquee-mask overflow-hidden">
+          <ul className="marquee flex w-max gap-3">
+            {[...marqueeItems, ...marqueeItems].map((item, i) => (
+              <li key={i} className="flex items-center gap-3 whitespace-nowrap rounded-full border border-[#14121F]/10 bg-white px-5 py-2 text-sm font-semibold text-[#14121F]/75">
+                <span className="h-1.5 w-1.5 rounded-full bg-[#6A4CFF]" />{item}
+              </li>
+            ))}
+          </ul>
+        </div>
+      </section>
+
+      {/* Demos */}
+      <section id="demos" className="relative mx-auto max-w-7xl scroll-mt-28 px-5 py-24 sm:px-8 lg:px-12 lg:py-32">
+        <div className="grid items-center gap-14 lg:grid-cols-[.95fr_1.05fr]">
+          <div>
+            <Eyebrow><ScreenShare className="h-3.5 w-3.5" /> Product demos & explainers</Eyebrow>
+            <h2 className={`${h2} mt-5`}>Your screen. Your face. Your script, <span className={gradientText}>privately.</span></h2>
+            <p className="mt-5 max-w-lg text-base leading-7 text-[#14121F]/65">Record walkthroughs that feel personal and look polished, without juggling a recorder, a teleprompter app and an editor.</p>
+            <ul className="mt-8 space-y-5">
+              {demoPoints.map((p) => (
+                <li key={p.title} className="flex gap-4">
+                  <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#6A4CFF] text-white"><Check className="h-3.5 w-3.5" /></span>
+                  <div>
+                    <h3 className={`${D} text-lg font-bold tracking-tight`}>{p.title}</h3>
+                    <p className="mt-1 text-[15px] leading-7 text-[#14121F]/65">{p.text}</p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div className={`${card} relative p-5 sm:p-7`}>
+            <p className="text-[11px] font-bold uppercase tracking-wider text-[#14121F]/60">Showcase frames</p>
+            <div className="mt-4 grid grid-cols-3 gap-3">
+              {frames.map((f) => (
+                <div key={f.name} className="text-center">
+                  <div className={`relative aspect-[3/4] overflow-hidden rounded-2xl ${f.bg} p-2.5`}>
+                    <div className="flex h-full flex-col overflow-hidden rounded-lg bg-white shadow-lg">
+                      {f.bar && (
+                        <div className="flex items-center gap-1 border-b border-[#14121F]/5 px-1.5 py-1.5">
+                          <span className="h-1 w-1 rounded-full bg-[#FF5F57]" /><span className="h-1 w-1 rounded-full bg-[#FEBC2E]" /><span className="h-1 w-1 rounded-full bg-[#28C840]" />
+                        </div>
+                      )}
+                      <div className="flex-1 space-y-1.5 p-2">
+                        <span className="block h-1.5 w-1/2 rounded bg-[#14121F]/70" />
+                        <span className="block h-1 w-full rounded bg-[#14121F]/10" />
+                        <span className="block h-1 w-4/5 rounded bg-[#14121F]/10" />
+                        <span className="block h-8 w-full rounded bg-[linear-gradient(120deg,#e0e7ff,#fce7f3)]" />
+                      </div>
+                    </div>
+                  </div>
+                  <span className="mt-2 block text-xs font-semibold text-[#14121F]/70">{f.name}</span>
+                </div>
+              ))}
+            </div>
+            <div className="mt-5 flex items-center gap-3 rounded-2xl bg-[#F7F6FB] p-3.5">
+              <span className="relative h-11 w-14 shrink-0 overflow-hidden rounded-lg bg-[linear-gradient(135deg,#c7d2fe,#fbcfe8)]">
+                <span className="absolute bottom-1 right-1 h-4 w-4 rounded-full bg-[linear-gradient(160deg,#ffb86b,#FF3D81)] ring-2 ring-white" />
+              </span>
+              <p className="text-[13px] leading-5 text-[#14121F]/70"><strong className="font-semibold text-[#14121F]">Floating camera card</strong> sits on top of any frame, so you are always part of the demo.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Edit by text */}
+      <section id="edit" className="relative mx-auto max-w-7xl scroll-mt-28 px-5 pb-24 sm:px-8 lg:px-12 lg:pb-32">
+        <div className="grid items-center gap-14 lg:grid-cols-[1.05fr_.95fr]">
+          <div className={`${card} order-2 p-5 sm:p-7 lg:order-1`}>
+            <div className="flex items-center justify-between">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-[#14121F]/60">Script</p>
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-600"><Scissors className="h-3.5 w-3.5" /> Delete selected</span>
+            </div>
+            <p className="mt-4 text-[17px] leading-9 text-[#14121F]">
+              Welcome back everyone,{' '}
+              <span className="rounded bg-red-50 px-1 text-red-500 line-through">so um basically like</span>{' '}
+              today I want to show you how{' '}
+              <span className="rounded bg-[#FFE347] px-1">our dashboard</span>{' '}
+              tracks every campaign.{' '}
+              <span className="sel rounded px-1">Sorry, let me start that sentence again.</span>{' '}
+              It brings all your reports into one place.
+            </p>
+
+            <div className="mt-6">
+              <div className="relative h-10 overflow-hidden rounded-2xl border border-[#14121F]/10 bg-[#F7F6FB]">
+                <span className="absolute inset-y-0 left-0 w-[22%] bg-[#6A4CFF]/15" />
+                <span className="absolute inset-y-0 left-[22%] w-[14%] border-x border-red-500 bg-red-500/25 [background-image:repeating-linear-gradient(45deg,transparent_0_4px,rgba(239,68,68,.35)_4px_8px)]" />
+                <span className="absolute inset-y-0 left-[36%] w-[24%] bg-[#6A4CFF]/15" />
+                <span className="absolute inset-y-0 left-[60%] w-[18%] border-x border-red-500 bg-red-500/25 [background-image:repeating-linear-gradient(45deg,transparent_0_4px,rgba(239,68,68,.35)_4px_8px)]" />
+                <span className="absolute inset-y-0 left-[78%] right-0 bg-[#6A4CFF]/15" />
+                <span className="absolute inset-y-1 left-[48%] w-0.5 rounded bg-[#FF3D81]" />
+              </div>
+              <div className="mt-2 flex justify-between text-[11px] font-semibold text-[#14121F]/50">
+                <span>0:00</span><span className="text-red-500">Removed parts are hatched. Tap to restore</span><span>2:48</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="order-1 lg:order-2">
+            <Eyebrow tone="pink"><Scissors className="h-3.5 w-3.5" /> Edit by text</Eyebrow>
+            <h2 className={`${h2} mt-5`}>Fix the take by deleting the words.</h2>
+            <p className="mt-5 max-w-lg text-base leading-7 text-[#14121F]/65">Your recording is transcribed word by word. Stumbled on a sentence? Select it, delete it, and the video closes the gap. No timeline hunting.</p>
+            <ul className="mt-8 space-y-3.5">
+              {editPoints.map((p) => (
+                <li key={p} className="flex items-start gap-3 text-[15px] leading-6 text-[#14121F]/80">
+                  <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#FF3D81] text-white"><Check className="h-3 w-3" /></span>
+                  {p}
+                </li>
               ))}
             </ul>
           </div>
         </div>
+      </section>
 
-        {/* Product moment: a reel being captioned */}
-        <div className="rise relative mx-auto w-full max-w-[380px] py-2" style={{ '--d': 3 } as CSSProperties}>
-          <div className="absolute -left-8 top-8 h-48 w-48 rounded-full bg-[#6A4CFF]/25 blur-3xl" />
-          <div className="absolute -right-4 bottom-6 h-48 w-48 rounded-full bg-[#FF3D81]/20 blur-3xl" />
-
-          <div className="relative mx-auto w-[240px] rotate-[2.5deg] rounded-[2.5rem] bg-[#14121F] p-2 shadow-[0_30px_60px_-15px_rgba(20,18,31,0.45)] sm:w-[260px]">
-            <div className="relative aspect-[9/18.5] overflow-hidden rounded-[2.1rem] bg-[linear-gradient(180deg,#ffb86b_0%,#ff6a8b_46%,#5b3df5_100%)]">
-              <div className="absolute left-1/2 top-[28%] h-20 w-20 -translate-x-1/2 rounded-full bg-[#FFE9A8]" />
-              <div className="absolute -bottom-10 -left-10 h-40 w-64 rounded-[50%] bg-[#2a1a5e]" />
-              <div className="absolute -bottom-14 -right-12 h-44 w-64 rounded-[50%] bg-[#1b1040]" />
-              <div className="absolute inset-x-0 bottom-0 h-1/2 bg-[linear-gradient(transparent,rgba(20,18,31,0.55))]" />
-
-              <div className="absolute inset-x-4 top-8 flex items-center justify-between text-[10px] font-semibold text-white">
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-black/35 px-2 py-0.5 backdrop-blur">
-                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#FF3D81]" />REC 00:24
-                </span>
-                <span className="rounded-full bg-black/35 px-2 py-0.5 backdrop-blur">9:16</span>
-              </div>
-
-              <div className="absolute inset-x-3 bottom-8 text-center">
-                <p className={`${D} text-[1.4rem] font-extrabold leading-snug text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.35)]`}>
-                  {captionWords.map((w, i) => (
-                    <span key={w}>
-                      <span className="cap" style={{ '--i': i } as CSSProperties}>{w}</span>{' '}
-                    </span>
-                  ))}
-                </p>
-              </div>
-            </div>
-            <div className="absolute left-1/2 top-[16px] h-4 w-16 -translate-x-1/2 rounded-full bg-[#14121F]" />
-          </div>
-
-          {/* Floating teleprompter */}
-          <div className="absolute -left-6 top-20 hidden w-48 rounded-2xl border border-white/70 bg-white/80 p-2.5 shadow-[0_20px_40px_-12px_rgba(20,18,31,0.25)] backdrop-blur-xl sm:block lg:-left-10">
-            <div className="mb-1.5 flex items-center justify-between text-[10px] font-semibold text-[#14121F]/55">
-              <span>Teleprompter</span>
-              <span className="inline-flex items-center gap-1 text-[#6A4CFF]"><Sparkles className="h-2.5 w-2.5" />AI script</span>
-            </div>
-            <div className="prompter-mask h-[72px] overflow-hidden">
-              <div className="prompter text-[12px] font-medium leading-4 text-[#14121F]">
-                {[...prompterLines, ...prompterLines].map((line, i) => (
-                  <p key={i} className="pb-1">{line}</p>
+      {/* Air drawing */}
+      <section className="relative mx-auto max-w-7xl px-5 pb-24 sm:px-8 lg:px-12 lg:pb-32">
+        <div className="relative overflow-hidden rounded-[2.5rem] bg-[#14121F] p-7 text-white sm:p-12">
+          <div className="pointer-events-none absolute -right-24 -top-28 h-80 w-80 rounded-full bg-[#6A4CFF]/45 blur-3xl" />
+          <div className="pointer-events-none absolute -bottom-28 -left-16 h-72 w-72 rounded-full bg-[#FF3D81]/30 blur-3xl" />
+          <div className="relative grid items-center gap-10 lg:grid-cols-2">
+            <div>
+              <Eyebrow tone="light"><Hand className="h-3.5 w-3.5" /> Hand-tracked drawing</Eyebrow>
+              <h2 className={`${D} mt-5 text-4xl font-extrabold leading-[1.02] tracking-[-0.03em] sm:text-5xl`}>Draw, write and erase with just your hand.</h2>
+              <p className="mt-5 max-w-md text-base leading-7 text-white/70">Circle a button, underline a number or write a note on your shared screen. Rough circles, boxes and lines snap into clean shapes, and everything is part of your recording.</p>
+              <ul className="mt-7 flex flex-wrap gap-2">
+                {gestures.map((g) => (
+                  <li key={g.label} className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3.5 py-2 text-xs font-semibold text-white/90">
+                    <span aria-hidden="true">{g.icon}</span>{g.label}
+                  </li>
                 ))}
-              </div>
+              </ul>
             </div>
-          </div>
 
-          {/* Floating captions chip */}
-          <div className="absolute -right-4 bottom-20 hidden items-center gap-2.5 rounded-2xl border border-white/70 bg-white/85 px-3 py-2.5 shadow-[0_20px_40px_-12px_rgba(20,18,31,0.25)] backdrop-blur-xl sm:flex lg:-right-6">
-            <span className="flex h-7 items-center gap-[3px]" aria-hidden="true">
-              {[0, 1, 2, 3, 4].map((i) => (
-                <span key={i} className="bar block h-5 w-1 rounded-full bg-[#6A4CFF]" style={{ '--i': i } as CSSProperties} />
-              ))}
-            </span>
-            <span>
-              <span className="block text-[11px] font-semibold">Captions ready</span>
-              <span className="block text-[10px] text-[#14121F]/55">Hinglish, in sync</span>
-            </span>
+            <div className="relative aspect-[16/11] overflow-hidden rounded-3xl border border-white/10 bg-white/[0.06] p-4">
+              <div className="h-full rounded-2xl bg-white p-4">
+                <span className="block h-3 w-1/3 rounded bg-[#14121F]/80" />
+                <span className="mt-3 block h-2 w-full rounded bg-[#14121F]/10" />
+                <span className="mt-2 block h-2 w-5/6 rounded bg-[#14121F]/10" />
+                <span className="mt-4 block h-[42%] w-full rounded-xl bg-[linear-gradient(120deg,#e0e7ff,#fce7f3)]" />
+              </div>
+              <svg viewBox="0 0 400 275" className="pointer-events-none absolute inset-4 h-[calc(100%-2rem)] w-[calc(100%-2rem)]" fill="none" aria-hidden="true">
+                <rect className="draw" pathLength={1} x="40" y="150" width="150" height="76" rx="6" stroke="#22d3ee" strokeWidth="4" strokeLinejoin="round" />
+                <ellipse className="draw" pathLength={1} style={{ '--i': 1 } as CSSProperties} cx="290" cy="60" rx="60" ry="30" stroke="#FF3D81" strokeWidth="4" />
+                <path className="draw" pathLength={1} style={{ '--i': 2 } as CSSProperties} d="M70 60 Q 100 30, 130 62 T 190 58" stroke="#FFE347" strokeWidth="5" strokeLinecap="round" />
+              </svg>
+              <span className="absolute bottom-3 right-3 inline-flex items-center gap-1.5 rounded-full bg-[#14121F]/85 px-3 py-1.5 text-[10px] font-semibold text-white">
+                <Pencil className="h-3 w-3" /> Snapped to shapes <Eraser className="ml-1 h-3 w-3" />
+              </span>
+            </div>
           </div>
         </div>
       </section>
 
-      {/* Bento features */}
+      {/* Feature grid */}
       <section id="features" className="relative mx-auto max-w-7xl scroll-mt-28 px-5 pb-24 sm:px-8 lg:px-12 lg:pb-32">
         <div className="max-w-3xl">
-          <h2 className={h2}>Less fiddling with tools. More time for your story.</h2>
-          <p className="mt-5 max-w-xl text-base leading-7 text-[#14121F]/65">From first take to final export, keep your creative flow simple and focused.</p>
+          <h2 className={h2}>Everything around the take, already built in.</h2>
+          <p className="mt-5 max-w-xl text-base leading-7 text-[#14121F]/65">Captions, scripts, backgrounds and effects live in the same studio, so you stay in the flow.</p>
         </div>
-
-        <div className="mt-12 grid gap-4 md:grid-cols-2 lg:grid-cols-6">
-          {/* Teleprompter + AI script */}
-          <article className={`${tile} rounded-[2rem] bg-white md:col-span-2 lg:col-span-4`}>
-            <div className="grid items-center gap-8 sm:grid-cols-2">
-              <div>
-                <h3 className={`${tileTitle} sm:text-3xl`}>Write the script with AI. Read it while you record.</h3>
-                <p className={`${tileText} max-w-sm text-[#14121F]/65`}>Type a topic and get a script in seven languages. The teleprompter scrolls on screen while you record.</p>
-              </div>
-              <div className="rounded-2xl bg-[#14121F] p-5 text-white">
-                <div className="flex items-center justify-between gap-2 rounded-xl bg-white/10 px-3 py-2 text-xs">
-                  <span className="truncate text-white/80">Topic: a day in Hyderabad</span>
-                  <span className="shrink-0 rounded-full bg-[#6A4CFF] px-2 py-0.5 font-semibold">Hinglish</span>
-                </div>
-                <div className={`${D} mt-4 space-y-2 text-lg font-semibold leading-snug`}>
-                  <p className="text-white/35">Namaste doston, aaj ka video</p>
-                  <p>Hyderabad ke bare mein <span className="rounded bg-[#FFE347] px-1 text-[#14121F]">hai</span></p>
-                  <p className="text-white/35">Charminar se shuru karte hain</p>
-                </div>
-              </div>
-            </div>
-          </article>
-
-          {/* Captions */}
-          <article className={`${tile} flex flex-col justify-between rounded-[1.75rem] border-transparent bg-[#6A4CFF] text-white lg:col-span-2`}>
-            <div>
-              <h3 className={tileTitle}>Captions that follow your voice</h3>
-              <p className={`${tileText} text-white/80`}>Word-by-word highlighting in English, Hindi and Hinglish.</p>
-            </div>
-            <p className={`${D} mt-8 text-3xl font-extrabold leading-tight`}>
-              Yeh <mark className="rounded-md bg-[#FFE347] px-1.5 text-[#14121F]">sabse</mark> mast hai
-            </p>
-          </article>
-
-          {/* Effects */}
-          <article className={`${tile} rounded-[1.75rem] bg-white lg:col-span-2`}>
-            <h3 className={tileTitle}>Look good anywhere</h3>
-            <p className={`${tileText} text-[#14121F]/65`}>Blur your background, key out a green screen, or drop in your own image.</p>
-            <div className="mt-6 grid grid-cols-4 gap-2 text-center text-[11px] font-medium text-[#14121F]/60">
-              {effects.map((e) => (
-                <div key={e.name}>
-                  <span className={`mx-auto block h-12 w-12 rounded-full ring-1 ring-[#14121F]/10 ${e.bg}`} />
-                  <span className="mt-1.5 block leading-tight">{e.name}</span>
-                </div>
-              ))}
-            </div>
-          </article>
-
-          {/* Photo reels */}
-          <article className={`${tile} rounded-[1.75rem] bg-white lg:col-span-2`}>
-            <h3 className={tileTitle}>Photos and clips, one reel</h3>
-            <p className={`${tileText} text-[#14121F]/65`}>Transitions, music and narration, with templates for travel, birthdays and products.</p>
-            <div className="relative mt-6 h-32" aria-hidden="true">
-              <div className="absolute left-4 top-3 h-28 w-20 -rotate-12 rounded-xl bg-[linear-gradient(160deg,#38BDF8,#6A4CFF)] shadow-lg" />
-              <div className="absolute left-16 top-0 h-28 w-20 rotate-3 rounded-xl bg-[linear-gradient(160deg,#FFE347,#FF3D81)] shadow-lg" />
-              <div className="absolute left-32 top-5 h-28 w-20 rotate-12 rounded-xl bg-[linear-gradient(160deg,#FF3D81,#14121F)] shadow-lg" />
-            </div>
-          </article>
-
-          {/* Editor */}
-          <article className={`${tile} rounded-[1.75rem] bg-white lg:col-span-2`}>
-            <h3 className={tileTitle}>Edit without a learning curve</h3>
-            <p className={`${tileText} text-[#14121F]/65`}>Trim, split, zoom in on key moments, and change speed.</p>
-            <div className="relative mt-6 rounded-xl bg-[#14121F]/[0.04] p-3" aria-hidden="true">
-              <div className="flex gap-1.5">
-                <span className="h-8 flex-[3] rounded-lg bg-[#6A4CFF]" />
-                <span className="h-8 flex-[2] rounded-lg bg-[#6A4CFF]/55" />
-                <span className="h-8 flex-[2] rounded-lg bg-[#6A4CFF]" />
-              </div>
-              <div className="mt-2 flex gap-1.5">
-                <span className="h-3 flex-[2] rounded bg-[#FF3D81]/70" />
-                <span className="h-3 flex-[4] rounded bg-[#14121F]/10" />
-                <span className="h-3 flex-[1] rounded bg-[#FFE347]" />
-              </div>
-              <span className="absolute inset-y-2 left-[42%] w-0.5 rounded bg-[#FF3D81]" />
-            </div>
-          </article>
-
-          {/* Screen share */}
-          <article className={`${tile} rounded-[2rem] border-transparent bg-[#14121F] text-white md:col-span-2 lg:col-span-6`}>
-            <div className="pointer-events-none absolute -right-20 -top-24 h-72 w-72 rounded-full bg-[#6A4CFF]/40 blur-3xl" />
-            <div className="relative grid items-center gap-8 md:grid-cols-2">
-              <div>
-                <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-white/10"><ScreenShare className="h-5 w-5" /></span>
-                <h3 className={`${tileTitle} mt-5 sm:text-3xl`}>Explain it on camera. Then show your screen.</h3>
-                <p className={`${tileText} max-w-md text-white/70`}>Start recording yourself, share a page in the middle of the take, and keep talking. Great for lessons, demos and walkthroughs.</p>
-              </div>
-              <div className="relative rounded-2xl border border-white/10 bg-white/[0.06] p-4" aria-hidden="true">
-                <div className="space-y-2.5 rounded-xl bg-white p-4">
-                  <span className="block h-3 w-1/3 rounded bg-[#14121F]/80" />
-                  <span className="block h-2 w-full rounded bg-[#14121F]/10" />
-                  <span className="block h-2 w-5/6 rounded bg-[#14121F]/10" />
-                  <span className="block h-16 w-full rounded-lg bg-[linear-gradient(120deg,#e0e7ff,#fce7f3)]" />
-                </div>
-                <span className="absolute -bottom-3 -right-3 h-16 w-16 rounded-full bg-[linear-gradient(160deg,#ffb86b,#FF3D81)] ring-4 ring-[#14121F]" />
-              </div>
-            </div>
-          </article>
+        <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {features.map((f) => (
+            <article key={f.title} className={`${card} group p-6 transition hover:-translate-y-1 sm:p-7`}>
+              <span className={`flex h-11 w-11 items-center justify-center rounded-2xl text-white ${f.color}`}><f.icon className="h-5 w-5" /></span>
+              <h3 className={`${D} mt-5 text-xl font-bold leading-tight tracking-tight`}>{f.title}</h3>
+              <p className="mt-2.5 text-[15px] leading-7 text-[#14121F]/65">{f.text}</p>
+            </article>
+          ))}
+        </div>
+        <div className="mt-8 flex flex-wrap items-center gap-2">
+          <span className="mr-1 text-xs font-medium text-[#14121F]/70">AI script writing in</span>
+          {languages.map((l) => (
+            <span key={l} className="rounded-full border border-[#14121F]/10 bg-white px-3 py-1 text-xs font-medium text-[#14121F]/80">{l}</span>
+          ))}
         </div>
       </section>
 
-      {/* How it works: a real sequence */}
+      {/* How it works */}
       <section id="how-it-works" className="relative mx-auto max-w-7xl scroll-mt-28 px-5 pb-24 sm:px-8 lg:px-12 lg:pb-32">
         <div className="grid gap-12 lg:grid-cols-[.8fr_1.2fr]">
           <div>
-            <h2 className={h2}>From idea to ready-to-share.</h2>
-            <p className="mt-5 max-w-sm text-base leading-7 text-[#14121F]/65">No complicated timeline to learn. Start with what you have and build from there.</p>
+            <h2 className={h2}>From first take to shareable video.</h2>
+            <p className="mt-5 max-w-sm text-base leading-7 text-[#14121F]/65">Three steps, no complicated timeline to learn.</p>
           </div>
           <ol className="divide-y divide-[#14121F]/10 border-y border-[#14121F]/10">
             {steps.map((s) => (
@@ -327,8 +486,7 @@ export default function HomePage() {
       {/* Use cases */}
       <section id="use-cases" className="relative mx-auto max-w-7xl scroll-mt-28 px-5 pb-24 sm:px-8 lg:px-12 lg:pb-32">
         <div className="max-w-2xl">
-          <h2 className={h2}>One studio. Your kind of video.</h2>
-          <p className="mt-5 max-w-xl text-base leading-7 text-[#14121F]/65">From a quick social clip to a thoughtful explainer, start with the story you want to share.</p>
+          <h2 className={h2}>Made for people who explain things.</h2>
         </div>
         <div className="mt-12 grid gap-10 md:grid-cols-3 md:gap-8">
           {useCases.map((u) => (
@@ -340,17 +498,34 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* FAQ */}
+      <section id="faq" className="relative mx-auto max-w-4xl scroll-mt-28 px-5 pb-24 sm:px-8 lg:pb-32">
+        <h2 className={`${h2} text-center`}>Good questions.</h2>
+        <div className="mt-10 space-y-3">
+          {faqs.map((f) => (
+            <details key={f.q} className={`${card} group rounded-3xl px-6 py-5`}>
+              <summary className={`flex cursor-pointer list-none items-center justify-between gap-4 text-base font-semibold ${focus} rounded-lg`}>
+                {f.q}
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#6A4CFF]/10 text-[#6A4CFF] transition-transform group-open:rotate-45"><Plus className="h-4 w-4" /></span>
+              </summary>
+              <p className="mt-3 max-w-2xl text-[15px] leading-7 text-[#14121F]/65">{f.a}</p>
+            </details>
+          ))}
+        </div>
+      </section>
+
       {/* Closing CTA */}
       <section className="relative mx-auto max-w-7xl px-5 pb-20 sm:px-8 lg:px-12 lg:pb-28">
-        <div className="relative overflow-hidden rounded-[2.5rem] bg-[#14121F] px-6 py-16 text-center text-white sm:px-12 sm:py-24">
-          <div className="pointer-events-none absolute -left-24 -top-24 h-80 w-80 rounded-full bg-[#6A4CFF]/45 blur-3xl" />
-          <div className="pointer-events-none absolute -bottom-28 -right-20 h-80 w-80 rounded-full bg-[#FF3D81]/35 blur-3xl" />
+        <div className="relative overflow-hidden rounded-[2.5rem] border border-[#14121F]/10 bg-[linear-gradient(135deg,#ede9ff,#ffe6f0_55%,#fff6c9)] px-6 py-16 text-center sm:px-12 sm:py-24">
+          <div className="pointer-events-none absolute -left-20 -top-24 h-72 w-72 rounded-full bg-[#6A4CFF]/25 blur-3xl" />
+          <div className="pointer-events-none absolute -bottom-28 -right-16 h-72 w-72 rounded-full bg-[#FF3D81]/25 blur-3xl" />
           <div className="relative">
-            <h2 className={`${D} mx-auto max-w-3xl text-4xl font-extrabold leading-[1.02] tracking-[-0.035em] sm:text-6xl`}>Bring your idea. We’ll help with the polish.</h2>
-            <Link href="/login?setup=1" className={`group mt-9 inline-flex items-center gap-2 rounded-full bg-white px-7 py-4 text-sm font-semibold text-[#14121F] transition hover:-translate-y-0.5 hover:bg-[#FFE347] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-[#14121F]`}>
-              Explore the studio <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+            <h2 className={`${D} mx-auto max-w-3xl text-4xl font-extrabold leading-[1.02] tracking-[-0.035em] text-[#14121F] sm:text-6xl`}>Your next demo is one take away.</h2>
+            <p className="mx-auto mt-5 max-w-md text-base leading-7 text-[#14121F]/65">Open the studio, hit record, and fix the rest by editing the transcript.</p>
+            <Link href="/login?setup=1" className={`group mt-9 inline-flex items-center gap-2 rounded-full bg-[#14121F] px-7 py-4 text-sm font-semibold text-white shadow-[0_14px_34px_-10px_rgba(20,18,31,0.55)] transition hover:-translate-y-0.5 hover:bg-[#2c2742] ${focus}`}>
+              Try the studio <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
             </Link>
-            <p className="mt-4 text-sm text-white/55">Free to start.</p>
+            <p className="mt-4 text-sm text-[#14121F]/55">Free to start. No install.</p>
           </div>
         </div>
       </section>
