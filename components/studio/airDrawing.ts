@@ -1,6 +1,7 @@
 import { FilesetResolver, HandLandmarker } from '@mediapipe/tasks-vision';
 import type { AirDrawingTool, AirWritingFont, AirWritingLanguage } from '@/types/studio';
 import type { HandwritingRequest, HandwritingResult } from './handwriting';
+import { recognizeShape } from './airShapes';
 
 const WASM_FILESET_URL = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm';
 const HAND_MODEL_URL =
@@ -13,9 +14,10 @@ const UNDO_HOLD_MS = 250;
 const HAND_LOST_MS = 300;
 const WORD_GAP_MS = 800;
 const POP_IN_MS = 380;
+const ERASE_RADIUS = 0.05; // fraction of the smaller frame side
 export const PERFORMANCE_DETECTION_INTERVAL_MS = 100;
 
-export type HandGesture = 'point' | 'pinch' | 'palm' | 'fist' | 'none';
+export type HandGesture = 'point' | 'pinch' | 'palm' | 'fist' | 'peace' | 'none';
 /** 'camera' strokes live in the full output frame; 'screen' strokes live in the shared-screen rectangle. */
 export type AnnotationSpace = 'camera' | 'screen';
 
@@ -38,6 +40,8 @@ export interface AirDrawingOptions {
     writeFont: AirWritingFont;
     writeColor: string;
     language: AirWritingLanguage;
+    snapShapes?: boolean;
+    rainbow?: boolean;
 }
 
 export interface FrameMapping {
@@ -71,6 +75,8 @@ interface Stroke {
     size: number;
     glow: number;
     endedAt: number | null;
+    /** True once the stroke was snapped to a clean shape, so it is drawn with straight segments. */
+    straight?: boolean;
 }
 
 interface TextItem {
@@ -114,7 +120,7 @@ class OneEuro {
     private x = new LowPass();
     private dx = new LowPass();
     private lastTime: number | null = null;
-    constructor(private minCutoff: number, private beta: number, private dCutoff = 1) {}
+    constructor(private minCutoff: number, private beta: number, private dCutoff = 1) { }
 
     private static alpha(cutoff: number, dt: number) {
         const tau = 1 / (2 * Math.PI * cutoff);
@@ -157,6 +163,7 @@ export function classifyGesture(lm: Landmark[]): HandGesture {
     const indexCurledIn = dist(lm[8], wrist) < dist(lm[6], wrist) * 0.85;
     if (dist(lm[4], lm[8]) < palmSize * 0.3 && !indexCurledIn) return 'pinch';
     if (index && middle && ring && pinky && thumb) return 'palm';
+    if (index && middle && !ring && !pinky) return 'peace';
     if (index && !middle && !ring && !pinky) return 'point';
     if (!index && !middle && !ring && !pinky) return 'fist';
     return 'none';
@@ -178,6 +185,8 @@ export class AirDrawingEngine {
     private revision = 0;
     private filterX = new OneEuro(1.2, 8);
     private filterY = new OneEuro(1.2, 8);
+    private snapShapes = false;
+    private rainbow = false;
 
     private lastDetectAt = -Infinity;
     private lastVideoTime = -1;
@@ -193,7 +202,7 @@ export class AirDrawingEngine {
     private clearProgress = 0;
     private layout: { width: number; height: number; rect: TargetRect; space: AnnotationSpace } | null = null;
 
-    constructor(private readonly hooks: AirDrawingEngineOptions) {}
+    constructor(private readonly hooks: AirDrawingEngineOptions) { }
 
     async load() {
         const vision = await FilesetResolver.forVisionTasks(WASM_FILESET_URL);
@@ -225,6 +234,8 @@ export class AirDrawingEngine {
 
     /** Runs hand detection (throttled in performance mode) and updates annotations. */
     update(video: HTMLVideoElement, now: number, opts: AirDrawingOptions, map: FrameMapping, space: AnnotationSpace) {
+        this.snapShapes = Boolean(opts.snapShapes);
+        this.rainbow = Boolean(opts.rainbow);
         this.maybeFinalizeWord(now, opts, space);
         if (!this.landmarker) return;
         const interval = opts.performanceMode ? PERFORMANCE_DETECTION_INTERVAL_MS : 0;
@@ -305,7 +316,9 @@ export class AirDrawingEngine {
                         space,
                         tool: wantedTool as StrokeTool,
                         points: [],
-                        color: writing ? opts.writeColor : opts.color,
+                        color: writing
+                            ? opts.writeColor
+                            : this.rainbow ? `hsl(${(this.nextId * 47) % 360} 100% 60%)` : opts.color,
                         size: writing ? Math.max(4, opts.size * 0.6) : opts.size,
                         glow: writing ? 50 : opts.glow,
                         endedAt: null,
@@ -325,6 +338,13 @@ export class AirDrawingEngine {
 
         this.cursor = { x: Math.min(1, Math.max(0, nx)), y: Math.min(1, Math.max(0, ny)), gesture: raw, space };
         if (isLaser) this.revision++;
+
+        // Two fingers up: erase anything the fingertip touches
+        if (raw === 'peace' && stable && !writing) {
+            this.eraseAt(nx, ny, space);
+            this.revision++;
+            return;
+        }
 
         if (!stable || this.actionFired) return;
         if (raw === 'palm' && held >= CLEAR_HOLD_MS) {
@@ -353,6 +373,16 @@ export class AirDrawingEngine {
         }
     }
 
+    private eraseAt(nx: number, ny: number, space: AnnotationSpace) {
+        const rect = this.layout?.rect ?? { x: 0, y: 0, width: 1280, height: 720 };
+        const radius = Math.min(rect.width, rect.height) * ERASE_RADIUS;
+        this.items = this.items.filter((item) => {
+            if (item.space !== space) return true;
+            const pts = item.kind === 'stroke' ? item.points : item.strokes.flatMap((s) => s.points);
+            return !pts.some((p) => Math.hypot((p.x - nx) * rect.width, (p.y - ny) * rect.height) < radius);
+        });
+    }
+
     private endStroke(now: number) {
         const stroke = this.active;
         if (!stroke) return;
@@ -362,6 +392,13 @@ export class AirDrawingEngine {
             this.items = this.items.filter((item) => item !== stroke);
         } else if (stroke.tool === 'ink') {
             this.lastInkEnd = now;
+        } else if (this.snapShapes && (stroke.tool === 'pen' || stroke.tool === 'highlighter')) {
+            const rect = this.layout?.rect ?? { x: 0, y: 0, width: 1280, height: 720 };
+            const snapped = recognizeShape(stroke.points, rect.width, rect.height);
+            if (snapped) {
+                stroke.points = snapped;
+                stroke.straight = true;
+            }
         }
         this.revision++;
     }
@@ -544,6 +581,20 @@ export class AirDrawingEngine {
     }
 
     private drawCursorRing(ctx: CanvasRenderingContext2D, x: number, y: number, scale: number, opts: AirDrawingOptions, gesture: HandGesture) {
+        // Eraser: dashed ring showing exactly what will be erased
+        if (gesture === 'peace' && !opts.writeMode) {
+            const rect = this.layout?.rect ?? { width: 1280, height: 720 };
+            ctx.save();
+            ctx.lineWidth = 3 * scale;
+            ctx.strokeStyle = 'rgba(255,85,119,0.95)';
+            ctx.setLineDash([6 * scale, 5 * scale]);
+            ctx.beginPath();
+            ctx.arc(x, y, Math.min(rect.width, rect.height) * ERASE_RADIUS, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.restore();
+            return;
+        }
+
         const drawPose = opts.writeMode ? 'pinch' : 'point';
         ctx.save();
         ctx.lineWidth = 2 * scale;
@@ -575,6 +626,12 @@ function smoothPath(ctx: CanvasRenderingContext2D, pts: Point[]) {
         ctx.quadraticCurveTo(pts[i].x, pts[i].y, (pts[i].x + pts[i + 1].x) / 2, (pts[i].y + pts[i + 1].y) / 2);
     }
     ctx.lineTo(pts[pts.length - 1].x, pts[pts.length - 1].y);
+}
+
+// Straight segments, used for snapped shapes so box corners stay sharp
+function polyPath(ctx: CanvasRenderingContext2D, pts: Point[]) {
+    ctx.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
 }
 
 function arrowPath(ctx: CanvasRenderingContext2D, pts: Point[], lineWidth: number) {
@@ -638,6 +695,7 @@ function drawStroke(ctx: CanvasRenderingContext2D, stroke: Stroke, rect: TargetR
     if (stroke.points.length < 2 || alpha <= 0) return;
     const pts = toPixels(stroke.points, rect);
     const lineWidth = Math.max(1, stroke.size * scale);
+    const trace = () => (stroke.straight ? polyPath(ctx, pts) : smoothPath(ctx, pts));
 
     if (stroke.tool === 'highlighter') {
         ctx.save();
@@ -647,13 +705,13 @@ function drawStroke(ctx: CanvasRenderingContext2D, stroke: Stroke, rect: TargetR
         ctx.strokeStyle = stroke.color;
         ctx.lineWidth = lineWidth * 3.5;
         ctx.beginPath();
-        smoothPath(ctx, pts);
+        trace();
         ctx.stroke();
         ctx.restore();
     } else if (stroke.tool === 'arrow') {
         neonPass(ctx, () => arrowPath(ctx, pts, lineWidth), stroke.color, lineWidth, stroke.glow, alpha);
     } else {
-        neonPass(ctx, () => smoothPath(ctx, pts), stroke.color, lineWidth, stroke.glow, alpha);
+        neonPass(ctx, trace, stroke.color, lineWidth, stroke.glow, alpha);
     }
 }
 

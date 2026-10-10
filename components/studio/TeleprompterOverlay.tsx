@@ -3,8 +3,12 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Grip, Pause, Play, RotateCcw } from 'lucide-react';
 
+type TeleprompterVariant = 'studio' | 'pip';
+
 interface TeleprompterOverlayProps {
     scriptText: string;
+    /** 'studio' = floating panel over the preview. 'pip' = fills the floating always-on-top window. */
+    variant?: TeleprompterVariant;
 }
 
 interface OverlayPosition {
@@ -36,6 +40,16 @@ interface ResizeState {
     top: number;
 }
 
+interface VariantPreset {
+    positionKey: string;
+    sizeKey: string;
+    lookKey: string;
+    position: OverlayPosition;
+    size: OverlaySize;
+    startVisible: boolean;
+    showToggle: boolean;
+}
+
 const POSITION_STORAGE_KEY = 'cliprame-teleprompter-position-v1';
 const SIZE_STORAGE_KEY = 'cliprame-teleprompter-size-v1';
 const LOOK_STORAGE_KEY = 'cliprame-teleprompter-look-v1';
@@ -50,15 +64,38 @@ const MAX_H = 0.8;
 const MIN_FONT = 14;
 const MAX_FONT = 44;
 
+const PRESETS: Record<TeleprompterVariant, VariantPreset> = {
+    studio: {
+        positionKey: POSITION_STORAGE_KEY,
+        sizeKey: SIZE_STORAGE_KEY,
+        lookKey: LOOK_STORAGE_KEY,
+        position: DEFAULT_POSITION,
+        size: DEFAULT_SIZE,
+        startVisible: false,
+        showToggle: true,
+    },
+    pip: {
+        positionKey: `${POSITION_STORAGE_KEY}-pip`,
+        sizeKey: `${SIZE_STORAGE_KEY}-pip`,
+        lookKey: `${LOOK_STORAGE_KEY}-pip`,
+        position: { x: 0.5, y: 0.5 },
+        size: { w: 1, h: 1 },
+        startVisible: true,
+        showToggle: false,
+    },
+};
+
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
-export function TeleprompterOverlay({ scriptText }: TeleprompterOverlayProps) {
+export function TeleprompterOverlay({ scriptText, variant = 'studio' }: TeleprompterOverlayProps) {
+    const preset = PRESETS[variant];
+
     const [isScrolling, setIsScrolling] = useState(false);
     const [isAtEnd, setIsAtEnd] = useState(false);
-    const [isVisible, setIsVisible] = useState(false);
+    const [isVisible, setIsVisible] = useState<boolean>(preset.startVisible);
     const [prevScriptText, setPrevScriptText] = useState(scriptText);
-    const [position, setPosition] = useState(DEFAULT_POSITION);
-    const [size, setSize] = useState(DEFAULT_SIZE);
+    const [position, setPosition] = useState<OverlayPosition>(preset.position);
+    const [size, setSize] = useState<OverlaySize>(preset.size);
     const [bgOpacity, setBgOpacity] = useState(DEFAULT_OPACITY);
     const [fontSize, setFontSize] = useState(DEFAULT_FONT_SIZE);
     const [positionLoaded, setPositionLoaded] = useState(false);
@@ -70,25 +107,31 @@ export function TeleprompterOverlay({ scriptText }: TeleprompterOverlayProps) {
     const dragRef = useRef<DragState | null>(null);
     const resizeRef = useRef<ResizeState | null>(null);
 
+    // Timers must run on the window this overlay is actually in. In the floating
+    // window that is the PiP window, whose timers are not throttled when the main
+    // tab is in the background.
+    const getOwnerWindow = () => containerRef.current?.ownerDocument.defaultView ?? window;
+
     // Load saved position, size and look
     useEffect(() => {
-        const frame = window.requestAnimationFrame(() => {
+        const win = getOwnerWindow();
+        const frame = win.requestAnimationFrame(() => {
             try {
-                const savedPosition = window.localStorage.getItem(POSITION_STORAGE_KEY);
+                const savedPosition = window.localStorage.getItem(preset.positionKey);
                 if (savedPosition) {
                     const parsed = JSON.parse(savedPosition) as Partial<OverlayPosition>;
                     if (typeof parsed.x === 'number' && typeof parsed.y === 'number') {
                         setPosition({ x: clamp(parsed.x, 0, 1), y: clamp(parsed.y, 0, 1) });
                     }
                 }
-                const savedSize = window.localStorage.getItem(SIZE_STORAGE_KEY);
+                const savedSize = window.localStorage.getItem(preset.sizeKey);
                 if (savedSize) {
                     const parsed = JSON.parse(savedSize) as Partial<OverlaySize>;
                     if (typeof parsed.w === 'number' && typeof parsed.h === 'number') {
                         setSize({ w: clamp(parsed.w, MIN_W, MAX_W), h: clamp(parsed.h, MIN_H, MAX_H) });
                     }
                 }
-                const savedLook = window.localStorage.getItem(LOOK_STORAGE_KEY);
+                const savedLook = window.localStorage.getItem(preset.lookKey);
                 if (savedLook) {
                     const parsed = JSON.parse(savedLook) as { bgOpacity?: number; fontSize?: number };
                     if (typeof parsed.bgOpacity === 'number') setBgOpacity(clamp(parsed.bgOpacity, 0.2, 0.9));
@@ -96,36 +139,36 @@ export function TeleprompterOverlay({ scriptText }: TeleprompterOverlayProps) {
                 }
             } catch {
                 try {
-                    window.localStorage.removeItem(POSITION_STORAGE_KEY);
-                    window.localStorage.removeItem(SIZE_STORAGE_KEY);
-                    window.localStorage.removeItem(LOOK_STORAGE_KEY);
+                    window.localStorage.removeItem(preset.positionKey);
+                    window.localStorage.removeItem(preset.sizeKey);
+                    window.localStorage.removeItem(preset.lookKey);
                 } catch { }
             }
             setPositionLoaded(true);
         });
-        return () => window.cancelAnimationFrame(frame);
-    }, []);
+        return () => win.cancelAnimationFrame(frame);
+    }, [preset]);
 
     useEffect(() => {
         if (!positionLoaded) return;
         try {
-            window.localStorage.setItem(POSITION_STORAGE_KEY, JSON.stringify(position));
+            window.localStorage.setItem(preset.positionKey, JSON.stringify(position));
         } catch { }
-    }, [position, positionLoaded]);
+    }, [position, positionLoaded, preset]);
 
     useEffect(() => {
         if (!positionLoaded) return;
         try {
-            window.localStorage.setItem(SIZE_STORAGE_KEY, JSON.stringify(size));
+            window.localStorage.setItem(preset.sizeKey, JSON.stringify(size));
         } catch { }
-    }, [size, positionLoaded]);
+    }, [size, positionLoaded, preset]);
 
     useEffect(() => {
         if (!positionLoaded) return;
         try {
-            window.localStorage.setItem(LOOK_STORAGE_KEY, JSON.stringify({ bgOpacity, fontSize }));
+            window.localStorage.setItem(preset.lookKey, JSON.stringify({ bgOpacity, fontSize }));
         } catch { }
-    }, [bgOpacity, fontSize, positionLoaded]);
+    }, [bgOpacity, fontSize, positionLoaded, preset]);
 
     useEffect(() => {
         const container = containerRef.current;
@@ -158,8 +201,9 @@ export function TeleprompterOverlay({ scriptText }: TeleprompterOverlayProps) {
 
     useEffect(() => {
         if (!isScrolling) return;
+        const win = getOwnerWindow();
 
-        const interval = window.setInterval(() => {
+        const interval = win.setInterval(() => {
             const scrollArea = scrollRef.current;
             if (!scrollArea) return;
 
@@ -173,7 +217,7 @@ export function TeleprompterOverlay({ scriptText }: TeleprompterOverlayProps) {
             scrollArea.scrollTop += 1;
         }, 30);
 
-        return () => window.clearInterval(interval);
+        return () => win.clearInterval(interval);
     }, [isScrolling]);
 
     if (!scriptText.trim()) return null;
@@ -317,24 +361,26 @@ export function TeleprompterOverlay({ scriptText }: TeleprompterOverlayProps) {
     };
 
     const resetSize = () => {
-        setSize(DEFAULT_SIZE);
+        setSize(preset.size);
     };
 
     return (
         <div ref={containerRef} className="pointer-events-none absolute inset-0 z-20 font-[family-name:var(--font-body)] text-white">
-            <button
-                type="button"
-                onPointerDown={(event) => event.stopPropagation()}
-                onClick={(event) => {
-                    event.stopPropagation();
-                    if (isVisible) setIsScrolling(false);
-                    setIsVisible(!isVisible);
-                }}
-                aria-expanded={isVisible}
-                className="pointer-events-auto absolute right-3 top-16 rounded-full border border-white/20 bg-[#14121F]/60 px-3.5 py-2 text-xs font-semibold text-white shadow-sm backdrop-blur-md transition hover:bg-[#14121F]/80 sm:right-4 sm:top-4"
-            >
-                {isVisible ? 'Hide prompter' : 'Show prompter'}
-            </button>
+            {preset.showToggle && (
+                <button
+                    type="button"
+                    onPointerDown={(event) => event.stopPropagation()}
+                    onClick={(event) => {
+                        event.stopPropagation();
+                        if (isVisible) setIsScrolling(false);
+                        setIsVisible(!isVisible);
+                    }}
+                    aria-expanded={isVisible}
+                    className="pointer-events-auto absolute right-3 top-16 rounded-full border border-white/20 bg-[#14121F]/60 px-3.5 py-2 text-xs font-semibold text-white shadow-sm backdrop-blur-md transition hover:bg-[#14121F]/80 sm:right-4 sm:top-4"
+                >
+                    {isVisible ? 'Hide prompter' : 'Show prompter'}
+                </button>
+            )}
 
             {isVisible && (
                 <section

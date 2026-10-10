@@ -31,6 +31,7 @@ export interface StudioSettings {
     cameraAvatarMouthX: number;
     cameraAvatarMouthY: number;
     cameraAvatarMouthWidth: number;
+    screenShareShowCamera: boolean;
     airDrawingEnabled: boolean;
     airDrawingColor: string;
     airDrawingSize: number; // 2-30
@@ -51,4 +52,6 @@ export interface StudioSettings {
     backgroundImageUrl: string | null; // object URL of the user-picked image
     inputMode: StudioInputMode; // Added
     uploadedVideoUrl?: string;  // Added
+    airDrawingSnapShapes: boolean;   // new
+    airDrawingRainbow: boolean;      // new
 }

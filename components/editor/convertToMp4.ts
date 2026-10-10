@@ -51,6 +51,8 @@ export interface ComposeOptions extends ExportJobOptions {
     /** Seconds the camera started AFTER the screen recording (positive delays camera). */
     cameraOffsetSec?: number;
     crf?: number;
+    /** Leave the camera card out of the finished video. */
+    hideCamera?: boolean;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -274,6 +276,7 @@ export function composeScreenShareWithCamera(
         const cameraName = 'camera.webm';
         const listName = 'annotations.txt';
         const outputName = 'output.mp4';
+        const hideCamera = options.hideCamera === true;
 
         await writeBlob(ffmpeg, screenName, screenRecording);
         await writeBlob(ffmpeg, cameraName, cameraRecording);
@@ -308,15 +311,22 @@ export function composeScreenShareWithCamera(
         }
 
         // ---- Filter graph --------------------------------------------------------
+        // When the camera card is hidden, the camera chain is left out completely
+        // (an unused filter output would make FFmpeg fail) and the screen passes straight through.
         const screenChain =
             `[0:v]fps=${OUTPUT_FPS},scale=${width}:${height}:force_original_aspect_ratio=decrease,` +
             `pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2,setsar=1[screen]`;
         const cameraChain = `[1:v]fps=${OUTPUT_FPS},hflip,scale=${insetWidth}:-2,setsar=1[cam]`;
-        const overlayCamera = `[screen][cam]overlay=W-w-32:H-h-32:shortest=1${hasAnnotations ? '[withcam]' : '[v]'}`;
+        const afterCamera = hasAnnotations ? '[withcam]' : '[v]';
+        const overlayCamera = hideCamera
+            ? `[screen]null${afterCamera}`
+            : `[screen][cam]overlay=W-w-32:H-h-32:shortest=1${afterCamera}`;
         const annotationChain = hasAnnotations
-            ? `;[2:v]fps=${OUTPUT_FPS},scale=${width}:${height},format=rgba[ann];[withcam][ann]overlay=0:0:format=auto[v]`
+            ? `[2:v]fps=${OUTPUT_FPS},scale=${width}:${height},format=rgba[ann];[withcam][ann]overlay=0:0:format=auto[v]`
             : '';
-        const filterGraph = `${screenChain};${cameraChain};${overlayCamera}${annotationChain}`;
+        const filterGraph = [screenChain, hideCamera ? '' : cameraChain, overlayCamera, annotationChain]
+            .filter(Boolean)
+            .join(';');
 
         // ---- Inputs ----------------------------------------------------------------
         const cameraOffset = options.cameraOffsetSec ?? 0;

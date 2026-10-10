@@ -1,5 +1,7 @@
 import { AspectRatioType } from '@/types/studio';
 
+export const CAMERA_INSET_VIDEO_BITRATE = 2_500_000;   // add this line
+
 export const RECORDING_FRAME_RATE = 30;
 export const RECORDING_VIDEO_BITRATE = 12_000_000;
 export const RECORDING_AUDIO_BITRATE = 192_000;
@@ -40,10 +42,14 @@ export function getFrameCrop(videoWidth: number, videoHeight: number, aspectRati
     return { x: 0, y: (videoHeight - height) / 2, width: videoWidth, height };
 }
 
-export function createHighQualityRecorder(stream: MediaStream) {
+export function createHighQualityRecorder(
+    stream: MediaStream,
+    overrides: Partial<Pick<MediaRecorderOptions, 'videoBitsPerSecond' | 'audioBitsPerSecond'>> = {}
+) {
     const options: MediaRecorderOptions = {
         videoBitsPerSecond: RECORDING_VIDEO_BITRATE,
         audioBitsPerSecond: RECORDING_AUDIO_BITRATE,
+        ...overrides,
     };
     const mimeTypes = ['video/webm;codecs=vp8,opus', 'video/webm;codecs=vp9,opus'];
     const mimeType = mimeTypes.find((type) => MediaRecorder.isTypeSupported(type));

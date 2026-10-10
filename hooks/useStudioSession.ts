@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { StudioSettings } from '@/types/studio';
 import { annotationTimeline } from '@/components/studio/annotationTimeline';
-import { createHighQualityRecorder, getRecordingDimensions } from '@/components/recordingQuality';
+import { createHighQualityRecorder, getRecordingDimensions, CAMERA_INSET_VIDEO_BITRATE } from '@/components/recordingQuality';
 
 const DEFAULT_SETTINGS: StudioSettings = {
     cameraFacing: 'user',
@@ -27,6 +27,8 @@ const DEFAULT_SETTINGS: StudioSettings = {
     airDrawingFade: false,
     airDrawingPerformanceMode: false,
     airDrawingTool: 'pen',
+    airDrawingSnapShapes: false,
+    airDrawingRainbow: false,
     airWriteMode: false,
     airWriteLanguage: 'en',
     airWriteFont: 'marker',
@@ -34,6 +36,7 @@ const DEFAULT_SETTINGS: StudioSettings = {
     screenFrameStyle: 'browser',
     screenFrameBackground: 'aurora',
     screenFrameLabel: '',
+    screenShareShowCamera: true,
     backgroundMode: 'none',
     backgroundImageUrl: null,
     inputMode: 'camera',
@@ -156,6 +159,9 @@ export function useStudioSession(enabled = true, screenShareStream: MediaStream 
         setSettings((prev) => ({ ...prev, ...newSettings }));
     }, []);
 
+    // Lets the floating always-on-top window show the same live camera.
+    const getCameraStream = useCallback(() => mediaStreamRef.current, []);
+
     const stopAvatarAudioMeter = useCallback(() => {
         avatarMeterActiveRef.current = false;
         if (avatarMeterFrameRef.current !== null) cancelAnimationFrame(avatarMeterFrameRef.current);
@@ -227,14 +233,16 @@ export function useStudioSession(enabled = true, screenShareStream: MediaStream 
 
         try {
             isScreenShareRecordingRef.current = Boolean(activeScreenTrack);
-            const mediaRecorder = createHighQualityRecorder(combinedStream);
+            // Screen content compresses well, so a lower bitrate stays sharp while using far less CPU.
+            const mediaRecorder = createHighQualityRecorder(combinedStream, activeScreenTrack ? { videoBitsPerSecond: 6_000_000 } : {});
             mediaRecorderRef.current = mediaRecorder;
 
             if (activeScreenTrack) {
                 const cameraTrack = mediaStreamRef.current.getVideoTracks()[0];
                 if (!cameraTrack) throw new Error('The camera is not available for the floating camera card.');
                 const cameraOnlyStream = new MediaStream([cameraTrack]);
-                const cameraRecorder = createHighQualityRecorder(cameraOnlyStream);
+                // The camera only fills a small inset card, so it needs far less bitrate than the screen.
+                const cameraRecorder = createHighQualityRecorder(cameraOnlyStream, { videoBitsPerSecond: CAMERA_INSET_VIDEO_BITRATE });
                 cameraRecorderRef.current = cameraRecorder;
                 const cameraChunks: Blob[] = [];
                 cameraRecordingPromiseRef.current = new Promise<Blob>((resolve, reject) => {
@@ -288,7 +296,7 @@ export function useStudioSession(enabled = true, screenShareStream: MediaStream 
                             const cameraBlob = await cameraPromise;
                             const { composeScreenShareWithCamera } = await import('@/components/editor/convertToMp4');
                             const annotations = await annotationTimeline.collect();
-                            const composedBlob = await composeScreenShareWithCamera(screenBlob, cameraBlob, getRecordingDimensions(settingsRef.current.aspectRatio), () => undefined, annotations);
+                            const composedBlob = await composeScreenShareWithCamera(screenBlob, cameraBlob, getRecordingDimensions(settingsRef.current.aspectRatio), () => undefined, annotations, { hideCamera: !settingsRef.current.screenShareShowCamera });
                             setRecordedVideoMimeType('video/mp4');
                             setRecordedVideoUrl(URL.createObjectURL(composedBlob));
                         } catch (error) {
@@ -404,6 +412,9 @@ export function useStudioSession(enabled = true, screenShareStream: MediaStream 
         microphoneLevelRef,
         startAvatarAudioMeter,
         stopAvatarAudioMeter,
+
+        // camera stream for the floating always-on-top window
+        getCameraStream,
 
         // refs consumed by VideoCanvas
         videoRef,

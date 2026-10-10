@@ -114,7 +114,8 @@ function drawScreenShareFrame(
     camera: HTMLVideoElement,
     cameraFilter: string,
     mirror = true,
-    frame?: ScreenFrameOptions
+    frame?: ScreenFrameOptions,
+    showCamera = true
 ) {
     const { width, height } = canvas;
 
@@ -139,7 +140,7 @@ function drawScreenShareFrame(
         ctx.drawImage(screen, (width - sw) / 2, (height - sh) / 2, sw, sh);
     }
 
-    if (camera.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && camera.videoWidth > 0) {
+    if (showCamera && camera.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && camera.videoWidth > 0) {
         const cardWidth = Math.round(width * 0.25);
         const cardHeight = Math.round(cardWidth * 0.66);
         const inset = Math.max(18, Math.round(width * 0.018));
@@ -455,6 +456,8 @@ export function VideoCanvas({
             writeFont: s.airWriteFont,
             writeColor: s.airWriteColor,
             language: s.airWriteLanguage,
+            snapShapes: s.airDrawingSnapShapes,   // new
+            rainbow: s.airDrawingRainbow,         // new
         };
     };
 
@@ -584,7 +587,7 @@ export function VideoCanvas({
                 background: current.screenFrameBackground ?? 'aurora',
                 label: current.screenFrameLabel || 'Screen share',
                 progress: getFrameProgress(clockMs(), screenFrameStartRef.current),
-            });
+            }, current.screenShareShowCamera !== false);
             finishFrame(ctx, canvas, false);
             return;
         }

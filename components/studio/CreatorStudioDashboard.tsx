@@ -15,6 +15,8 @@ import { deleteEditorDraft, DraftSummary, LoadedDraft, listEditorDrafts, loadEdi
 import { PhotoReelStudio } from '@/components/studio/PhotoReelStudio';
 import { changePasswordAction, checkUsernameAvailabilityAction, signOutAction, updateProfileAction, updateProfileAvatarAction } from '@/app/auth/actions';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
+import { useDocumentPip } from './useDocumentPip';
+import { FloatingStudioPip } from './FloatingStudioPip';
 
 const display = Bricolage_Grotesque({ subsets: ['latin'], variable: '--font-display', display: 'swap' });
 const body = Instrument_Sans({ subsets: ['latin'], variable: '--font-body', display: 'swap' });
@@ -265,6 +267,7 @@ export function CreatorStudioDashboard({ userEmail, initialDisplayName = '', ini
     const {
         settings,
         updateSettings,
+        getCameraStream,
         microphoneLevelRef,
         startAvatarAudioMeter,
         stopAvatarAudioMeter,
@@ -287,6 +290,15 @@ export function CreatorStudioDashboard({ userEmail, initialDisplayName = '', ini
         cameraError,
     } = useStudioSession(creationMode === 'record' && view === 'record', screenShareStream);
 
+    // Always-on-top floating camera + teleprompter (like Google Meet).
+    // While sharing, Chrome also opens it automatically when you switch tabs.
+    // The floating window never opens before or during the screen picker, so it cannot
+    // affect what gets captured. While sharing, Chrome may open it on a tab switch,
+    // and the "Show floating camera" button opens it with one click.
+    const [floatingEnabled, setFloatingEnabled] = useState(true);
+    const pip = useDocumentPip(Boolean(screenShareStream) && floatingEnabled);
+    const closePip = pip.close;
+
     useEffect(() => { screenShareStreamRef.current = screenShareStream; }, [screenShareStream]);
 
     useEffect(() => {
@@ -304,7 +316,8 @@ export function CreatorStudioDashboard({ userEmail, initialDisplayName = '', ini
         setScreenShareStream(null);
         setScreenShareSurface(null);
         setIsScreenTrackMuted(false);
-    }, []);
+        closePip();
+    }, [closePip]);
 
     useEffect(() => {
         if (creationMode !== 'record' || view !== 'record' || recordedVideoUrl) {
@@ -329,9 +342,13 @@ export function CreatorStudioDashboard({ userEmail, initialDisplayName = '', ini
             setScreenShareError('Screen sharing is not supported in this browser. Use a recent desktop version of Chrome, Edge, Firefox, or Safari.');
             return;
         }
+        // Open the floating window on this click, before the screen picker (the picker uses up the click).
+        if (floatingEnabled && pip.isSupported) await pip.open();
         try {
             const captureOptions = {
-                video: { displaySurface: 'window', frameRate: { ideal: 30, max: 30 } },
+                // Window capture records only the chosen browser window, so the floating camera and
+                // teleprompter windows never appear in the video. Capped at 1080p to keep encoding smooth.
+                video: { displaySurface: 'window', width: { ideal: 1920, max: 1920 }, height: { ideal: 1080, max: 1080 }, frameRate: { ideal: 30, max: 30 } },
                 audio: false,
                 surfaceSwitching: 'include',
                 selfBrowserSurface: 'exclude',
@@ -344,12 +361,15 @@ export function CreatorStudioDashboard({ userEmail, initialDisplayName = '', ini
             const displayTrack = stream.getVideoTracks()[0];
             if (!displayTrack) {
                 stream.getTracks().forEach((track) => track.stop());
+                closePip();
                 setScreenShareError('The browser did not provide a screen video track. Choose a screen, window, or tab and try again.');
                 return;
             }
             displayTrack.contentHint = 'motion';
             const surface = displayTrack.getSettings().displaySurface;
             setScreenShareSurface(surface === 'browser' ? 'Chrome tab' : surface === 'window' ? 'Browser window' : surface === 'monitor' ? 'Entire screen' : 'Unknown capture source');
+            // Entire-screen capture would record the floating window (and teleprompter), and Chrome cannot exclude it.
+            if (surface === 'monitor') closePip();
             setIsScreenTrackMuted(displayTrack.muted);
             displayTrack.addEventListener('mute', () => setIsScreenTrackMuted(true));
             displayTrack.addEventListener('unmute', () => setIsScreenTrackMuted(false));
@@ -358,10 +378,12 @@ export function CreatorStudioDashboard({ userEmail, initialDisplayName = '', ini
                 if (screenShareStreamRef.current === stream) screenShareStreamRef.current = null;
                 setScreenShareSurface(null);
                 setIsScreenTrackMuted(false);
+                closePip();
             }, { once: true });
             screenShareStreamRef.current = stream;
             setScreenShareStream(stream);
         } catch (error) {
+            closePip(); // the picker was cancelled or sharing failed
             if (error instanceof DOMException && (error.name === 'NotAllowedError' || error.name === 'AbortError')) return;
             setScreenShareError(error instanceof Error ? error.message : 'Could not start screen sharing. Check browser permissions and try again.');
         }
@@ -641,7 +663,21 @@ export function CreatorStudioDashboard({ userEmail, initialDisplayName = '', ini
                         <MonitorUp className="h-4 w-4" />{screenShareStream ? 'Stop screen share' : 'Share screen'}
                         {screenShareStream && <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" />}
                     </button>
-                    {screenShareStream ? <div className="max-w-sm space-y-2 rounded-lg border border-white/10 bg-neutral-950/80 px-3 py-2 text-[11px] leading-relaxed text-neutral-300"><p>Chrome source: <strong className="text-emerald-200">{screenShareSurface ?? 'checking…'}</strong>{isScreenTrackMuted && <span className="font-semibold text-amber-200"> · paused</span>} · screen changes detected: <strong className="text-white">{screenFramesReceived}</strong></p><p>Switch to the page you want to record for a few seconds. This count should increase when the captured picture changes. If it stays at 1, Chrome isn’t sending the new page in the selected source. The final video uses the direct screen recording; the camera card is composed afterward.</p>{studioWasBackgrounded && <p role="status" className="rounded-md border border-emerald-300/20 bg-emerald-300/10 px-2 py-1.5 text-emerald-100">Studio is in another tab. The direct screen recording continues.</p>}</div> : <p className="absolute left-full top-0 ml-3 hidden w-[24rem] text-[11px] leading-snug text-neutral-500 xl:block">Choose <strong className="text-neutral-200">Window</strong> in Chrome’s picker, then select the Chrome window you’ll navigate in. Avoid <strong className="text-neutral-200">Chrome tab</strong>, which captures only one tab.</p>}
+                    <label className="pointer-events-auto flex cursor-pointer items-center gap-2 rounded-lg border border-white/10 bg-neutral-950/85 px-3 py-2 text-[11px] font-medium text-neutral-200 shadow-lg backdrop-blur-md">
+                        <input type="checkbox" checked={floatingEnabled} onChange={(event) => { setFloatingEnabled(event.target.checked); if (!event.target.checked) closePip(); }} className="h-3.5 w-3.5 accent-indigo-500" />
+                        Floating camera &amp; teleprompter
+                    </label>
+                    <label className="pointer-events-auto flex cursor-pointer items-center gap-2 rounded-lg border border-white/10 bg-neutral-950/85 px-3 py-2 text-[11px] font-medium text-neutral-200 shadow-lg backdrop-blur-md">
+                        <input type="checkbox" checked={settings.screenShareShowCamera} onChange={(event) => updateSettings({ screenShareShowCamera: event.target.checked })} className="h-3.5 w-3.5 accent-indigo-500" />
+                        Show my camera in the video
+                    </label>
+                    {screenShareStream && floatingEnabled && screenShareSurface !== 'Entire screen' && pip.isSupported && !pip.isOpen && (
+                        <button type="button" onClick={() => void pip.open()} className="pointer-events-auto rounded-xl border border-white/15 bg-neutral-950/85 px-3 py-2 text-xs font-semibold text-neutral-100 shadow-lg backdrop-blur-md hover:bg-neutral-800/95">
+                            Show floating camera
+                        </button>
+                    )}
+                    {pip.error && <p role="alert" className="rounded-lg border border-red-500/30 bg-red-950/90 px-3 py-2 text-xs leading-relaxed text-red-200">{pip.error}</p>}
+                    {screenShareStream ? <div className="max-w-sm space-y-2 rounded-lg border border-white/10 bg-neutral-950/80 px-3 py-2 text-[11px] leading-relaxed text-neutral-300"><p>Chrome source: <strong className="text-emerald-200">{screenShareSurface ?? 'checking…'}</strong>{isScreenTrackMuted && <span className="font-semibold text-amber-200"> · paused</span>} · screen changes detected: <strong className="text-white">{screenFramesReceived}</strong></p><p>Switch to the page you want to record for a few seconds. This count should increase when the captured picture changes. If it stays at 1, Chrome isn’t sending the new page in the selected source. The final video uses the direct screen recording; the camera card is composed afterward.</p>{studioWasBackgrounded && <p role="status" className="rounded-md border border-emerald-300/20 bg-emerald-300/10 px-2 py-1.5 text-emerald-100">Studio is in another tab. The direct screen recording continues.</p>}{screenShareSurface === 'Entire screen' && floatingEnabled && <p role="status" className="rounded-md border border-amber-300/30 bg-amber-300/10 px-2 py-1.5 text-amber-100">Entire screen records everything visible, so the floating camera and teleprompter were closed. Choose Window instead to keep them while recording.</p>}</div> : <p className="absolute left-full top-0 ml-3 hidden w-[24rem] text-[11px] leading-snug text-neutral-500 xl:block">In Chrome’s picker, open the <strong className="text-neutral-200">Window</strong> tab and choose the Chrome window you’ll browse in. Every tab you open in that window is recorded, and your floating camera and teleprompter stay out of the video. Avoid <strong className="text-neutral-200">Chrome tab</strong> (one tab only) and <strong className="text-neutral-200">Entire screen</strong> (records the floating window).</p>}
                     {screenShareError && <p role="alert" className="rounded-lg border border-red-500/30 bg-red-950/90 px-3 py-2 text-xs leading-relaxed text-red-200">{screenShareError}</p>}
                 </div>
                 <button type="button" onClick={() => setShowSettings(true)} aria-label="Open studio settings" className="absolute bottom-[calc(max(1.25rem,env(safe-area-inset-bottom))+3.75rem)] right-4 z-30 flex h-12 w-12 items-center justify-center rounded-full border border-white/15 bg-neutral-950/80 text-neutral-100 shadow-lg backdrop-blur-md md:hidden"><SlidersHorizontal className="h-5 w-5" /></button>
@@ -651,6 +687,20 @@ export function CreatorStudioDashboard({ userEmail, initialDisplayName = '', ini
                 </div>
                 {recordedVideoUrl && <ExportModal videoUrl={recordedVideoUrl} mimeType={recordedVideoMimeType ?? 'video/webm'} scriptText={settings.scriptText} onReset={resetRecording} onEdit={() => setView('edit')} />}
             </div>
+            <FloatingStudioPip
+                pipWindow={pip.pipWindow}
+                getCameraStream={getCameraStream}
+                scriptText={settings.scriptText}
+                mirror={settings.cameraFacing !== 'environment'}
+                countdown={countdown}
+                isRecording={isRecording}
+                isPaused={isRecordingPaused}
+                recordingSeconds={recordingSeconds}
+                onStart={startRecordingSequence}
+                onStop={stopRecording}
+                onPause={pauseRecording}
+                onResume={resumeRecording}
+            />
             {showWelcome && <div className="fixed inset-0 z-100 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm"><section role="dialog" aria-modal="true" aria-labelledby="welcome-title" className="w-full max-w-lg rounded-3xl border border-neutral-700 bg-neutral-900 p-6 shadow-2xl sm:p-8"><div className="mb-4 inline-flex rounded-2xl bg-indigo-500/15 p-3 text-indigo-300"><FolderOpen className="h-6 w-6" /></div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-indigo-300">Your creator workspace</p><h2 id="welcome-title" className="mt-2 text-2xl font-bold text-white">Let’s make your first video.</h2><p className="mt-3 text-sm leading-relaxed text-neutral-400">Start with a ready-to-read Hinglish reel script, or jump straight into the studio. You can edit the script and language any time.</p><div className="mt-6 flex flex-col gap-2 sm:flex-row"><button onClick={() => dismissWelcome(true)} className="flex-1 rounded-xl bg-indigo-600 px-4 py-3 text-sm font-semibold text-white hover:bg-indigo-500">Try the sample template</button><button onClick={() => dismissWelcome(false)} className="flex-1 rounded-xl border border-neutral-700 px-4 py-3 text-sm font-semibold text-neutral-200 hover:bg-neutral-800">Start with my own script</button></div></section></div>}
         </div>
     );
