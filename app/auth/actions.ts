@@ -117,7 +117,7 @@ export async function signUpAction(_state: AuthFormState, formData: FormData): P
     }
 
     const requestHeaders = await headers();
-    const origin = process.env.NEXT_PUBLIC_SITE_URL ?? requestHeaders.get('origin') ?? 'http://localhost:3000';
+    const origin = process.env.NEXT_PUBLIC_SITE_URL ?? requestHeaders.get('origin') ?? 'https://ai-creator-studio-ai.vercel.app/';
     const { data, error } = await supabase.auth.signUp({
         email,
         password,
