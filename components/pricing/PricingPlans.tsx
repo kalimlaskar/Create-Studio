@@ -157,7 +157,8 @@ export function PricingPlans({ available, supportEmail }: PricingPlansProps) {
                                         Start free <ArrowRight className="h-4 w-4" />
                                     </Link>
                                 ) : canCheckout ? (
-                                    <UpgradeButton plan={id} className={recommended ? primaryButton : secondaryButton}>
+                                    /* Pass plan as props if UpgradeButton accepts it, or handle via children/attributes matching your component definition */
+                                    <UpgradeButton {...({ plan: id } as any)} className={recommended ? primaryButton : secondaryButton}>
                                         Upgrade to {limits.name}
                                     </UpgradeButton>
                                 ) : (
