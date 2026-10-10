@@ -2,7 +2,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import type { CSSProperties } from 'react';
 import { Bricolage_Grotesque, Instrument_Sans } from 'next/font/google';
-import { ArrowRight, Check, Eraser, EyeOff, Film, Hand, Languages, Layers, Mic, Pencil, Plus, Scissors, ScreenShare, Sparkles, Type } from 'lucide-react';
+import { ArrowRight, Check, Eraser, EyeOff, Film, Hand, Images, Languages, Layers, Mic, Music, Pencil, Plus, Scissors, ScreenShare, Sparkles, Type } from 'lucide-react';
 
 const display = Bricolage_Grotesque({ subsets: ['latin'], variable: '--font-display', display: 'swap' });
 const body = Instrument_Sans({ subsets: ['latin'], variable: '--font-body', display: 'swap' });
@@ -26,7 +26,7 @@ const prompterLines = [
   'Let me show you how it works',
 ];
 const languages = ['English', 'हिन्दी', 'Hinglish', 'বাংলা', 'मराठी', 'தமிழ்', 'తెలుగు'];
-const marqueeItems = ['Product demos', 'Tutorials', 'Course lessons', 'Pitch walkthroughs', 'Travel reels', 'Release notes', 'Customer onboarding', 'Explainers'];
+const marqueeItems = ['Product demos', 'Tutorials', 'Course lessons', 'Pitch walkthroughs', 'Travel reels', 'Product showcases', 'Release notes', 'Customer onboarding', 'Explainers'];
 
 const demoPoints = [
   { title: 'A floating camera card', text: 'Your face stays on screen while you walk through the product, so viewers connect with you, not just your cursor.' },
@@ -56,23 +56,39 @@ const gestures = [
   { icon: '🖐', label: 'Open palm to clear' },
 ];
 
+const reelTemplates = [
+  { name: 'Travel', bg: 'bg-[linear-gradient(170deg,#38BDF8,#6A4CFF)]', caption: 'Weekend in Goa' },
+  { name: 'Product', bg: 'bg-[linear-gradient(170deg,#FFE347,#FF3D81)]', caption: 'Meet the new drop' },
+  { name: 'Birthday', bg: 'bg-[linear-gradient(170deg,#FF3D81,#14121F)]', caption: 'Happy birthday!' },
+  { name: 'Festival', bg: 'bg-[linear-gradient(170deg,#ffb86b,#ff6a8b)]', caption: 'Diwali vibes' },
+];
+
+const reelFeatures = [
+  { icon: Layers, title: '3D depth photos', text: 'Turn a flat photo into a parallax shot with real depth.' },
+  { icon: Sparkles, title: 'Sci-fi transitions', text: 'Particle dissolve, portal and warp between clips.' },
+  { icon: Images, title: 'Auto-ordered clips', text: 'Drop in photos and clips. We sort them by sharpness and exposure.' },
+  { icon: Music, title: 'Music, narration, captions', text: 'Add a soundtrack, an AI voiceover and AI captions to every reel.' },
+];
+
+const showcaseKit = ['Hologram presenter', 'Comic & anime looks', 'Browser & macOS frames', 'Floating camera card', 'Depth parallax', 'Portal & warp transitions'];
+
 const features = [
   { icon: Type, color: 'bg-[#6A4CFF]', title: 'Captions that follow your voice', text: 'Word-by-word highlighting in English, Hindi and Hinglish, in sync with your speech.' },
   { icon: Languages, color: 'bg-[#FF3D81]', title: 'AI scripts and dubbing', text: 'Type a topic, get a script in seven languages, and add an AI voiceover when you need one.' },
   { icon: Layers, color: 'bg-[#14121F]', title: 'Backgrounds in one tap', text: 'Blur, green screen, clean cutout or your own image, without a green wall behind you.' },
   { icon: Sparkles, color: 'bg-[#6A4CFF]', title: 'Hologram and cartoon looks', text: 'Turn yourself into a glowing hologram, a comic, a pencil sketch or an anime avatar.' },
   { icon: Film, color: 'bg-[#FF3D81]', title: 'Sci-fi transitions', text: 'Particle dissolve, portal and warp transitions between the parts of your video.' },
-  { icon: Mic, color: 'bg-[#14121F]', title: 'Photo and clip reels', text: 'Mix photos and clips with music and narration, using templates for travel, birthdays and products.' },
+  { icon: Mic, color: 'bg-[#14121F]', title: 'Clean audio, automatically', text: 'Noise suppression and echo cancellation on every recording.' },
 ];
 
 const steps = [
-  { n: '01', color: 'text-[#6A4CFF]', title: 'Record or upload', text: 'Record your screen and camera in one take, or bring a video you already have.' },
-  { n: '02', color: 'text-[#FF3D81]', title: 'Edit by reading', text: 'Delete words from the transcript, trim the ends, add captions, music and zooms.' },
-  { n: '03', color: 'text-[#14121F]', title: 'Export and share', text: 'Download a finished video, sized for reels, YouTube or the web.' },
+  { n: '01', color: 'text-[#6A4CFF]', title: 'Record or upload', text: 'Record your screen and camera in one take, or bring a video, photos and clips you already have.' },
+  { n: '02', color: 'text-[#FF3D81]', title: 'Edit by reading', text: 'Delete words from the transcript, trim the ends, add captions, music, effects and zooms.' },
+  { n: '03', color: 'text-[#14121F]', title: 'Export and share', text: 'Download a finished video or reel, sized for reels, YouTube or the web.' },
 ];
 
 const useCases = [
-  { rule: 'border-[#6A4CFF]', title: 'Product teams & founders', text: 'Record a clean demo, release walkthrough or customer onboarding video without a video editor.' },
+  { rule: 'border-[#6A4CFF]', title: 'Product teams & founders', text: 'Record a clean demo, release walkthrough or showcase reel without a video editor.' },
   { rule: 'border-[#FF3D81]', title: 'Teachers & creators', text: 'Explain a topic on camera, show your screen mid-take, and cut the stumbles by deleting words.' },
   { rule: 'border-[#14121F]', title: 'Social & travel stories', text: 'Turn photos, clips and ideas into captioned reels in your own language.' },
 ];
@@ -81,12 +97,12 @@ const faqs = [
   { q: 'Do I need to install anything?', a: 'No. Cliprame runs in your browser, so you can record, edit and export from one tab.' },
   { q: 'Will viewers see my teleprompter?', a: 'No. The teleprompter is only on your screen while you record, and it is not part of the video.' },
   { q: 'How does editing by transcript work?', a: 'Your video is transcribed word by word. Select words in the transcript and delete them, and that part of the video is cut. Anything you remove can be restored.' },
-  { q: 'Where are my videos stored?', a: 'Recordings and drafts stay on your device. Audio is only sent for processing when you ask for captions, a transcript or AI features.' },
+  { q: 'Can I make reels from photos?', a: 'Yes. Mix photos and video clips, pick a template, then add text, music, narration and transitions before you export.' },
+  { q: 'Where are my videos stored?', a: 'Recordings and drafts stay in your browser. Audio is only sent for processing when you ask for captions, a transcript or AI features.' },
   { q: 'Is it free?', a: 'You can start for free. See the pricing page for plan details.' },
 ];
 
 const css = `
-.cap{display:inline-block;padding:.02em .22em;border-radius:.3em}
 @keyframes prompter{to{transform:translateY(-50%)}}
 .prompter{animation:prompter 16s linear infinite}
 .prompter-mask{-webkit-mask-image:linear-gradient(transparent,#000 28%,#000 72%,transparent);mask-image:linear-gradient(transparent,#000 28%,#000 72%,transparent)}
@@ -95,7 +111,7 @@ const css = `
 @keyframes floaty{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
 .floaty{animation:floaty 6s ease-in-out infinite;animation-delay:calc(var(--i,0)*-1.5s)}
 @keyframes marquee{to{transform:translateX(-50%)}}
-.marquee{animation:marquee 34s linear infinite}
+.marquee{animation:marquee 38s linear infinite}
 .marquee-mask{-webkit-mask-image:linear-gradient(90deg,transparent,#000 12%,#000 88%,transparent);mask-image:linear-gradient(90deg,transparent,#000 12%,#000 88%,transparent)}
 @keyframes draw{0%{stroke-dashoffset:1}35%,85%{stroke-dashoffset:0}100%{stroke-dashoffset:1}}
 .draw{stroke-dasharray:1;stroke-dashoffset:1;animation:draw 6s ease-in-out infinite;animation-delay:calc(var(--i,0)*.5s)}
@@ -124,6 +140,20 @@ function Eyebrow({ children, tone = 'violet' }: { children: React.ReactNode; ton
   return <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ${styles}`}>{children}</span>;
 }
 
+function ReelPhone({ bg, caption, className = '' }: { bg: string; caption: string; className?: string }) {
+  return (
+    <div className={`absolute w-[38%] rounded-[1.6rem] bg-[#14121F] p-1.5 shadow-[0_30px_50px_-18px_rgba(20,18,31,0.5)] ${className}`}>
+      <div className={`relative aspect-[9/17] overflow-hidden rounded-[1.25rem] ${bg}`}>
+        <span className="absolute left-1/2 top-[26%] h-[22%] w-[38%] -translate-x-1/2 rounded-full bg-white/50" />
+        <span className="absolute -bottom-[8%] -left-[10%] h-[34%] w-[80%] rounded-[50%] bg-black/25" />
+        <div className="absolute inset-x-2 bottom-[9%] text-center">
+          <span className={`${D} rounded-md bg-[#FFE347] px-1.5 text-[11px] font-extrabold text-[#14121F]`}>{caption}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const navLink = `rounded-full px-4 py-2 text-sm font-medium text-[#14121F]/65 transition-colors hover:bg-[#14121F]/[0.06] hover:text-[#14121F] ${focus}`;
 const mobileNavLink = 'shrink-0 rounded-full bg-white/70 px-3.5 py-1.5 text-xs font-medium text-[#14121F]/70 backdrop-blur transition-colors hover:text-[#14121F]';
 const h2 = `${D} text-4xl font-bold leading-[1.02] tracking-[-0.03em] text-[#14121F] sm:text-5xl lg:text-6xl`;
@@ -142,6 +172,7 @@ export default function HomePage() {
           <nav aria-label="Main navigation" className="hidden items-center gap-1 md:flex">
             <a href="#demos" className={navLink}>Demos</a>
             <a href="#edit" className={navLink}>Edit by text</a>
+            <a href="#reels" className={navLink}>Reels</a>
             <a href="#features" className={navLink}>Features</a>
             <Link href="/pricing" className={navLink}>Pricing</Link>
           </nav>
@@ -155,6 +186,7 @@ export default function HomePage() {
         <nav aria-label="Mobile main navigation" className="mx-auto mt-2 flex max-w-5xl gap-1.5 overflow-x-auto px-1 [scrollbar-width:none] md:hidden [&::-webkit-scrollbar]:hidden">
           <a href="#demos" className={mobileNavLink}>Demos</a>
           <a href="#edit" className={mobileNavLink}>Edit by text</a>
+          <a href="#reels" className={mobileNavLink}>Reels</a>
           <a href="#features" className={mobileNavLink}>Features</a>
           <Link href="/pricing" className={mobileNavLink}>Pricing</Link>
         </nav>
@@ -173,7 +205,7 @@ export default function HomePage() {
             Edit it <span className={gradientText}>like a doc.</span>
           </h1>
           <p className="rise mt-5 max-w-xl text-base leading-7 text-[#14121F]/65 sm:text-lg sm:leading-8" style={{ '--d': 2 } as CSSProperties}>
-            Share your screen with your face in a floating card, read from a teleprompter only you can see, then fix mistakes by deleting words from the transcript. All in one browser tab.
+            Record walkthroughs with your face in a floating card and a teleprompter only you can see, then fix mistakes by deleting words. Or turn photos and clips into music-backed reels with templates and sci-fi effects. All in one browser tab.
           </p>
           <div className="rise mt-7 flex flex-wrap items-center gap-3" style={{ '--d': 3 } as CSSProperties}>
             <Link href="/login?setup=1" className={`group inline-flex items-center gap-2 rounded-full bg-[#14121F] px-6 py-3.5 text-sm font-semibold text-white shadow-[0_14px_34px_-10px_rgba(20,18,31,0.55)] transition hover:-translate-y-0.5 hover:bg-[#2c2742] ${focus}`}>
@@ -183,7 +215,7 @@ export default function HomePage() {
               See it in action
             </a>
           </div>
-          <p className="rise mt-4 text-xs text-[#14121F]/55" style={{ '--d': 4 } as CSSProperties}>Free to start · No install · Drafts stay on your device</p>
+          <p className="rise mt-4 text-xs text-[#14121F]/55" style={{ '--d': 4 } as CSSProperties}>Free to start · No install · Drafts stay in your browser</p>
 
           <ul className="rise mt-8 grid max-w-xl gap-2.5 sm:grid-cols-3" style={{ '--d': 5 } as CSSProperties}>
             {[
@@ -294,6 +326,24 @@ export default function HomePage() {
               </li>
             ))}
           </ul>
+        </div>
+      </section>
+
+      {/* Two ways to create */}
+      <section className="relative mx-auto max-w-7xl px-5 pt-20 sm:px-8 lg:px-12">
+        <div className="grid gap-4 md:grid-cols-2">
+          <a href="#demos" className={`${card} group block p-7 transition hover:-translate-y-1 sm:p-9 ${focus}`}>
+            <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#6A4CFF]/10 text-[#6A4CFF]"><ScreenShare className="h-6 w-6" /></span>
+            <h3 className={`${D} mt-8 text-3xl font-bold tracking-tight`}>Record a video</h3>
+            <p className="mt-3 max-w-md text-[15px] leading-7 text-[#14121F]/65">Camera or screen share, a private teleprompter, creative effects and an editor that cuts by text.</p>
+            <span className="mt-8 inline-flex items-center gap-2 text-sm font-semibold text-[#6A4CFF]">See the demo tools <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" /></span>
+          </a>
+          <a href="#reels" className={`${card} group block p-7 transition hover:-translate-y-1 sm:p-9 ${focus}`}>
+            <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#FF3D81]/10 text-[#FF3D81]"><Images className="h-6 w-6" /></span>
+            <h3 className={`${D} mt-8 text-3xl font-bold tracking-tight`}>Create a photo + video reel</h3>
+            <p className="mt-3 max-w-md text-[15px] leading-7 text-[#14121F]/65">Mix photos and clips, add text, music and effects, then export a finished reel.</p>
+            <span className="mt-8 inline-flex items-center gap-2 text-sm font-semibold text-[#FF3D81]">See the reel studio <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" /></span>
+          </a>
         </div>
       </section>
 
@@ -439,6 +489,65 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* Reels */}
+      <section id="reels" className="relative mx-auto max-w-7xl scroll-mt-28 px-5 pb-24 sm:px-8 lg:px-12 lg:pb-32">
+        <div className={`${card} relative overflow-hidden p-6 sm:p-12`}>
+          <div className="pointer-events-none absolute -left-20 -top-24 h-72 w-72 rounded-full bg-[#FF3D81]/15 blur-3xl" />
+          <div className="pointer-events-none absolute -bottom-24 -right-16 h-72 w-72 rounded-full bg-[#6A4CFF]/15 blur-3xl" />
+          <div className="relative grid items-center gap-12 lg:grid-cols-[.9fr_1.1fr]">
+            {/* phones */}
+            <div className="relative mx-auto h-[400px] w-full max-w-[460px]">
+              <ReelPhone bg={reelTemplates[0].bg} caption={reelTemplates[0].caption} className="left-0 top-10 -rotate-6" />
+              <ReelPhone bg={reelTemplates[1].bg} caption={reelTemplates[1].caption} className="left-[31%] top-0 z-10" />
+              <ReelPhone bg={reelTemplates[2].bg} caption={reelTemplates[2].caption} className="right-0 top-12 rotate-6" />
+              <span className="floaty absolute -left-2 bottom-4 inline-flex items-center gap-1.5 rounded-full border border-[#14121F]/10 bg-white px-3 py-1.5 text-[11px] font-semibold shadow-lg" style={{ '--i': 0 } as CSSProperties}>
+                <Music className="h-3 w-3 text-[#FF3D81]" /> Music synced
+              </span>
+              <span className="floaty absolute -right-2 bottom-12 inline-flex items-center gap-1.5 rounded-full border border-[#14121F]/10 bg-white px-3 py-1.5 text-[11px] font-semibold shadow-lg" style={{ '--i': 1 } as CSSProperties}>
+                <Sparkles className="h-3 w-3 text-[#6A4CFF]" /> Portal transition
+              </span>
+            </div>
+
+            <div>
+              <Eyebrow tone="pink"><Images className="h-3.5 w-3.5" /> Photo + video reels</Eyebrow>
+              <h2 className={`${h2} mt-5`}>Photos and clips in. A reel people <span className={gradientText}>replay</span> out.</h2>
+              <p className="mt-5 max-w-lg text-base leading-7 text-[#14121F]/65">Great for product showcases, launches, travel stories and celebrations. Pick a template, drop in your media, and add the effects that make it feel produced.</p>
+
+              <div className="mt-6 flex flex-wrap gap-2">
+                {reelTemplates.map((t) => (
+                  <span key={t.name} className="inline-flex items-center gap-2 rounded-full border border-[#14121F]/10 bg-[#F7F6FB] px-3.5 py-1.5 text-xs font-semibold text-[#14121F]/80">
+                    <span className={`h-2.5 w-2.5 rounded-full ${t.bg}`} />{t.name}
+                  </span>
+                ))}
+              </div>
+
+              <div className="mt-7 grid gap-3 sm:grid-cols-2">
+                {reelFeatures.map((f) => (
+                  <div key={f.title} className="rounded-2xl border border-[#14121F]/10 bg-[#F7F6FB] p-4">
+                    <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-[#6A4CFF] shadow-sm"><f.icon className="h-4 w-4" /></span>
+                    <h3 className={`${D} mt-3 text-base font-bold tracking-tight`}>{f.title}</h3>
+                    <p className="mt-1 text-[13px] leading-5 text-[#14121F]/65">{f.text}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-6">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-[#14121F]/55">Product showcase toolkit</p>
+                <ul className="mt-2.5 flex flex-wrap gap-2">
+                  {showcaseKit.map((k) => (
+                    <li key={k} className="rounded-full bg-[#14121F] px-3 py-1.5 text-xs font-semibold text-white">{k}</li>
+                  ))}
+                </ul>
+              </div>
+
+              <Link href="/login?setup=1" className={`group mt-8 inline-flex items-center gap-2 rounded-full bg-[#FF3D81] px-6 py-3.5 text-sm font-semibold text-white shadow-[0_14px_34px_-10px_rgba(255,61,129,0.6)] transition hover:-translate-y-0.5 hover:bg-[#e8296c] ${focus}`}>
+                Make a reel <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+              </Link>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* Feature grid */}
       <section id="features" className="relative mx-auto max-w-7xl scroll-mt-28 px-5 pb-24 sm:px-8 lg:px-12 lg:pb-32">
         <div className="max-w-3xl">
@@ -504,7 +613,7 @@ export default function HomePage() {
         <div className="mt-10 space-y-3">
           {faqs.map((f) => (
             <details key={f.q} className={`${card} group rounded-3xl px-6 py-5`}>
-              <summary className={`flex cursor-pointer list-none items-center justify-between gap-4 text-base font-semibold ${focus} rounded-lg`}>
+              <summary className={`flex cursor-pointer list-none items-center justify-between gap-4 rounded-lg text-base font-semibold ${focus}`}>
                 {f.q}
                 <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#6A4CFF]/10 text-[#6A4CFF] transition-transform group-open:rotate-45"><Plus className="h-4 w-4" /></span>
               </summary>
@@ -520,8 +629,8 @@ export default function HomePage() {
           <div className="pointer-events-none absolute -left-20 -top-24 h-72 w-72 rounded-full bg-[#6A4CFF]/25 blur-3xl" />
           <div className="pointer-events-none absolute -bottom-28 -right-16 h-72 w-72 rounded-full bg-[#FF3D81]/25 blur-3xl" />
           <div className="relative">
-            <h2 className={`${D} mx-auto max-w-3xl text-4xl font-extrabold leading-[1.02] tracking-[-0.035em] text-[#14121F] sm:text-6xl`}>Your next demo is one take away.</h2>
-            <p className="mx-auto mt-5 max-w-md text-base leading-7 text-[#14121F]/65">Open the studio, hit record, and fix the rest by editing the transcript.</p>
+            <h2 className={`${D} mx-auto max-w-3xl text-4xl font-extrabold leading-[1.02] tracking-[-0.035em] text-[#14121F] sm:text-6xl`}>Your next demo or reel is one take away.</h2>
+            <p className="mx-auto mt-5 max-w-md text-base leading-7 text-[#14121F]/65">Open the studio, hit record, or drop in your photos. Fix the rest by editing the transcript.</p>
             <Link href="/login?setup=1" className={`group mt-9 inline-flex items-center gap-2 rounded-full bg-[#14121F] px-7 py-4 text-sm font-semibold text-white shadow-[0_14px_34px_-10px_rgba(20,18,31,0.55)] transition hover:-translate-y-0.5 hover:bg-[#2c2742] ${focus}`}>
               Try the studio <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
             </Link>

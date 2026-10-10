@@ -620,11 +620,23 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
         if (!narrationText.trim() || isGeneratingVoice) return;
         setIsGeneratingVoice(true);
         setError(null);
+        setNotice(null);
         try {
             const result = await generateSpeechAudio(narrationText, narrationLanguage, narrationVoiceGender);
             if (voiceover) URL.revokeObjectURL(voiceover.url);
             setVoiceover(result);
-            setNotice('Voiceover generated successfully!');
+
+            // Compare the voiceover length with the reel so the ending is not cut off by surprise.
+            const voiceMs = await new Promise<number>((resolve) => {
+                const probe = new Audio(result.url);
+                probe.onloadedmetadata = () => resolve(Number.isFinite(probe.duration) ? probe.duration * 1000 : 0);
+                probe.onerror = () => resolve(0);
+            });
+            if (durationMs > 0 && voiceMs > durationMs + 500) {
+                setNotice(`The voiceover is ${(voiceMs / 1000).toFixed(1)}s but your reel is ${(durationMs / 1000).toFixed(1)}s, so the end will be cut off. Add clips, slow clips down, or shorten the script.`);
+            } else {
+                setNotice('Voiceover ready. Press Play preview to hear it with your reel.');
+            }
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Could not generate speech.');
         } finally {
@@ -2258,7 +2270,10 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
                     <textarea
                         value={narrationText}
                         onChange={(e) => setNarrationText(e.target.value)}
-                        placeholder="Enter script to convert into voiceover..."
+                        maxLength={1500}
+                        placeholder={narrationLanguage === 'en'
+                            ? 'Write your script. It will be read exactly as written.'
+                            : 'Write your script in English. It will be translated and spoken in the selected language.'}
                         rows={3}
                         className="w-full resize-y rounded-xl border border-[#14121F]/15 bg-[#F7F6FB] px-3.5 py-2.5 text-xs text-[#14121F] shadow-xs placeholder:text-[#14121F]/40 focus:border-[#6A4CFF] focus:outline-none"
                     />
