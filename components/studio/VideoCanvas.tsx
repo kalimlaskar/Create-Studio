@@ -46,6 +46,8 @@ const OFFSCREEN_VIDEO_CLASS =
     'pointer-events-none fixed left-0 top-0 z-[-1] h-px w-px opacity-[0.01]';
 
 function getVideoFilter(settings: StudioSettings) {
+    const neutral = settings.brightness === 100 && settings.contrast === 100 && settings.filterPreset === 'none';
+    if (neutral) return 'none';
     const preset = settings.filterPreset === 'cinematic'
         ? 'saturate(120%) sepia(20%)'
         : settings.filterPreset === 'mono'
@@ -565,7 +567,7 @@ export function VideoCanvas({
         const canvas = visibleCanvasRef.current;
         if (!video || !canvas) return;
 
-        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        const ctx = canvas.getContext('2d');
         if (!ctx) return;
 
         const current = settingsRef.current;
@@ -763,13 +765,19 @@ export function VideoCanvas({
                 renderFrame();
             }
         };
-
+        const TARGET_FPS = Math.min(RECORDING_FRAME_RATE, 30);
+        const MIN_FRAME_GAP_MS = 1000 / TARGET_FPS - 2;
+        let lastFrameAt = 0;
         const tick = () => {
             if (cancelled) return;
-            try {
-                processFrame();
-            } catch (error) {
-                console.error('Frame render failed:', error);
+            const now = performance.now();
+            if (now - lastFrameAt >= MIN_FRAME_GAP_MS) {
+                lastFrameAt = now;
+                try {
+                    processFrame();
+                } catch (error) {
+                    console.error('Frame render failed:', error);
+                }
             }
             if (!cancelled && !stopTicker) rafId = requestAnimationFrame(tick);
         };
@@ -781,7 +789,8 @@ export function VideoCanvas({
 
             const needsBackgroundLoop = isRecordingRef.current || Boolean(screenShareStreamRef.current);
             if (document.hidden && needsBackgroundLoop) {
-                stopTicker = createBackgroundTicker(tick, RECORDING_FRAME_RATE);
+                // Hidden tabs don't get animation frames, so a worker timer keeps the recording going.
+                stopTicker = createBackgroundTicker(tick, TARGET_FPS);
             } else {
                 rafId = requestAnimationFrame(tick);
             }
@@ -791,7 +800,7 @@ export function VideoCanvas({
         syncLoop();
 
         if (canvas.captureStream) {
-            canvasStreamRef.current = canvas.captureStream(RECORDING_FRAME_RATE);
+            canvasStreamRef.current = canvas.captureStream(TARGET_FPS);
         }
 
         return () => {

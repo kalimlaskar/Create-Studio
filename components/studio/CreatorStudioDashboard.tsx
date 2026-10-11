@@ -289,6 +289,7 @@ export function CreatorStudioDashboard({ userEmail, initialDisplayName = '', ini
         resetRecording,
         cameraError,
     } = useStudioSession(creationMode === 'record' && view === 'record', screenShareStream);
+    const getPreviewStream = useCallback(() => canvasStreamRef.current, [canvasStreamRef]);
 
     // Always-on-top floating camera + teleprompter (like Google Meet).
     // While sharing, Chrome also opens it automatically when you switch tabs.
@@ -700,7 +701,7 @@ export function CreatorStudioDashboard({ userEmail, initialDisplayName = '', ini
                 onStop={stopRecording}
                 onPause={pauseRecording}
                 onResume={resumeRecording}
-                getPreviewStream={() => canvasStreamRef.current}
+                getPreviewStream={getPreviewStream}
                 airDrawing={settings}
                 onAirDrawingChange={updateSettings}
             />
