@@ -117,17 +117,16 @@ export async function signUpAction(_state: AuthFormState, formData: FormData): P
     }
 
     const requestHeaders = await headers();
-    const origin = process.env.NEXT_PUBLIC_SITE_URL ?? requestHeaders.get('origin') ?? 'https://ai-creator-studio-ai.vercel.app/';
-    const { data, error } = await supabase.auth.signUp({
+    const origin = process.env.NEXT_PUBLIC_SITE_URL ?? requestHeaders.get('origin') ?? 'http://localhost:3000';
+
+    const { error } = await supabase.auth.signInWithOtp({
         email,
-        password,
         options: {
-            data: { display_name: name },
+            shouldCreateUser: false,
             emailRedirectTo: `${origin}/auth/callback?next=/studio`,
         },
     });
     if (error) return { error: getAuthErrorMessage(error, 'We could not create your account. Check the details and try again.') };
-    if (data.session) redirect('/studio');
     return { message: 'Check your inbox for a confirmation link. After confirming your email, you can sign in.' };
 }
 

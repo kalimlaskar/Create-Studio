@@ -122,3 +122,8 @@ export function limitReachedResponse(result: Extract<UsageResult, { ok: false }>
         { status: 429 },
     );
 }
+/** Returns true if the user is on an active Creator or Studio plan. */
+export async function isUserPro(userId: string): Promise<boolean> {
+    const plan = await getEffectivePlan(userId);
+    return plan === 'creator' || plan === 'studio';
+}

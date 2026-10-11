@@ -75,6 +75,9 @@ const GRADIENTS: Array<{ id: GradientPreset; label: string; colors: [string, str
     { id: 'warm', label: 'Warm', colors: ['234,179,8', '220,38,38'] },
 ];
 
+
+
+
 const TEXT_BASE_Y: Record<TextPosition, number> = { top: 15, center: 50, bottom: 82 }; // % of frame height
 
 const getCanvasSize = (aspect: PlatformAspect) => ({
@@ -487,6 +490,20 @@ function CaptionOverlay({ clip, onPointerDown, onPointerMove, onPointerUp }: {
 /* -------------------------------------------------------------------------- */
 
 export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
+
+    // Inside your PhotoReelStudio main component:
+    // Add these states
+    const [isProUser, setIsProUser] = useState(false);
+    const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+
+    // Add this helper function
+    const handleFeatureClick = (isFeaturePro: boolean, action: () => void) => {
+        if (isFeaturePro && !isProUser) {
+            setShowUpgradeModal(true);
+            return;
+        }
+        action();
+    };
     /* ---- clips & look ---- */
     const [images, setImages] = useState<ReelImage[]>([]);
     const [selectedImageId, setSelectedImageId] = useState<string | null>(null);
@@ -580,6 +597,7 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
         }
         return Math.max(0, images.length - 1);
     };
+
 
     const safePreviewIndex = getIndexAtTime(previewTimeMs);
     const activeImage = images[safePreviewIndex] ?? null;
@@ -1925,13 +1943,22 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
 
                                 {selectedImage.type === 'image' && (
                                     <div>
-                                        <SelectField label="3D Camera Motion" value={selectedImage.motion ?? 'none'} onChange={(value) => updateSelected({ motion: value as ReelImage['motion'] })}>
+                                        <SelectField
+                                            label="3D Camera Motion"
+                                            value={selectedImage.motion ?? 'none'}
+                                            onChange={(value) => {
+                                                // Check if the selected motion is a Pro feature (e.g., depth-orbit, depth-sway, depth-dolly)
+                                                const isProMotion = ['depth-orbit', 'depth-sway', 'depth-dolly'].includes(value);
+
+                                                handleFeatureClick(isProMotion, () => updateSelected({ motion: value as ReelImage['motion'] }));
+                                            }}
+                                        >
                                             <option value="none">Still</option>
                                             <option value="zoom-in">Slow zoom in</option>
                                             <option value="zoom-out">Slow zoom out</option>
-                                            <option value="depth-orbit">🔄 Product Orbit</option>
-                                            <option value="depth-sway">↔️ Turntable Sway</option>
-                                            <option value="depth-dolly">🔍 3D Dolly In</option>
+                                            <option value="depth-orbit">👑 🔄 Product Orbit (PRO)</option>
+                                            <option value="depth-sway">👑 ↔️ Turntable Sway (PRO)</option>
+                                            <option value="depth-dolly">👑 🔍 3D Dolly In (PRO)</option>
                                         </SelectField>
                                         {isDepthMotion(selectedImage.motion) && (
                                             <span className="mt-1 flex items-center gap-1.5 text-[10px] font-semibold text-[#6A4CFF]">
@@ -2553,6 +2580,32 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
                     {error && <p role="alert" className="w-full max-w-4xl rounded-2xl border border-red-200 bg-red-50 p-3.5 text-xs font-medium text-red-600 shadow-xs">{error}</p>}
                     <canvas ref={canvasRef} className="hidden" />
                 </div>
+                {/* UPGRADE MODAL */}
+                {showUpgradeModal && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+                        <div className="bg-slate-900 border border-purple-500/30 rounded-3xl max-w-md w-full p-6 text-center shadow-2xl relative">
+                            <h3 className="text-2xl font-bold text-white mb-2">Unlock Pro Studio</h3>
+                            <p className="text-slate-400 text-sm mb-6">
+                                Get unlimited access to all 3D effects, AI tools, and 4K exports.
+                            </p>
+                            <button
+                                onClick={() => {
+                                    setIsProUser(true);
+                                    setShowUpgradeModal(false);
+                                }}
+                                className="w-full py-3.5 bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-semibold rounded-2xl mb-3"
+                            >
+                                Upgrade to Pro ($9/month)
+                            </button>
+                            <button
+                                onClick={() => setShowUpgradeModal(false)}
+                                className="w-full py-3 bg-slate-800 text-slate-300 text-sm font-medium rounded-2xl"
+                            >
+                                Maybe Later
+                            </button>
+                        </div>
+                    </div>
+                )}
             </section>
         </main>
     );

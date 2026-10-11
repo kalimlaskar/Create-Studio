@@ -64,8 +64,6 @@ function PipPreview({ pipWindow, getCameraStream, getPreviewStream, mirror, coun
     const canShowCanvas = Boolean(getPreviewStream);
     const showCanvas = view === 'canvas' && canShowCanvas;
 
-    // The parent passes new function objects on every render. Keeping them in refs means the video only
-    // restarts when the window opens or the view changes, not on every re-render.
     const getCameraRef = useRef(getCameraStream);
     const getPreviewRef = useRef(getPreviewStream);
     useEffect(() => {
@@ -256,7 +254,10 @@ function FloatingStudioPipBase({
     isRecording, isPaused, recordingSeconds, onStart, onStop, onPause, onResume,
     airDrawing, onAirDrawingChange,
 }: FloatingStudioPipProps) {
-    if (!pipWindow) return null;
+    // Feature detect Document Picture-in-Picture support (Safari doesn't support it)
+    const isDocumentPipSupported = typeof window !== 'undefined' && 'documentPictureInPicture' in window;
+
+    if (!isDocumentPipSupported || !pipWindow) return null;
 
     return createPortal(
         <div className="flex h-screen w-screen flex-col bg-[#14121F] font-[family-name:var(--font-body)] text-white">

@@ -3,6 +3,8 @@ import Image from 'next/image';
 import type { CSSProperties } from 'react';
 import { Bricolage_Grotesque, Instrument_Sans } from 'next/font/google';
 import { ArrowRight, Check, Eraser, EyeOff, Film, Hand, Images, Languages, Layers, Mic, Music, Pencil, Plus, Scissors, ScreenShare, Sparkles, Type } from 'lucide-react';
+import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { isEntitled } from '@/lib/billing/subscription';
 
 const display = Bricolage_Grotesque({ subsets: ['latin'], variable: '--font-display', display: 'swap' });
 const body = Instrument_Sans({ subsets: ['latin'], variable: '--font-body', display: 'swap' });
@@ -160,7 +162,41 @@ const h2 = `${D} text-4xl font-bold leading-[1.02] tracking-[-0.03em] text-[#141
 const card = 'rounded-[2rem] border border-[#14121F]/10 bg-white shadow-[0_1px_0_rgba(20,18,31,0.04),0_24px_48px_-28px_rgba(20,18,31,0.28)]';
 const gradientText = 'bg-gradient-to-r from-[#6A4CFF] via-[#9a4cff] to-[#FF3D81] bg-clip-text text-transparent';
 
-export default function HomePage() {
+export default async function HomePage() {
+  let userPlan = '';
+  let isLoggedIn = false;
+  let displayName = 'User';
+
+  try {
+    const supabase = await createSupabaseServerClient();
+    if (supabase) {
+      const { data: authData } = await supabase.auth.getClaims();
+      if (authData?.claims?.sub) {
+        isLoggedIn = true;
+        const userId = authData.claims.sub;
+
+        const [profileRes, subRes] = await Promise.all([
+          supabase.from('profiles').select('display_name,username').eq('id', userId).maybeSingle(),
+          supabase.from('subscriptions').select('status,current_period_end,plan_name').eq('user_id', userId).maybeSingle()
+        ]);
+
+        if (profileRes.data?.display_name) {
+          displayName = profileRes.data.display_name;
+        } else if (authData.claims.email) {
+          displayName = String(authData.claims.email).split('@')[0];
+        }
+
+        if (subRes.data?.plan_name) {
+          userPlan = subRes.data.plan_name;
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Failed to resolve session on homepage:', err);
+  }
+
+  const initialLetter = displayName.charAt(0).toUpperCase();
+
   return (
     <main className={`${display.variable} ${body.variable} min-h-dvh overflow-x-clip bg-[#F7F6FB] font-[family-name:var(--font-body)] text-[#14121F] selection:bg-[#6A4CFF]/20`}>
       <style dangerouslySetInnerHTML={{ __html: css }} />
@@ -176,11 +212,39 @@ export default function HomePage() {
             <a href="#features" className={navLink}>Features</a>
             <Link href="/pricing" className={navLink}>Pricing</Link>
           </nav>
-          <div className="flex shrink-0 items-center gap-1">
-            <Link href="/login" className={`rounded-full px-3 py-2 text-sm font-medium text-[#14121F]/75 transition-colors hover:text-[#14121F] sm:px-4 ${focus}`}>Log in</Link>
-            <Link href="/login?setup=1" className={`inline-flex items-center gap-1.5 rounded-full bg-[#14121F] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#2c2742] sm:px-5 ${focus}`}>
-              Try the studio <ArrowRight className="h-3.5 w-3.5" />
-            </Link>
+
+          <div className="flex shrink-0 items-center gap-2">
+            {isLoggedIn ? (
+              <>
+                {userPlan ? (
+                  <span className="rounded-full bg-[#6A4CFF]/10 px-4 py-1.5 text-xs font-bold text-[#6A4CFF]">
+                    {userPlan}
+                  </span>
+                ) : (
+                  <Link href="/pricing" className="inline-flex items-center gap-1 rounded-full border border-[#14121F]/10 bg-[#F7F6FB] px-3 py-1.5 text-xs font-semibold text-[#14121F]/70 transition hover:bg-[#14121F]/10">
+                    Free Tier · Upgrade
+                  </Link>
+                )}
+
+                <Link
+                  href="/studio"
+                  className={`inline-flex items-center gap-2 rounded-full border border-[#14121F]/10 bg-white py-1.5 pl-2 pr-4 text-sm font-semibold text-[#14121F] shadow-sm transition hover:border-[#6A4CFF]/40 hover:shadow-md ${focus}`}
+                >
+                  <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#6A4CFF] text-xs font-bold text-white shadow-xs">
+                    {initialLetter}
+                  </span>
+                  <span className="max-w-[100px] truncate">{displayName}</span>
+                  <ArrowRight className="h-3.5 w-3.5 text-[#14121F]/40" />
+                </Link>
+              </>
+            ) : (
+              <>
+                <Link href="/login" className={`rounded-full px-3 py-2 text-sm font-medium text-[#14121F]/75 transition-colors hover:text-[#14121F] sm:px-4 ${focus}`}>Log in</Link>
+                <Link href="/login?setup=1" className={`inline-flex items-center gap-1.5 rounded-full bg-[#14121F] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#2c2742] sm:px-5 ${focus}`}>
+                  Try the studio <ArrowRight className="h-3.5 w-3.5" />
+                </Link>
+              </>
+            )}
           </div>
         </div>
         <nav aria-label="Mobile main navigation" className="mx-auto mt-2 flex max-w-5xl gap-1.5 overflow-x-auto px-1 [scrollbar-width:none] md:hidden [&::-webkit-scrollbar]:hidden">
@@ -208,8 +272,8 @@ export default function HomePage() {
             Record walkthroughs with your face in a floating card and a teleprompter only you can see, then fix mistakes by deleting words. Or turn photos and clips into music-backed reels with templates and sci-fi effects. All in one browser tab.
           </p>
           <div className="rise mt-7 flex flex-wrap items-center gap-3" style={{ '--d': 3 } as CSSProperties}>
-            <Link href="/login?setup=1" className={`group inline-flex items-center gap-2 rounded-full bg-[#14121F] px-6 py-3.5 text-sm font-semibold text-white shadow-[0_14px_34px_-10px_rgba(20,18,31,0.55)] transition hover:-translate-y-0.5 hover:bg-[#2c2742] ${focus}`}>
-              Try the studio <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+            <Link href="/studio" className={`group inline-flex items-center gap-2 rounded-full bg-[#14121F] px-6 py-3.5 text-sm font-semibold text-white shadow-[0_14px_34px_-10px_rgba(20,18,31,0.55)] transition hover:-translate-y-0.5 hover:bg-[#2c2742] ${focus}`}>
+              {isLoggedIn ? 'Go to Studio' : 'Try the studio'} <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
             </Link>
             <a href="#demos" className={`inline-flex items-center rounded-full border border-[#14121F]/15 bg-white/70 px-6 py-3.5 text-sm font-semibold text-[#14121F] backdrop-blur transition hover:bg-white ${focus}`}>
               See it in action
@@ -244,7 +308,6 @@ export default function HomePage() {
               <span className="mx-auto rounded-full bg-[#14121F]/[0.05] px-4 py-1 text-[10px] font-medium text-[#14121F]/50">yourproduct.com/dashboard</span>
             </div>
             <div className="relative aspect-[16/10] overflow-hidden rounded-2xl bg-[#F7F6FB]">
-              {/* fake dashboard */}
               <div className="absolute inset-y-0 left-0 w-[15%] space-y-2 border-r border-[#14121F]/5 bg-white p-2.5">
                 <span className="block h-2 w-3/4 rounded bg-[#6A4CFF]" />
                 <span className="block h-2 w-full rounded bg-[#14121F]/10" />
@@ -269,7 +332,6 @@ export default function HomePage() {
               <span className="absolute left-3 top-3 inline-flex items-center gap-1.5 rounded-full bg-[#14121F]/80 px-2.5 py-1 text-[10px] font-semibold text-white">
                 <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#FF3D81]" />REC 02:14
               </span>
-              {/* hand-drawn annotation */}
               <svg viewBox="0 0 400 250" className="pointer-events-none absolute inset-0 h-full w-full" fill="none" aria-hidden="true">
                 <ellipse className="draw" pathLength={1} cx="230" cy="40" rx="64" ry="33" stroke="#FF3D81" strokeWidth="4" strokeLinecap="round" />
                 <path className="draw" pathLength={1} style={{ '--i': 1 } as CSSProperties} d="M318 118 C 296 108, 280 92, 268 76 M268 76 L 281 80 M268 76 L 270 90" stroke="#FF3D81" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
@@ -277,7 +339,6 @@ export default function HomePage() {
             </div>
           </div>
 
-          {/* PIP camera card */}
           <div className="floaty absolute -bottom-2 -right-2 w-[32%] sm:-right-6" style={{ '--i': 1 } as CSSProperties}>
             <div className="relative aspect-[4/3] overflow-hidden rounded-2xl bg-[linear-gradient(160deg,#ffb86b,#ff6a8b_55%,#6A4CFF)] shadow-[0_20px_40px_-12px_rgba(20,18,31,0.45)] ring-4 ring-white">
               <span className="absolute left-1/2 top-[20%] h-[36%] w-[27%] -translate-x-1/2 rounded-full bg-[#FFE9A8]" />
@@ -286,7 +347,6 @@ export default function HomePage() {
             </div>
           </div>
 
-          {/* Private teleprompter */}
           <div className="floaty absolute -left-3 top-20 hidden w-48 sm:block lg:-left-12" style={{ '--i': 0 } as CSSProperties}>
             <div className="rounded-2xl bg-[#14121F]/90 p-3 text-white shadow-[0_24px_48px_-14px_rgba(20,18,31,0.5)] backdrop-blur-xl">
               <div className="mb-2 flex items-center justify-between text-[10px] font-semibold text-white/60">
@@ -303,7 +363,6 @@ export default function HomePage() {
             </div>
           </div>
 
-          {/* Transcript chip */}
           <div className="floaty absolute -bottom-6 left-2 hidden sm:block sm:left-6" style={{ '--i': 2 } as CSSProperties}>
             <div className="rounded-2xl border border-[#14121F]/10 bg-white px-3.5 py-3 text-[12px] font-medium shadow-[0_20px_40px_-14px_rgba(20,18,31,0.3)]">
               <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-[#14121F]/50">Transcript</p>
@@ -495,7 +554,6 @@ export default function HomePage() {
           <div className="pointer-events-none absolute -left-20 -top-24 h-72 w-72 rounded-full bg-[#FF3D81]/15 blur-3xl" />
           <div className="pointer-events-none absolute -bottom-24 -right-16 h-72 w-72 rounded-full bg-[#6A4CFF]/15 blur-3xl" />
           <div className="relative grid items-center gap-12 lg:grid-cols-[.9fr_1.1fr]">
-            {/* phones */}
             <div className="relative mx-auto h-[400px] w-full max-w-[460px]">
               <ReelPhone bg={reelTemplates[0].bg} caption={reelTemplates[0].caption} className="left-0 top-10 -rotate-6" />
               <ReelPhone bg={reelTemplates[1].bg} caption={reelTemplates[1].caption} className="left-[31%] top-0 z-10" />
@@ -631,22 +689,25 @@ export default function HomePage() {
           <div className="relative">
             <h2 className={`${D} mx-auto max-w-3xl text-4xl font-extrabold leading-[1.02] tracking-[-0.035em] text-[#14121F] sm:text-6xl`}>Your next demo or reel is one take away.</h2>
             <p className="mx-auto mt-5 max-w-md text-base leading-7 text-[#14121F]/65">Open the studio, hit record, or drop in your photos. Fix the rest by editing the transcript.</p>
-            <Link href="/login?setup=1" className={`group mt-9 inline-flex items-center gap-2 rounded-full bg-[#14121F] px-7 py-4 text-sm font-semibold text-white shadow-[0_14px_34px_-10px_rgba(20,18,31,0.55)] transition hover:-translate-y-0.5 hover:bg-[#2c2742] ${focus}`}>
-              Try the studio <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+            <Link href="/studio" className={`group mt-9 inline-flex items-center gap-2 rounded-full bg-[#14121F] px-7 py-4 text-sm font-semibold text-white shadow-[0_14px_34px_-10px_rgba(20,18,31,0.55)] transition hover:-translate-y-0.5 hover:bg-[#2c2742] ${focus}`}>
+              {isLoggedIn ? 'Open your Studio' : 'Try the studio'} <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
             </Link>
             <p className="mt-4 text-sm text-[#14121F]/55">Free to start. No install.</p>
           </div>
         </div>
       </section>
 
+      {/* Footer */}
       <footer className="relative border-t border-[#14121F]/10">
         <div className="mx-auto flex max-w-7xl flex-col gap-4 px-5 py-8 text-sm text-[#14121F]/55 sm:px-8 md:flex-row md:items-center md:justify-between lg:px-12">
           <Wordmark />
           <p>Record. Edit. Share your story.</p>
           <div className="flex items-center gap-5">
             <Link href="/pricing" className="transition hover:text-[#14121F]">Pricing</Link>
-            <Link href="/login" className="transition hover:text-[#14121F]">Log in</Link>
-            <Link href="/login?setup=1" className="transition hover:text-[#14121F]">Try the studio</Link>
+            {!isLoggedIn ? (
+              <Link href="/login" className="transition hover:text-[#14121F]">Log in</Link>
+            ) : null}
+            <Link href="/studio" className="transition hover:text-[#14121F]">Go to Studio</Link>
           </div>
         </div>
       </footer>

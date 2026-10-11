@@ -1,35 +1,57 @@
-import { razorpayConfigured, razorpayRequest } from '@/lib/billing/razorpay';
-import { getCurrentUser, isEntitled } from '@/lib/billing/subscription';
-import { createSupabaseAdminClient } from '@/lib/supabase/admin';
+// app/api/billing/subscribe/route.ts
+import { getRequestUserId } from '@/lib/plans/server';
+import { billingDb, planIdFor, razorpayApi } from '@/lib/billing/razorpay';
 
-export async function POST() {
-    const user = await getCurrentUser();
-    if (!user) return Response.json({ error: 'Sign in to upgrade.' }, { status: 401 });
-    const admin = createSupabaseAdminClient();
-    if (!razorpayConfigured() || !admin) return Response.json({ error: 'Payments are not configured yet.' }, { status: 503 });
+const fail = (error: string, status: number) => Response.json({ error }, { status });
 
-    const { data: existing } = await admin.from('subscriptions').select('status,current_period_end').eq('user_id', user.id).maybeSingle();
-    if (isEntitled(existing)) return Response.json({ error: 'You already have an active Pro subscription.' }, { status: 409 });
+export async function POST(request: Request) {
+    const userId = await getRequestUserId();
+    if (!userId) return fail('Sign in to upgrade.', 401);
 
-    const planId = process.env.RAZORPAY_PLAN_ID as string;
+    const body = await request.json().catch(() => null) as { plan?: unknown } | null;
+    const plan = body?.plan;
+    if (plan !== 'creator' && plan !== 'studio') return fail('Choose the Creator or Studio plan.', 400);
+
+    const razorpayPlanId = planIdFor(plan);
+    const keyId = process.env.RAZORPAY_KEY_ID;
+    if (!razorpayPlanId || !keyId) return fail('This plan is not available for purchase yet.', 503);
+
+    const db = billingDb();
+    const { data: existing } = await db
+        .from('subscriptions')
+        .select('status, current_period_end')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+    if (existing?.status === 'active') {
+        return fail('You already have an active plan. Cancel it first, then choose a new one.', 409);
+    }
+    if (existing?.status === 'cancelled' && existing.current_period_end && new Date(existing.current_period_end) > new Date()) {
+        return fail(`Your current plan runs until ${new Date(existing.current_period_end).toLocaleDateString('en-IN')}. You can subscribe again after that.`, 409);
+    }
+
     try {
-        const subscription = await razorpayRequest<{ id: string }>('/subscriptions', {
-            plan_id: planId,
-            total_count: 120,
+        const subscription = await razorpayApi<{ id: string }>('subscriptions', {
+            plan_id: razorpayPlanId,
+            total_count: 120, // monthly billing for up to 10 years; the user can cancel any time
+            quantity: 1,
             customer_notify: 1,
-            notes: { user_id: user.id },
+            notes: { user_id: userId, plan },
         });
-        const { error } = await admin.from('subscriptions').upsert({
-            user_id: user.id,
+
+        const { error } = await db.from('subscriptions').upsert({
+            user_id: userId,
             razorpay_subscription_id: subscription.id,
-            razorpay_plan_id: planId,
+            razorpay_plan_id: razorpayPlanId,
             status: 'created',
-            current_period_end: null,
+            cancel_at_period_end: false,
             updated_at: new Date().toISOString(),
-        });
+        }, { onConflict: 'user_id' });
         if (error) throw error;
-        return Response.json({ subscriptionId: subscription.id, keyId: process.env.RAZORPAY_KEY_ID, email: user.email });
-    } catch {
-        return Response.json({ error: 'Could not start checkout. Please try again.' }, { status: 502 });
+
+        return Response.json({ subscriptionId: subscription.id, keyId });
+    } catch (error) {
+        console.error('Could not create subscription:', error);
+        return fail('Could not start checkout. Please try again.', 502);
     }
 }

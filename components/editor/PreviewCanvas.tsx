@@ -17,9 +17,10 @@ interface PreviewCanvasProps {
     videoRef: RefObject<HTMLVideoElement | null>;
     project: EditorProject;
     performanceMode: boolean;
+    isPro?: boolean;
 }
 
-export function PreviewCanvas({ videoRef, project, performanceMode }: PreviewCanvasProps) {
+export function PreviewCanvas({ videoRef, project, performanceMode, isPro = false }: PreviewCanvasProps) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const [showOriginal, setShowOriginal] = useState(false);
     const snapshotsRef = useRef<TransitionSnapshots | null>(null);
@@ -86,14 +87,18 @@ export function PreviewCanvas({ videoRef, project, performanceMode }: PreviewCan
                 if (!showOriginal) drawActiveOverlays(ctx, project.tracks.overlays, currentMs, canvas.width, canvas.height);
                 if (!showOriginal) drawActiveCaption(ctx, project.tracks.captions, currentMs, project.captionStyle, canvas.width, canvas.height);
                 if (!showOriginal) applyArtisticEffect(canvas, project.cameraArtEffect);
-                if (!showOriginal) drawFreeTierWatermark(ctx, canvas.width, canvas.height);
+
+                // 2. Only draw the watermark if the user is NOT pro
+                if (!showOriginal && !isPro) {
+                    drawFreeTierWatermark(ctx, canvas.width, canvas.height);
+                }
             }
             animationFrameId = requestAnimationFrame(drawFrame);
         };
 
         drawFrame();
         return () => cancelAnimationFrame(animationFrameId);
-    }, [videoRef, project, showOriginal, performanceMode]);
+    }, [videoRef, project, showOriginal, performanceMode, isPro]);
 
     return (
         <div className="relative flex min-h-0 min-w-0 flex-1 items-center justify-center overflow-hidden rounded-[2.2rem] border border-[#14121F]/10 bg-white p-4 shadow-[0_20px_50px_-15px_rgba(20,18,31,0.15)] sm:p-6 font-[family-name:var(--font-body)]">

@@ -1,4 +1,4 @@
-import { hmacMatches } from '@/lib/billing/razorpay';
+import { hmacHex, safeEqualHex } from '@/lib/billing/razorpay';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 
 const STATUS_BY_EVENT: Record<string, string> = {
@@ -15,9 +15,19 @@ const STATUS_BY_EVENT: Record<string, string> = {
 
 export async function POST(request: Request) {
     const raw = await request.text();
-    if (!hmacMatches(raw, request.headers.get('x-razorpay-signature'), process.env.RAZORPAY_WEBHOOK_SECRET)) {
+    const signature = request.headers.get('x-razorpay-signature');
+    const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
+
+    if (!signature || !secret) {
+        return Response.json({ error: 'Missing signature or secret.' }, { status: 400 });
+    }
+
+    // Verify signature using your lib/billing/razorpay helpers
+    const expectedSignature = hmacHex(secret, raw);
+    if (!safeEqualHex(expectedSignature, signature)) {
         return Response.json({ error: 'Invalid signature.' }, { status: 400 });
     }
+
     const admin = createSupabaseAdminClient();
     if (!admin) return Response.json({ error: 'Not configured.' }, { status: 503 });
 
@@ -28,7 +38,6 @@ export async function POST(request: Request) {
     const status = event.event ? STATUS_BY_EVENT[event.event] : undefined;
     if (!entity?.id || !status) return Response.json({ ok: true });
 
-    // Only write when the subscription id matches one we created for a user (prevents spoofed notes.user_id).
     const { data: row } = await admin.from('subscriptions').select('user_id').eq('razorpay_subscription_id', entity.id).maybeSingle();
     if (!row) return Response.json({ ok: true });
 

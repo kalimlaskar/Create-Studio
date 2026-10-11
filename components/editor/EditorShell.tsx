@@ -25,6 +25,7 @@ import { drawTransitionFrame, getInitialPerformanceMode, storePerformanceMode, T
 import { addDeletedRange, removeDeletedRange, getKeepRanges, skipTarget, sourceToOutput } from '@/lib/cuts'; // CUT
 
 interface EditorShellProps {
+    isPro?: boolean;
     sourceVideoUrl: string;
     aspectRatio: AspectRatioType;
     initialScript: string;
@@ -37,7 +38,7 @@ interface EditorShellProps {
     onDraftSaved?: () => void;
 }
 
-export function EditorShell({ sourceVideoUrl, aspectRatio, initialScript, initialScriptLanguage, creatorName, sourceDurationMs, initialCameraArtEffect, onBack, initialProject, onDraftSaved }: EditorShellProps) {
+export function EditorShell({ isPro = false, sourceVideoUrl, aspectRatio, initialScript, initialScriptLanguage, creatorName, sourceDurationMs, initialCameraArtEffect, onBack, initialProject, onDraftSaved }: EditorShellProps) {
     const {
         project,
         projectLoadError,
@@ -290,7 +291,9 @@ export function EditorShell({ sourceVideoUrl, aspectRatio, initialScript, initia
                 drawActiveOverlays(ctx, project.tracks.overlays, currentMs, exportCanvas.width, exportCanvas.height, scale);
                 drawActiveCaption(ctx, project.tracks.captions, currentMs, project.captionStyle, exportCanvas.width, exportCanvas.height);
                 applyArtisticEffect(exportCanvas, project.cameraArtEffect);
-                drawFreeTierWatermark(ctx, exportCanvas.width, exportCanvas.height);
+                if (!isPro) {
+                    drawFreeTierWatermark(ctx, exportCanvas.width, exportCanvas.height);
+                }
 
                 // CUT: progress measured on the joined timeline
                 const outputMs = sourceToOutput(currentMs, keep) ?? 0;
@@ -572,7 +575,7 @@ export function EditorShell({ sourceVideoUrl, aspectRatio, initialScript, initia
 
                 {project ? (
                     <div className={`flex min-h-0 flex-1 flex-col gap-3.5 overflow-hidden ${isExporting ? 'pointer-events-none opacity-70' : ''}`}>
-                        <PreviewCanvas videoRef={videoRef} project={project} performanceMode={performanceMode} />
+                        <PreviewCanvas videoRef={videoRef} project={project} performanceMode={performanceMode} isPro={isPro} />
                         <Timeline
                             durationMs={project.durationMs}
                             playheadMs={playheadMs}

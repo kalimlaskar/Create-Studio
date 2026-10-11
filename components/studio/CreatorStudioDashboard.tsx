@@ -21,14 +21,6 @@ import { FloatingStudioPip } from './FloatingStudioPip';
 const display = Bricolage_Grotesque({ subsets: ['latin'], variable: '--font-display', display: 'swap' });
 const body = Instrument_Sans({ subsets: ['latin'], variable: '--font-body', display: 'swap' });
 
-/* ---------- Palette matching landing/pricing/auth pages ----------
-   ink     #14121F   text, dark surfaces
-   paper   #F7F6FB   page background
-   violet  #6A4CFF   primary accent
-   pink    #FF3D81   secondary accent / REC
-   yellow  #FFE347   caption highlight
-*/
-
 const D = 'font-[family-name:var(--font-display)]';
 const focus =
     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6A4CFF]/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[#F7F6FB]';
@@ -221,7 +213,50 @@ function ProfileMenu({ creatorName, username, avatarUrl, userEmail, profilePersi
     );
 }
 
-export function CreatorStudioDashboard({ userEmail, initialDisplayName = '', initialUsername = '', initialAvatarUrl = '', profilePersistenceEnabled = false, isPro = false }: { userEmail: string; initialDisplayName?: string; initialUsername?: string; initialAvatarUrl?: string; profilePersistenceEnabled?: boolean; isPro?: boolean }) {
+export function CreatorStudioDashboard({
+    userEmail,
+    initialDisplayName = '',
+    initialUsername = '',
+    initialAvatarUrl = '',
+    profilePersistenceEnabled = false,
+    isPro = false,
+    userPlan: initialUserPlan = 'Free'
+}: {
+    userEmail: string;
+    initialDisplayName?: string;
+    initialUsername?: string;
+    initialAvatarUrl?: string;
+    profilePersistenceEnabled?: boolean;
+    isPro?: boolean;
+    userPlan?: string;
+}) {
+    const [userPlan, setUserPlan] = useState(initialUserPlan);
+
+    // Fetch live plan directly from the database table on mount
+    useEffect(() => {
+        let isMounted = true;
+        const fetchPlanFromDB = async () => {
+            const supabase = createSupabaseBrowserClient();
+            if (!supabase) return;
+
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) return;
+
+            const { data: sub } = await supabase
+                .from('subscriptions')
+                .select('plan_name')
+                .eq('user_id', user.id)
+                .maybeSingle();
+
+            if (isMounted && sub?.plan_name) {
+                setUserPlan(sub.plan_name);
+            }
+        };
+
+        void fetchPlanFromDB();
+        return () => { isMounted = false; };
+    }, []);
+
     const [creationMode, setCreationMode] = useState<'choose' | 'record' | 'photos'>('choose');
     const [view, setView] = useState<'record' | 'edit'>('record');
     const [showSettings, setShowSettings] = useState(false);
@@ -291,11 +326,6 @@ export function CreatorStudioDashboard({ userEmail, initialDisplayName = '', ini
     } = useStudioSession(creationMode === 'record' && view === 'record', screenShareStream);
     const getPreviewStream = useCallback(() => canvasStreamRef.current, [canvasStreamRef]);
 
-    // Always-on-top floating camera + teleprompter (like Google Meet).
-    // While sharing, Chrome also opens it automatically when you switch tabs.
-    // The floating window never opens before or during the screen picker, so it cannot
-    // affect what gets captured. While sharing, Chrome may open it on a tab switch,
-    // and the "Show floating camera" button opens it with one click.
     const [floatingEnabled, setFloatingEnabled] = useState(true);
     const pip = useDocumentPip(Boolean(screenShareStream) && floatingEnabled);
     const closePip = pip.close;
@@ -343,12 +373,9 @@ export function CreatorStudioDashboard({ userEmail, initialDisplayName = '', ini
             setScreenShareError('Screen sharing is not supported in this browser. Use a recent desktop version of Chrome, Edge, Firefox, or Safari.');
             return;
         }
-        // Open the floating window on this click, before the screen picker (the picker uses up the click).
         if (floatingEnabled && pip.isSupported) await pip.open();
         try {
             const captureOptions = {
-                // Window capture records only the chosen browser window, so the floating camera and
-                // teleprompter windows never appear in the video. Capped at 1080p to keep encoding smooth.
                 video: { displaySurface: 'window', width: { ideal: 1920, max: 1920 }, height: { ideal: 1080, max: 1080 }, frameRate: { ideal: 30, max: 30 } },
                 audio: false,
                 surfaceSwitching: 'include',
@@ -369,7 +396,6 @@ export function CreatorStudioDashboard({ userEmail, initialDisplayName = '', ini
             displayTrack.contentHint = 'motion';
             const surface = displayTrack.getSettings().displaySurface;
             setScreenShareSurface(surface === 'browser' ? 'Chrome tab' : surface === 'window' ? 'Browser window' : surface === 'monitor' ? 'Entire screen' : 'Unknown capture source');
-            // Entire-screen capture would record the floating window (and teleprompter), and Chrome cannot exclude it.
             if (surface === 'monitor') closePip();
             setIsScreenTrackMuted(displayTrack.muted);
             displayTrack.addEventListener('mute', () => setIsScreenTrackMuted(true));
@@ -384,7 +410,7 @@ export function CreatorStudioDashboard({ userEmail, initialDisplayName = '', ini
             screenShareStreamRef.current = stream;
             setScreenShareStream(stream);
         } catch (error) {
-            closePip(); // the picker was cancelled or sharing failed
+            closePip();
             if (error instanceof DOMException && (error.name === 'NotAllowedError' || error.name === 'AbortError')) return;
             setScreenShareError(error instanceof Error ? error.message : 'Could not start screen sharing. Check browser permissions and try again.');
         }
@@ -531,6 +557,7 @@ export function CreatorStudioDashboard({ userEmail, initialDisplayName = '', ini
     if ((view === 'edit' || (settings.inputMode === 'upload' && Boolean(settings.uploadedVideoUrl))) && activeVideoUrl) {
         return (
             <EditorShell
+                isPro={isPro}
                 sourceVideoUrl={activeVideoUrl}
                 aspectRatio={restoredDraft?.project.aspectRatio ?? settings.aspectRatio}
                 initialScript={settings.scriptText}
@@ -559,7 +586,6 @@ export function CreatorStudioDashboard({ userEmail, initialDisplayName = '', ini
                 <style dangerouslySetInnerHTML={{ __html: css }} />
                 <div className="grain pointer-events-none absolute inset-0 -z-10" />
 
-                {/* Floating glass nav matching landing/pricing pages */}
                 <header className="sticky top-0 z-50 px-3 pt-3 sm:px-6 sm:pt-4">
                     <div className="mx-auto flex h-14 max-w-5xl items-center justify-between gap-3 rounded-full border border-white/70 bg-white/70 pl-4 pr-2 shadow-[0_10px_30px_-10px_rgba(20,18,31,0.18)] backdrop-blur-xl sm:h-16 sm:pl-5">
                         <Wordmark />
@@ -570,7 +596,9 @@ export function CreatorStudioDashboard({ userEmail, initialDisplayName = '', ini
                         </nav>
                         <div className="flex shrink-0 items-center gap-2">
                             {isPro ? (
-                                <span className="rounded-full bg-[#6A4CFF]/10 px-3 py-1 text-xs font-semibold text-[#6A4CFF]">Pro</span>
+                                <span className="rounded-full bg-[#6A4CFF]/10 px-3 py-1 text-xs font-semibold text-[#6A4CFF]">
+                                    {userPlan}
+                                </span>
                             ) : profilePersistenceEnabled && (
                                 <Link href="/pricing" className="rounded-full bg-[#6A4CFF] px-3.5 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-[#5839e0]">Upgrade</Link>
                             )}
@@ -651,7 +679,7 @@ export function CreatorStudioDashboard({ userEmail, initialDisplayName = '', ini
                             {savedDrafts.map((draft) => <div key={draft.id} className="flex items-center gap-1 rounded-lg hover:bg-neutral-800"><button onClick={() => void openDraft(draft.id)} disabled={isLoadingDraft} className="min-w-0 flex-1 rounded-lg px-3 py-2 text-left text-xs text-neutral-200 disabled:opacity-50"><span className="block truncate font-semibold">{draft.title || 'Untitled creator project'}</span><span className="mt-1 block text-neutral-500">{draft.creatorName} · {Math.round(draft.durationMs / 1000)} sec · {new Date(draft.savedAt).toLocaleDateString()}</span></button><button onClick={() => void removeDraft(draft.id)} aria-label={`Delete ${draft.title}`} className="rounded-md p-2 text-neutral-600 hover:text-red-400"><Trash2 className="h-3.5 w-3.5" /></button></div>)}
                             {savedDrafts.length === 0 && <p className="px-3 py-2 text-xs text-neutral-400">Your saved edits will appear here.</p>}
                             {isLoadingDraft && <p className="px-3 py-2 text-xs text-neutral-400">Opening project…</p>}
-                            <div className="mx-2 mt-2 rounded-lg border border-neutral-800 bg-neutral-950 p-3"><span className="text-xs font-semibold text-neutral-200">Free plan</span><p className="mt-1 text-[10px] leading-relaxed text-neutral-500">60-second recordings and exports · watermark included. Billing is not configured.</p><button type="button" disabled className="mt-2 w-full cursor-not-allowed rounded-md border border-neutral-800 px-2 py-1.5 text-[10px] font-semibold text-neutral-500">Upgrade · payments not configured</button></div>
+                            <div className="mx-2 mt-2 rounded-lg border border-neutral-800 bg-neutral-950 p-3"><span className="text-xs font-semibold text-neutral-200">{userPlan} Plan</span><p className="mt-1 text-[10px] leading-relaxed text-neutral-500">Active subscription package loaded from your database account.</p></div>
                         </div>
                     </details>
                 </div>

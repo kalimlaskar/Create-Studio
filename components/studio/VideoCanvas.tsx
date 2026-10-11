@@ -24,6 +24,7 @@ interface VideoCanvasProps {
     countdown: number | null;
     screenShareStream: MediaStream | null;
     onScreenFrame?: (video: HTMLVideoElement) => void;
+    isProUser: boolean; // Added Pro user flag
 }
 
 type FaceLandmarkerLike = {
@@ -228,6 +229,7 @@ export function VideoCanvas({
     countdown,
     screenShareStream,
     onScreenFrame,
+    isProUser, // Destructure Pro user state
 }: VideoCanvasProps) {
     const visibleCanvasRef = useRef<HTMLCanvasElement>(null);
     const screenVideoRef = useRef<HTMLVideoElement>(null);
@@ -458,8 +460,8 @@ export function VideoCanvas({
             writeFont: s.airWriteFont,
             writeColor: s.airWriteColor,
             language: s.airWriteLanguage,
-            snapShapes: s.airDrawingSnapShapes,   // new
-            rainbow: s.airDrawingRainbow,         // new
+            snapShapes: s.airDrawingSnapShapes,
+            rainbow: s.airDrawingRainbow,
         };
     };
 
@@ -549,7 +551,11 @@ export function VideoCanvas({
             applyArtisticEffect(canvas, settingsRef.current.cameraArtEffect as CameraArtEffect);
         }
         drawAirStrokes(ctx, canvas);
-        if (isRecordingRef.current) drawFreeTierWatermark(ctx, canvas.width, canvas.height);
+
+        // Watermark is skipped entirely if the user is Pro
+        if (isRecordingRef.current && !isProUser) {
+            drawFreeTierWatermark(ctx, canvas.width, canvas.height);
+        }
     };
 
     const isScreenFrameReady = () => {
@@ -751,14 +757,14 @@ export function VideoCanvas({
                     current.cameraAvatarMouthWidth
                 );
                 drawAirStrokes(context, canvas);
-                if (isRecordingRef.current) drawFreeTierWatermark(context, canvas.width, canvas.height);
+                if (isRecordingRef.current && !isProUser) drawFreeTierWatermark(context, canvas.width, canvas.height);
             } else if (current.cameraArtEffect === 'avatar') {
                 const landmarks = faceLandmarkerRef.current?.detectForVideo(video, performance.now()).faceLandmarks?.[0];
                 const context = canvas.getContext('2d');
                 if (!context) return;
                 drawTrackedAvatar(context, canvas.width, canvas.height, landmarks);
                 drawAirStrokes(context, canvas);
-                if (isRecordingRef.current) drawFreeTierWatermark(context, canvas.width, canvas.height);
+                if (isRecordingRef.current && !isProUser) drawFreeTierWatermark(context, canvas.width, canvas.height);
             } else if (segmenterRef.current) {
                 renderFrame(segmenterRef.current.segmentForVideo(video, performance.now()));
             } else {
@@ -789,7 +795,6 @@ export function VideoCanvas({
 
             const needsBackgroundLoop = isRecordingRef.current || Boolean(screenShareStreamRef.current);
             if (document.hidden && needsBackgroundLoop) {
-                // Hidden tabs don't get animation frames, so a worker timer keeps the recording going.
                 stopTicker = createBackgroundTicker(tick, TARGET_FPS);
             } else {
                 rafId = requestAnimationFrame(tick);
@@ -810,7 +815,7 @@ export function VideoCanvas({
             stopTicker = null;
             document.removeEventListener('visibilitychange', syncLoop);
         };
-    }, [videoRef, canvasStreamRef, microphoneLevelRef]);
+    }, [videoRef, canvasStreamRef, microphoneLevelRef, isProUser]);
 
     const handleCanvasTap = (event: React.MouseEvent<HTMLCanvasElement>) => {
         const engine = airDrawingRef.current;
@@ -913,9 +918,9 @@ export function VideoCanvas({
                 {!screenShareStream && <TeleprompterOverlay scriptText={settings.scriptText} />}
 
                 {isRecording && (
-                    <div className={`absolute left-4 top-4 z-30 flex items-center gap-2 rounded-full px-4 py-2 text-xs font-bold text-white shadow-lg backdrop-blur-md sm:left-5 sm:top-5 ${isRecordingPaused ? 'bg-amber-500/90' : 'bg-[#FF3D81]/90 shadow-[0_4px_20px_rgba(255,61,129,0.4)]'}`}>
+                    <div className={`absolute left-4 top-4 z-30 flex items-center gap-2 rounded-full px-4 py-2 text-xs font-bold text-white shadow-lg backdrop-blur-md sm:left-5 sm:top-5 ${isRecordingPaused ? 'bg-amber-500/90' : isProUser ? 'bg-[#6A4CFF]/90 shadow-[0_4px_20px_rgba(106,76,255,0.4)]' : 'bg-[#FF3D81]/90 shadow-[0_4px_20px_rgba(255,61,129,0.4)]'}`}>
                         <span className={`h-2.5 w-2.5 rounded-full bg-white ${isRecordingPaused ? '' : 'animate-pulse'}`} />
-                        {isRecordingPaused ? 'PAUSED' : 'RECORDING'} · FREE PLAN
+                        {isRecordingPaused ? 'PAUSED' : 'RECORDING'} · {isProUser ? 'PRO PLAN' : 'FREE PLAN'}
                     </div>
                 )}
             </div>

@@ -12,6 +12,6 @@ export async function getCurrentUser() {
 
 export function isEntitled(row: { status: string; current_period_end: string | null } | null) {
     if (!row) return false;
-    if (row.status === 'active') return true;
+    if (row.status === 'active' || row.status === 'authenticated') return true;
     return (row.status === 'pending' || row.status === 'cancelled') && Boolean(row.current_period_end) && new Date(row.current_period_end as string) > new Date();
 }

@@ -10,37 +10,69 @@ export const metadata = { title: 'Your studio | Cliprame' };
 export default async function StudioPage() {
     const cookieStore = await cookies();
     const demoToken = cookieStore.get(DEMO_SESSION_COOKIE)?.value;
+
     if (isDemoAuthEnabled()) {
-        if (verifyDemoSessionToken(demoToken)) return <CreatorStudioDashboard userEmail={`${getDemoSessionUsername(demoToken) ?? 'tester'} · test account`} />;
+        if (verifyDemoSessionToken(demoToken)) {
+            const demoEmail = `${getDemoSessionUsername(demoToken) ?? 'tester'} · test account`;
+            return <CreatorStudioDashboard userEmail={demoEmail} userPlan="Free" isPro={false} />;
+        }
         redirect('/login?setup=1');
     }
 
     if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY) {
         redirect('/login?setup=1');
     }
+
     const supabase = await createSupabaseServerClient();
     if (!supabase) redirect('/login?setup=1');
+
     const { data, error } = await supabase.auth.getClaims();
     if (error || !data?.claims?.sub) redirect('/login');
+
+    const userId = data.claims.sub;
     const userEmail = typeof data.claims.email === 'string' ? data.claims.email : '';
+
     const { data: profile } = await supabase
         .from('profiles')
         .select('display_name,username,avatar_path')
-        .eq('id', data.claims.sub)
+        .eq('id', userId)
         .maybeSingle();
-    const { data: subscription } = await supabase
-        .from('subscriptions')
-        .select('status,current_period_end')
-        .eq('user_id', data.claims.sub)
-        .maybeSingle();
-    const isPro = isEntitled(subscription);
+
+    // 1. Check if the user plan is cached in the browser cookie (safe to read)
+    let userPlan = cookieStore.get('cliprame_user_plan')?.value;
+
+    // 2. If not cached, fetch it from Supabase
+    if (!userPlan) {
+        const { data: subData } = await supabase
+            .from('subscriptions')
+            .select('status,current_period_end,plan_name')
+            .eq('user_id', userId)
+            .maybeSingle();
+
+        userPlan = subData?.plan_name ?? 'Free';
+    }
+
+    const isPro = userPlan !== 'Free' && userPlan !== 'free';
+
     const userMetadata = data.claims.user_metadata as Record<string, unknown> | undefined;
     const metadataDisplayName = typeof userMetadata?.display_name === 'string' ? userMetadata.display_name : '';
     const initialDisplayName = typeof profile?.display_name === 'string' && profile.display_name.trim()
         ? profile.display_name
         : metadataDisplayName;
+
     const initialAvatarUrl = typeof profile?.avatar_path === 'string'
         ? supabase.storage.from('profile-avatars').getPublicUrl(profile.avatar_path).data.publicUrl
         : '';
-    return <CreatorStudioDashboard userEmail={userEmail} initialDisplayName={initialDisplayName} initialUsername={profile?.username ?? ''} initialAvatarUrl={initialAvatarUrl} profilePersistenceEnabled isPro={isPro} />;
+
+    return (
+        <CreatorStudioDashboard
+            userEmail={userEmail}
+            initialDisplayName={initialDisplayName}
+            initialUsername={profile?.username ?? ''}
+            initialAvatarUrl={initialAvatarUrl}
+            profilePersistenceEnabled
+            isPro={isPro}
+            userPlan={userPlan}
+        />
+    );
 }

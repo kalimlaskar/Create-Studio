@@ -1,28 +1,47 @@
-import { hmacMatches } from '@/lib/billing/razorpay';
-import { getCurrentUser } from '@/lib/billing/subscription';
-import { createSupabaseAdminClient } from '@/lib/supabase/admin';
+// app/api/billing/verify/route.ts
+// Confirms the payment popup result really came from Razorpay. The plan itself is only
+// switched on by the webhook, never by this browser call.
+import { getRequestUserId } from '@/lib/plans/server';
+import { billingDb, hmacHex, safeEqualHex } from '@/lib/billing/razorpay';
 
-// Instant unlock after checkout. The signed webhook remains the source of truth for renewals and cancellations.
+const fail = (error: string, status: number) => Response.json({ error }, { status });
+
 export async function POST(request: Request) {
-    const user = await getCurrentUser();
-    const admin = createSupabaseAdminClient();
-    if (!user || !admin) return Response.json({ error: 'Not authorized.' }, { status: 401 });
+    const userId = await getRequestUserId();
+    if (!userId) return fail('Sign in again.', 401);
 
-    const body = await request.json().catch(() => null);
+    const secret = process.env.RAZORPAY_KEY_SECRET;
+    if (!secret) return fail('Payments are not configured.', 503);
+
+    const body = await request.json().catch(() => null) as {
+        razorpay_payment_id?: unknown;
+        razorpay_subscription_id?: unknown;
+        razorpay_signature?: unknown;
+    } | null;
     const paymentId = typeof body?.razorpay_payment_id === 'string' ? body.razorpay_payment_id : '';
     const subscriptionId = typeof body?.razorpay_subscription_id === 'string' ? body.razorpay_subscription_id : '';
     const signature = typeof body?.razorpay_signature === 'string' ? body.razorpay_signature : '';
-    if (!hmacMatches(`${paymentId}|${subscriptionId}`, signature, process.env.RAZORPAY_KEY_SECRET)) {
-        return Response.json({ error: 'Payment verification failed.' }, { status: 400 });
+    if (!paymentId || !subscriptionId || !signature) return fail('Missing payment details.', 400);
+
+    const db = billingDb();
+    const { data: row } = await db
+        .from('subscriptions')
+        .select('razorpay_subscription_id, status')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+    // Use the subscription ID we stored, not the one the browser sent.
+    if (!row?.razorpay_subscription_id || row.razorpay_subscription_id !== subscriptionId) {
+        return fail('That payment does not match your subscription.', 400);
     }
 
-    const { data: row } = await admin.from('subscriptions').select('razorpay_subscription_id,status').eq('user_id', user.id).maybeSingle();
-    if (!row || row.razorpay_subscription_id !== subscriptionId) return Response.json({ error: 'Subscription mismatch.' }, { status: 400 });
+    const expected = hmacHex(secret, `${paymentId}|${row.razorpay_subscription_id}`);
+    if (!safeEqualHex(expected, signature)) return fail('Payment could not be verified.', 400);
 
     if (row.status === 'created') {
-        // Provisional 3-day window; the webhook replaces it with the real billing period.
-        const provisionalEnd = new Date(Date.now() + 3 * 86_400_000).toISOString();
-        await admin.from('subscriptions').update({ status: 'pending', current_period_end: provisionalEnd, updated_at: new Date().toISOString() }).eq('user_id', user.id);
+        await db.from('subscriptions')
+            .update({ status: 'authenticated', updated_at: new Date().toISOString() })
+            .eq('user_id', userId);
     }
     return Response.json({ ok: true });
 }
