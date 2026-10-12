@@ -53,7 +53,7 @@ export function AuthForm({ mode, next = '/studio', setup = false, demoMode = fal
                 </Link>
                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-violet-300">{isSignup ? 'Create your free workspace' : isOtpStep ? 'Verify your email' : 'Welcome back'}</p>
                 <h1 className={`mt-2 font-bold tracking-tight text-white ${embedded ? 'text-2xl sm:text-[1.7rem]' : 'text-3xl'}`}>{isSignup ? 'Create your account.' : isOtpStep ? 'Check your inbox.' : 'Sign in to Cliprame.'}</h1>
-                <p className="mt-2 text-sm leading-relaxed text-white/55">{isSignup ? 'Start creating classroom lessons and social-ready reels.' : isOtpStep ? 'Enter the 6-digit code we emailed you to continue.' : 'Use a secure email code or sign in with your password.'}</p>
+                <p className="mt-2 text-sm leading-relaxed text-white/55">{isSignup ? 'Start creating classroom lessons and social-ready reels.' : isOtpStep ? 'Enter the 8-digit code we emailed you to continue.' : 'Use a secure email code or sign in with your password.'}</p>
             </div>
 
             {setup && !authUnavailable && <div role="status" className={`mb-4 rounded-xl border p-3 text-xs leading-relaxed ${demoMode ? 'border-violet-400/25 bg-violet-400/10 text-violet-100' : 'border-amber-500/30 bg-amber-500/10 text-amber-100'}`}>
@@ -108,7 +108,7 @@ export function AuthForm({ mode, next = '/studio', setup = false, demoMode = fal
                 <form action={verifyOtpAction} className="space-y-4">
                     <input type="hidden" name="next" value={next} />
                     <input type="hidden" name="email" value={otpRequestState.email ?? ''} />
-                    <label className={labelCls}>6-digit code<input name="token" type="text" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} required placeholder="000000" className={`${inputCls} text-center font-mono text-lg tracking-[0.35em]`} /></label>
+                    <label className={labelCls}>8-digit code<input name="token" type="text" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{8}" maxLength={8} required placeholder="00000000" className={`${inputCls} text-center font-mono text-lg tracking-[0.35em]`} /></label>
                     {otpVerifyState.error && <p role="alert" className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-200">{otpVerifyState.error}</p>}
                     <button type="submit" disabled={otpVerifyPending} className={primaryBtn}>
                         {otpVerifyPending ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
