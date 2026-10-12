@@ -52,7 +52,9 @@ export default async function StudioPage() {
         userPlan = subData?.plan_name ?? 'Free';
     }
 
-    const isPro = userPlan !== 'Free' && userPlan !== 'free';
+    // Case-insensitive check: anything other than "free" or empty makes them Pro/Studio
+    const normalizedPlan = (userPlan ?? 'Free').toLowerCase();
+    const isPro = normalizedPlan !== 'free' && normalizedPlan !== '';
 
     const userMetadata = data.claims.user_metadata as Record<string, unknown> | undefined;
     const metadataDisplayName = typeof userMetadata?.display_name === 'string' ? userMetadata.display_name : '';
