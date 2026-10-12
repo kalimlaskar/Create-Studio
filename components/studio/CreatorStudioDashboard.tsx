@@ -13,7 +13,7 @@ import { EditorShell } from '@/components/editor/EditorShell';
 import { useStudioSession } from '@/hooks/useStudioSession';
 import { deleteEditorDraft, DraftSummary, LoadedDraft, listEditorDrafts, loadEditorDraft } from '@/components/editor/drafts';
 import { PhotoReelStudio } from '@/components/studio/PhotoReelStudio';
-import { changePasswordAction, checkUsernameAvailabilityAction, signOutAction, updateProfileAction, updateProfileAvatarAction } from '@/app/auth/actions';
+import { changePasswordAction, checkUsernameAvailabilityAction, deleteAccountAction, signOutAction, updateProfileAction, updateProfileAvatarAction } from '@/app/auth/actions';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 import { useDocumentPip } from './useDocumentPip';
 import { FloatingStudioPip } from './FloatingStudioPip';
@@ -66,6 +66,12 @@ function ProfileMenu({ creatorName, username, avatarUrl, userEmail, profilePersi
     const [confirmPassword, setConfirmPassword] = useState('');
     const [passwordState, setPasswordState] = useState('');
     const [isChangingPassword, setIsChangingPassword] = useState(false);
+
+    // Modern delete account states
+    const [showDeleteSection, setShowDeleteSection] = useState(false);
+    const [confirmInput, setConfirmInput] = useState('');
+    const [isDeleting, setIsDeleting] = useState(false);
+    const [deleteError, setDeleteError] = useState('');
 
     const checkUsername = async () => {
         setUsernameCheck('Checking username…');
@@ -164,6 +170,25 @@ function ProfileMenu({ creatorName, username, avatarUrl, userEmail, profilePersi
         }
     };
 
+    const handleDeleteAccount = async (event: React.FormEvent) => {
+        event.preventDefault();
+        if (confirmInput !== 'delete') return;
+
+        setIsDeleting(true);
+        setDeleteError('');
+        try {
+            const result = await deleteAccountAction();
+            if (result?.error) {
+                setDeleteError(result.error);
+                setIsDeleting(false);
+            }
+        } catch (error) {
+            console.error('Account deletion failed:', error);
+            setDeleteError('Could not delete account. Please try again.');
+            setIsDeleting(false);
+        }
+    };
+
     return (
         <details className="relative">
             <summary className={`flex max-w-[min(15rem,52vw)] cursor-pointer list-none items-center gap-2 rounded-full border border-[#14121F]/15 bg-white/80 px-3.5 py-2 text-xs font-semibold text-[#14121F] shadow-sm backdrop-blur transition hover:bg-white ${focus}`}>
@@ -208,11 +233,69 @@ function ProfileMenu({ creatorName, username, avatarUrl, userEmail, profilePersi
                 <form action={signOutAction} className="mt-4 border-t border-[#14121F]/10 pt-4">
                     <button className="w-full rounded-full border border-[#14121F]/15 px-4 py-2.5 text-left text-xs font-semibold text-[#14121F] transition hover:bg-red-50 hover:text-red-600 hover:border-red-200">Sign out</button>
                 </form>
+
+                {profilePersistenceEnabled && (
+                    <div className="mt-4 border-t border-neutral-200/60 pt-4">
+                        {!showDeleteSection ? (
+                            <button
+                                type="button"
+                                onClick={() => setShowDeleteSection(true)}
+                                className="group flex w-full items-center justify-between rounded-2xl border border-red-500/20 bg-red-50/[0.4] px-4 py-3 text-left text-xs font-semibold text-red-600 transition hover:bg-red-50 hover:border-red-500/40"
+                            >
+                                <span>Delete account</span>
+                            </button>
+                        ) : (
+                            <form onSubmit={(e) => void handleDeleteAccount(e)} className="relative overflow-hidden rounded-2xl border border-red-500/30 bg-gradient-to-b from-red-50/90 to-red-100/40 p-4 text-left shadow-inner space-y-3">
+                                <div className="flex items-center justify-between text-red-700">
+                                    <div className="flex items-center gap-2">
+                                        <div className="flex h-6 w-6 items-center justify-center rounded-full bg-red-600 text-white shadow-sm">
+                                            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth="2.5" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+                                            </svg>
+                                        </div>
+                                        <p className="text-xs font-bold tracking-wide text-red-950">Are you absolutely sure?</p>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => { setShowDeleteSection(false); setConfirmInput(''); setDeleteError(''); }}
+                                        className="text-red-400 hover:text-red-700 transition p-1"
+                                        title="Close"
+                                    >
+                                        <X className="h-4 w-4" />
+                                    </button>
+                                </div>
+
+                                <p className="text-[11px] leading-relaxed text-red-900/80">
+                                    This action cannot be undone. All your project drafts, subscription details, and profile data will be permanently wiped. Type <span className="rounded bg-red-200/70 px-1 py-0.5 font-mono font-bold text-red-950">delete</span> below to confirm.
+                                </p>
+
+                                <input
+                                    type="text"
+                                    value={confirmInput}
+                                    onChange={(e) => setConfirmInput(e.target.value)}
+                                    placeholder="Type 'delete' to confirm"
+                                    autoFocus
+                                    className="w-full rounded-xl border border-red-300/80 bg-white px-3.5 py-2.5 text-xs font-mono text-red-950 shadow-sm outline-none transition focus:border-red-600 focus:ring-2 focus:ring-red-600/20 placeholder:text-red-300"
+                                />
+
+                                <div className="flex items-center gap-2 pt-1">
+                                    <button
+                                        type="submit"
+                                        disabled={confirmInput !== 'delete' || isDeleting}
+                                        className="flex-1 rounded-xl bg-red-600 px-3.5 py-2.5 text-center text-xs font-semibold text-white shadow-md shadow-red-600/20 transition hover:bg-red-500 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
+                                    >
+                                        {isDeleting ? 'Deleting account…' : 'I understand, delete account'}
+                                    </button>
+                                </div>
+                                {deleteError && <p role="alert" className="rounded-lg bg-red-600/10 px-3 py-2 text-xs font-medium text-red-600 border border-red-600/20">{deleteError}</p>}
+                            </form>
+                        )}
+                    </div>
+                )}
             </div>
         </details>
     );
 }
-
 export function CreatorStudioDashboard({
     userEmail,
     initialDisplayName = '',
@@ -232,7 +315,6 @@ export function CreatorStudioDashboard({
 }) {
     const [userPlan, setUserPlan] = useState(initialUserPlan);
 
-    // Fetch live plan directly from the database table on mount
     useEffect(() => {
         let isMounted = true;
         const fetchPlanFromDB = async () => {

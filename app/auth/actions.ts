@@ -3,6 +3,7 @@
 import { headers } from 'next/headers';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
+import { createServerClient } from '@supabase/ssr';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createDemoSessionToken, DEMO_SESSION_COOKIE, DEMO_SESSION_MAX_AGE, isDemoAuthEnabled, verifyDemoCredentials } from '@/lib/auth/demo';
 
@@ -212,6 +213,30 @@ export async function changePasswordAction(password: string, confirmPassword: st
     const { error } = await supabase.auth.updateUser({ password });
     if (error) return { error: 'Could not update your password. Please try again.' };
     return {};
+}
+
+export async function deleteAccountAction(): Promise<{ error?: string }> {
+    const supabase = await createSupabaseServerClient();
+    if (!supabase) return { error: 'Supabase Auth is not configured.' };
+
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) return { error: 'Sign in again to delete your account.' };
+
+    const supabaseAdmin = process.env.SUPABASE_SERVICE_ROLE_KEY
+        ? createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY, { cookies: { getAll: () => [], setAll: () => { } } })
+        : null;
+
+    if (!supabaseAdmin) {
+        return { error: 'Server configuration error: Service role key required for account deletion.' };
+    }
+
+    const { error: deleteError } = await supabaseAdmin.auth.admin.deleteUser(user.id);
+    if (deleteError) return { error: 'Could not delete your account. Please try again.' };
+
+    const cookieStore = await cookies();
+    cookieStore.delete(DEMO_SESSION_COOKIE);
+    await supabase.auth.signOut();
+    redirect('/');
 }
 
 export async function signOutAction() {
