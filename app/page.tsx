@@ -209,7 +209,7 @@ export default async function HomePage() {
             <a href="/demo" className={navLink}>Demos</a>
             <a href="#edit" className={navLink}>Edit by text</a>
             <a href="#reels" className={navLink}>Reels</a>
-            <a href="#features" className={navLink}>Features</a>
+            <a href="/features" className={navLink}>Features</a>
             <Link href="/pricing" className={navLink}>Pricing</Link>
           </nav>
 
@@ -251,7 +251,7 @@ export default async function HomePage() {
           <a href="#demos" className={mobileNavLink}>Demos</a>
           <a href="#edit" className={mobileNavLink}>Edit by text</a>
           <a href="#reels" className={mobileNavLink}>Reels</a>
-          <a href="#features" className={mobileNavLink}>Features</a>
+          <a href="/features" className={mobileNavLink}>Features</a>
           <Link href="/pricing" className={mobileNavLink}>Pricing</Link>
         </nav>
       </header>

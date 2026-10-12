@@ -30,6 +30,7 @@ function Wordmark() {
 }
 
 const navLink = `rounded-full px-4 py-2 text-sm font-medium text-[#14121F]/65 transition-colors hover:bg-[#14121F]/[0.06] hover:text-[#14121F] ${focus}`;
+const mobileNavLink = 'shrink-0 rounded-full bg-white/70 px-3.5 py-1.5 text-xs font-medium text-[#14121F]/70 backdrop-blur transition-colors hover:text-[#14121F]';
 const card = 'rounded-[2rem] border border-[#14121F]/10 bg-white shadow-[0_1px_0_rgba(20,18,31,0.04),0_24px_48px_-28px_rgba(20,18,31,0.28)]';
 const gradientText = 'bg-gradient-to-r from-[#6A4CFF] via-[#9a4cff] to-[#FF3D81] bg-clip-text text-transparent';
 
@@ -104,7 +105,8 @@ export default function DemoShowcaseClient({ isLoggedIn, userPlan, displayName }
                     <Wordmark />
                     <nav aria-label="Main navigation" className="hidden items-center gap-1 md:flex">
                         <Link href="/" className={navLink}>Home</Link>
-                        <Link href="/demo" className="rounded-full bg-[#14121F]/[0.08] px-4 py-2 text-sm font-semibold text-[#14121F]">Demos</Link>
+                        <span aria-current="page" className="rounded-full bg-[#14121F]/[0.08] px-4 py-2 text-sm font-semibold text-[#14121F]">Demos</span>
+                        <Link href="/features" className={navLink}>Features</Link>
                         <Link href="/pricing" className={navLink}>Pricing</Link>
                     </nav>
 
@@ -142,6 +144,12 @@ export default function DemoShowcaseClient({ isLoggedIn, userPlan, displayName }
                         )}
                     </div>
                 </div>
+                <nav aria-label="Mobile main navigation" className="mx-auto mt-2 flex max-w-5xl gap-1.5 overflow-x-auto px-1 [scrollbar-width:none] md:hidden [&::-webkit-scrollbar]:hidden">
+                    <Link href="/" className={mobileNavLink}>Home</Link>
+                    <span className="shrink-0 rounded-full bg-[#14121F] px-3.5 py-1.5 text-xs font-medium text-white">Demos</span>
+                    <Link href="/features" className={mobileNavLink}>Features</Link>
+                    <Link href="/pricing" className={mobileNavLink}>Pricing</Link>
+                </nav>
             </header>
 
             {/* Hero */}

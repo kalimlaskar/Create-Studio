@@ -88,9 +88,9 @@ export default function PricingPage() {
                     <Wordmark />
                     <nav aria-label="Main navigation" className="hidden items-center gap-1 md:flex">
                         <Link href="/" className={navLink}>Home</Link>
-                        <a href="#plans" className={navLink}>Plans</a>
-                        <a href="#included" className={navLink}>What&apos;s included</a>
-                        <a href="#faq" className={navLink}>FAQ</a>
+                        <Link href="/demo" className={navLink}>Demos</Link>
+                        <Link href="/features" className={navLink}>Features</Link>
+                        <span aria-current="page" className="rounded-full bg-[#14121F]/[0.08] px-4 py-2 text-sm font-semibold text-[#14121F]">Pricing</span>
                     </nav>
                     <div className="flex shrink-0 items-center gap-1">
                         <Link href="/login" className={`rounded-full px-3 py-2 text-sm font-medium text-[#14121F]/75 transition-colors hover:text-[#14121F] sm:px-4 ${focus}`}>Log in</Link>
@@ -101,9 +101,9 @@ export default function PricingPage() {
                 </div>
                 <nav aria-label="Mobile main navigation" className="mx-auto mt-2 flex max-w-5xl gap-1.5 overflow-x-auto px-1 [scrollbar-width:none] md:hidden [&::-webkit-scrollbar]:hidden">
                     <Link href="/" className={mobileNavLink}>Home</Link>
-                    <a href="#plans" className={mobileNavLink}>Plans</a>
-                    <a href="#included" className={mobileNavLink}>What&apos;s included</a>
-                    <a href="#faq" className={mobileNavLink}>FAQ</a>
+                    <Link href="/demo" className={mobileNavLink}>Demos</Link>
+                    <Link href="/features" className={mobileNavLink}>Features</Link>
+                    <span className="shrink-0 rounded-full bg-[#14121F] px-3.5 py-1.5 text-xs font-medium text-white">Pricing</span>
                 </nav>
             </header>
 
