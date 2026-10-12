@@ -119,13 +119,17 @@ export async function signUpAction(_state: AuthFormState, formData: FormData): P
     const requestHeaders = await headers();
     const origin = process.env.NEXT_PUBLIC_SITE_URL ?? requestHeaders.get('origin') ?? 'http://localhost:3000';
 
-    const { error } = await supabase.auth.signInWithOtp({
+    const { error } = await supabase.auth.signUp({
         email,
+        password,
         options: {
-            shouldCreateUser: false,
+            data: {
+                display_name: name,
+            },
             emailRedirectTo: `${origin}/auth/callback?next=/studio`,
         },
     });
+
     if (error) return { error: getAuthErrorMessage(error, 'We could not create your account. Check the details and try again.') };
     return { message: 'Check your inbox for a confirmation link. After confirming your email, you can sign in.' };
 }
