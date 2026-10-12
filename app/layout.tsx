@@ -14,10 +14,34 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Cliprame | Make lessons and reels",
-  description: "Create classroom lessons, narrated presentations, and social-ready reels with a simple browser-based video studio.",
+  title: "Cliprame · Browser Video Studio & Reels Creator",
+  description: "Record camera videos with a built-in teleprompter, add word-by-word animated captions, and edit social-ready reels right in your browser.",
   icons: { icon: "/cliprame-icon.svg", apple: "/apple-touch-icon.png" },
   appleWebApp: { capable: true, title: "Cliprame", statusBarStyle: "black-translucent" },
+
+  openGraph: {
+    title: "Cliprame · Browser Video Studio & Reels Creator",
+    description: "Record camera videos with a built-in teleprompter, add word-by-word animated captions, and edit social-ready reels right in your browser.",
+    url: "https://www.cliprame.com",
+    siteName: "Cliprame",
+    images: [
+      {
+        url: "/cliprame-og-image.png",
+        width: 1200,
+        height: 630,
+        alt: "Cliprame Studio Preview",
+      },
+    ],
+    locale: "en_US",
+    type: "website",
+  },
+
+  twitter: {
+    card: "summary_large_image",
+    title: "Cliprame · Browser Video Studio & Reels Creator",
+    description: "Record camera videos with a built-in teleprompter, add word-by-word animated captions, and edit social-ready reels right in your browser.",
+    images: ["/cliprame-og-image.png"],
+  },
 };
 
 export const viewport: Viewport = {
