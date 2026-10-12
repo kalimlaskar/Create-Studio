@@ -206,7 +206,7 @@ export default async function HomePage() {
         <div className="mx-auto flex h-14 max-w-5xl items-center justify-between gap-3 rounded-full border border-white/70 bg-white/70 pl-4 pr-2 shadow-[0_10px_30px_-10px_rgba(20,18,31,0.18)] backdrop-blur-xl sm:h-16 sm:pl-5">
           <Wordmark />
           <nav aria-label="Main navigation" className="hidden items-center gap-1 md:flex">
-            <a href="#demos" className={navLink}>Demos</a>
+            <a href="/demo" className={navLink}>Demos</a>
             <a href="#edit" className={navLink}>Edit by text</a>
             <a href="#reels" className={navLink}>Reels</a>
             <a href="#features" className={navLink}>Features</a>
