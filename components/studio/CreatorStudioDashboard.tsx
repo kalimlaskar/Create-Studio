@@ -17,6 +17,7 @@ import { changePasswordAction, checkUsernameAvailabilityAction, deleteAccountAct
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 import { useDocumentPip } from './useDocumentPip';
 import { FloatingStudioPip } from './FloatingStudioPip';
+import { ScreenShareControls } from '@/components/studio/Screensharecontrols';
 
 const display = Bricolage_Grotesque({ subsets: ['latin'], variable: '--font-display', display: 'swap' });
 const body = Instrument_Sans({ subsets: ['latin'], variable: '--font-body', display: 'swap' });
@@ -768,29 +769,25 @@ export function CreatorStudioDashboard({
                 {cameraError && <div className="absolute left-1/2 top-4 z-40 -translate-x-1/2 rounded-lg bg-red-600/90 px-4 py-2 text-sm text-white shadow-lg">{cameraError}</div>}
                 <VideoCanvas videoRef={videoRef} canvasStreamRef={canvasStreamRef} settings={settings} onAvatarMouthPositionChange={(cameraAvatarMouthX, cameraAvatarMouthY) => updateSettings({ cameraAvatarMouthX, cameraAvatarMouthY })} microphoneLevelRef={microphoneLevelRef} isRecording={isRecording} isRecordingPaused={isRecordingPaused} countdown={countdown} screenShareStream={screenShareStream} onScreenFrame={reportScreenFrame} isProUser />
                 {isFinalizingScreenRecording && <div role="status" aria-live="polite" className="absolute left-1/2 top-1/2 z-40 flex -translate-x-1/2 -translate-y-1/2 items-center gap-3 rounded-2xl border border-indigo-300/20 bg-neutral-950/95 px-5 py-4 text-sm font-medium text-white shadow-2xl backdrop-blur"><LoaderCircle className="h-5 w-5 animate-spin text-indigo-300" />Preparing your screen recording and camera card…</div>}
-                <div className="absolute left-4 top-4 z-30 hidden max-w-[min(15rem,calc(100%-2rem))] flex-col items-start gap-2 md:left-4 md:top-3 md:flex">
-                    {screenShareStream && <p className="max-w-sm rounded-lg border border-cyan-300/20 bg-neutral-950/90 px-3 py-2 text-[11px] leading-relaxed text-cyan-100">Keep Cliprame open in this tab. Scroll the page in another tab or window; if sharing a tab, switch it from Chrome’s sharing controls.</p>}
-                    <button type="button" onClick={() => screenShareStream ? (isRecording ? stopRecording() : stopScreenShare()) : void startScreenShare()} disabled={countdown !== null} aria-pressed={Boolean(screenShareStream)} className={`pointer-events-auto flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold shadow-lg backdrop-blur-md transition disabled:cursor-not-allowed disabled:opacity-50 ${screenShareStream ? 'border-emerald-400/35 bg-emerald-950/80 text-emerald-100 hover:bg-emerald-900/90' : 'border-white/15 bg-neutral-950/85 text-neutral-100 hover:bg-neutral-800/95'}`}>
-                        <MonitorUp className="h-4 w-4" />{screenShareStream ? 'Stop screen share' : 'Share screen'}
-                        {screenShareStream && <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" />}
-                    </button>
-                    <label className="pointer-events-auto flex cursor-pointer items-center gap-2 rounded-lg border border-white/10 bg-neutral-950/85 px-3 py-2 text-[11px] font-medium text-neutral-200 shadow-lg backdrop-blur-md">
-                        <input type="checkbox" checked={floatingEnabled} onChange={(event) => { setFloatingEnabled(event.target.checked); if (!event.target.checked) closePip(); }} className="h-3.5 w-3.5 accent-indigo-500" />
-                        Floating camera &amp; teleprompter
-                    </label>
-                    <label className="pointer-events-auto flex cursor-pointer items-center gap-2 rounded-lg border border-white/10 bg-neutral-950/85 px-3 py-2 text-[11px] font-medium text-neutral-200 shadow-lg backdrop-blur-md">
-                        <input type="checkbox" checked={settings.screenShareShowCamera} onChange={(event) => updateSettings({ screenShareShowCamera: event.target.checked })} className="h-3.5 w-3.5 accent-indigo-500" />
-                        Show my camera in the video
-                    </label>
-                    {screenShareStream && floatingEnabled && screenShareSurface !== 'Entire screen' && pip.isSupported && !pip.isOpen && (
-                        <button type="button" onClick={() => void pip.open()} className="pointer-events-auto rounded-xl border border-white/15 bg-neutral-950/85 px-3 py-2 text-xs font-semibold text-neutral-100 shadow-lg backdrop-blur-md hover:bg-neutral-800/95">
-                            Show floating camera
-                        </button>
-                    )}
-                    {pip.error && <p role="alert" className="rounded-lg border border-red-500/30 bg-red-950/90 px-3 py-2 text-xs leading-relaxed text-red-200">{pip.error}</p>}
-                    {screenShareStream ? <div className="max-w-sm space-y-2 rounded-lg border border-white/10 bg-neutral-950/80 px-3 py-2 text-[11px] leading-relaxed text-neutral-300"><p>Chrome source: <strong className="text-emerald-200">{screenShareSurface ?? 'checking…'}</strong>{isScreenTrackMuted && <span className="font-semibold text-amber-200"> · paused</span>} · screen changes detected: <strong className="text-white">{screenFramesReceived}</strong></p><p>Switch to the page you want to record for a few seconds. This count should increase when the captured picture changes. If it stays at 1, Chrome isn’t sending the new page in the selected source. The final video uses the direct screen recording; the camera card is composed afterward.</p>{studioWasBackgrounded && <p role="status" className="rounded-md border border-emerald-300/20 bg-emerald-300/10 px-2 py-1.5 text-emerald-100">Studio is in another tab. The direct screen recording continues.</p>}{screenShareSurface === 'Entire screen' && floatingEnabled && <p role="status" className="rounded-md border border-amber-300/30 bg-amber-300/10 px-2 py-1.5 text-amber-100">Entire screen records everything visible, so the floating camera and teleprompter were closed. Choose Window instead to keep them while recording.</p>}</div> : <p className="absolute left-full top-0 ml-3 hidden w-[24rem] text-[11px] leading-snug text-neutral-500 xl:block">In Chrome’s picker, open the <strong className="text-neutral-200">Window</strong> tab and choose the Chrome window you’ll browse in. Every tab you open in that window is recorded, and your floating camera and teleprompter stay out of the video. Avoid <strong className="text-neutral-200">Chrome tab</strong> (one tab only) and <strong className="text-neutral-200">Entire screen</strong> (records the floating window).</p>}
-                    {screenShareError && <p role="alert" className="rounded-lg border border-red-500/30 bg-red-950/90 px-3 py-2 text-xs leading-relaxed text-red-200">{screenShareError}</p>}
-                </div>
+                <ScreenShareControls
+                    isSharing={Boolean(screenShareStream)}
+                    isRecording={isRecording}
+                    countdown={countdown}
+                    surface={screenShareSurface}
+                    isTrackPaused={isScreenTrackMuted}
+                    framesReceived={screenFramesReceived}
+                    wasBackgrounded={studioWasBackgrounded}
+                    floatingEnabled={floatingEnabled}
+                    pipSupported={pip.isSupported}
+                    pipOpen={pip.isOpen}
+                    pipError={pip.error}
+                    shareError={screenShareError}
+                    showCamera={settings.screenShareShowCamera}
+                    onToggleShare={() => (screenShareStream ? (isRecording ? stopRecording() : stopScreenShare()) : void startScreenShare())}
+                    onFloatingChange={(enabled) => { setFloatingEnabled(enabled); if (!enabled) closePip(); }}
+                    onShowCameraChange={(show) => updateSettings({ screenShareShowCamera: show })}
+                    onOpenPip={() => void pip.open()}
+                />
                 <button type="button" onClick={() => setShowSettings(true)} aria-label="Open studio settings" className="absolute bottom-[calc(max(1.25rem,env(safe-area-inset-bottom))+3.75rem)] right-4 z-30 flex h-12 w-12 items-center justify-center rounded-full border border-white/15 bg-neutral-950/80 text-neutral-100 shadow-lg backdrop-blur-md md:hidden"><SlidersHorizontal className="h-5 w-5" /></button>
                 <button type="button" onClick={() => updateSettings({ cameraFacing: settings.cameraFacing === 'user' ? 'environment' : 'user' })} disabled={countdown !== null || (isRecording && Boolean(screenShareStream))} aria-label={settings.cameraFacing === 'user' ? 'Switch to back camera' : 'Switch to selfie camera'} title="Flip camera" className="absolute bottom-[max(1.25rem,env(safe-area-inset-bottom))] right-4 z-30 flex h-12 w-12 items-center justify-center rounded-full border border-white/15 bg-neutral-950/80 text-neutral-100 shadow-lg backdrop-blur-md transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-40 md:bottom-6"><SwitchCamera className="h-5 w-5" /></button>
                 <div className="pointer-events-none absolute bottom-[max(1.25rem,env(safe-area-inset-bottom))] left-1/2 z-30 -translate-x-1/2 md:bottom-6">
