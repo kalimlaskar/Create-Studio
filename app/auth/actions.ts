@@ -90,7 +90,7 @@ export async function verifySignInOtpAction(_state: AuthFormState, formData: For
     const token = String(formData.get('token') ?? '').trim();
     const next = getSafeNext(formData.get('next'));
     if (!email || !/^\S+@\S+\.\S+$/.test(email)) return { error: 'Enter a valid email address.' };
-    if (!/^\d{6}$/.test(token)) return { error: 'Enter the 6-digit code from your email.' };
+    if (!/^\d{8}$/.test(token)) return { error: 'Enter the 8-digit code from your email.' };
 
     const supabase = await createSupabaseServerClient();
     if (!supabase) return { error: 'Email code sign-in is unavailable. Configure Supabase to continue.' };
