@@ -41,7 +41,12 @@ const DEFAULT_SETTINGS: StudioSettings = {
     backgroundImageUrl: null,
     inputMode: 'camera',
     scriptLanguage: 'en',
+    airZoomEnabled: false,
+    airZoomScale: 3,
+    airZoomX: 0,
+    airZoomY: 0,
     scriptText: 'Type or paste your script here...\n\nWelcome to your new video studio. Keep your eyes on the camera lens while reading smoothly.'
+
 };
 
 export const FREE_RECORDING_LIMIT_SECONDS = 300;
