@@ -13,8 +13,8 @@ import {
     BORDER_EFFECTS, BorderEffect, DEFAULT_TRACKS, createDefaultTrackFile,
     drawBorderEffect, exitDocumentFullscreen, requestElementFullscreen,
 } from './photoReelExtras';
-import { FX_LIST, FX_PRESETS, FxId, applyCameraFx, cameraCss, drawOverlayFx, drawRgbSplit } from './photoReelFx';
 import { generateSpeechAudio } from './textToSpeech';
+import { FX_LIST, FX_PRESETS, FxId, applyCameraFx, buildOverlayConfig, cameraCss, DEFAULT_RIPPLE_COLOR, drawOverlayFx, drawRgbSplit } from './photoReelFx';
 
 /* -------------------------------------------------------------------------- */
 /* Types & constants                                                          */
@@ -56,8 +56,17 @@ interface ReelImage {
     scale?: number;                        // image zoom (0.5 – 2.5)
     motion: 'none' | 'zoom-in' | 'zoom-out' | 'pan-left' | 'pan-right' | DepthMotion;
     transition: 'cut' | 'fade' | 'slide' | 'zoom';
-    cursorTargetX?: number; // 0 to 1 (left to right)
-    cursorTargetY?: number; // 0 to 1 (top to bottom)
+
+    // Interactive Effect Targets & Configurations
+    cursorTargetX?: number;                // 0 to 1 (left to right) for cursor click effect
+    cursorTargetY?: number;                // 0 to 1 (top to bottom) for cursor click effect
+    cursorColor?: string;                  // Specific color for the cursor click effect
+    cursorScale?: number;                  // Independent size scale multiplier for the cursor click effect
+    rippleTargetX?: number;                // 0 to 1 (left to right) for ripple effect center
+    rippleTargetY?: number;                // 0 to 1 (top to bottom) for ripple effect center
+    rippleScale?: number;                  // Size scale multiplier for the ripple wave
+    rippleColor?: string;                  // Specific color (hex) for the ripple wave
+    rippleSpeed?: number;                  // Animation speed multiplier for the ripple
 }
 
 const FONT_FAMILIES: Record<FontKey, string> = {
@@ -74,9 +83,6 @@ const GRADIENTS: Array<{ id: GradientPreset; label: string; colors: [string, str
     { id: 'ocean', label: 'Ocean', colors: ['8,145,178', '30,58,138'] },
     { id: 'warm', label: 'Warm', colors: ['234,179,8', '220,38,38'] },
 ];
-
-
-
 
 const TEXT_BASE_Y: Record<TextPosition, number> = { top: 15, center: 50, bottom: 82 }; // % of frame height
 
@@ -137,10 +143,7 @@ function drawSoftEdged(ctx: CanvasRenderingContext2D, source: CanvasImageSource,
  * Shared by the live preview and the export. `seconds` is the time inside the current clip.
  */
 function drawProductEffects(ctx: CanvasRenderingContext2D, clip: ReelImage, width: number, height: number, t: number, logo: { image: HTMLImageElement | null; corner: Corner; sizePct: number }, seconds = 0) {
-    const targetX = clip.cursorTargetX ?? 0.5;
-    const targetY = clip.cursorTargetY ?? 0.4;
-
-    drawOverlayFx(ctx, clip.fx, width, height, seconds, targetX, targetY);
+    drawOverlayFx(ctx, clip.fx, width, height, seconds, buildOverlayConfig(clip));
 
     const vignette = clip.vignette ?? 0;
     if (vignette > 0) {
@@ -200,7 +203,7 @@ function drawProductEffects(ctx: CanvasRenderingContext2D, clip: ReelImage, widt
 }
 
 /* -------------------------------------------------------------------------- */
-/* Product templates: pick a category, add photos, done                         */
+/* Product templates                                                          */
 /* -------------------------------------------------------------------------- */
 
 interface ProductTemplate {
@@ -208,7 +211,7 @@ interface ProductTemplate {
     label: string;
     emoji: string;
     blurb: string;
-    spec: string; // recommended upload
+    spec: string;
     aspect: PlatformAspect;
     backgroundColor: string;
     secondsPerImage: number;
@@ -217,7 +220,7 @@ interface ProductTemplate {
     brightness: number;
     saturation: number;
     transition: ReelImage['transition'];
-    motions: ReelImage['motion'][]; // cycled per photo
+    motions: ReelImage['motion'][];
     textStyle: TextOverlayStyle;
     textPosition: TextPosition;
     fontFamily: FontKey;
@@ -335,7 +338,6 @@ const getDefaultTextColor = (style: TextOverlayStyle) => (style === 'highlight' 
 
 const SPEED_PRESETS = [0.25, 0.5, 1, 1.5, 2, 3, 4];
 
-/** Returns the clip with a new speed. For videos the amount of source footage that is used stays the same, so the clip gets shorter or longer. */
 const withSpeed = (clip: ReelImage, next: number): ReelImage => {
     const speed = clamp(Math.round(next * 100) / 100, 0.25, 4);
     if (clip.type !== 'video') return { ...clip, speed };
@@ -424,7 +426,6 @@ function DepthPreview({ clip, depth, progress, aspectRatio, filter, backgroundCo
     );
 }
 
-/** Live preview of vignette, shine, badge, logo and animated border (same drawing code as the export). */
 function EffectsOverlay({ clip, progress, seconds, aspectRatio, logoImage, logoCorner, logoSize }: {
     clip: ReelImage;
     progress: number;
@@ -447,7 +448,6 @@ function EffectsOverlay({ clip, progress, seconds, aspectRatio, logoImage, logoC
     return <canvas ref={canvasRef} width={width} height={height} className="pointer-events-none absolute inset-0 h-full w-full" />;
 }
 
-/** Draggable caption shown over the preview. Uses the same % + font math as the canvas export. */
 function CaptionOverlay({ clip, onPointerDown, onPointerMove, onPointerUp }: {
     clip: ReelImage;
     onPointerDown: (event: React.PointerEvent<HTMLDivElement>) => void;
@@ -485,18 +485,45 @@ function CaptionOverlay({ clip, onPointerDown, onPointerMove, onPointerUp }: {
     );
 }
 
+function RipplePlacer({ x, y, color, label, frameRef, onChange }: {
+    x: number; y: number; color: string; label: string;
+    frameRef: React.RefObject<HTMLDivElement | null>;
+    onChange: (x: number, y: number) => void;
+}) {
+    const dragging = useRef(false);
+    const move = (event: React.PointerEvent<HTMLDivElement>) => {
+        if (!dragging.current || !frameRef.current) return;
+        const rect = frameRef.current.getBoundingClientRect();
+        if (!rect.width || !rect.height) return;
+        onChange(clamp((event.clientX - rect.left) / rect.width, 0.02, 0.98), clamp((event.clientY - rect.top) / rect.height, 0.02, 0.98));
+    };
+    const end = (event: React.PointerEvent<HTMLDivElement>) => {
+        dragging.current = false;
+        if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+    };
+    return (
+        <div
+            title={label}
+            onPointerDown={(event) => { event.stopPropagation(); event.currentTarget.setPointerCapture(event.pointerId); dragging.current = true; move(event); }}
+            onPointerMove={move}
+            onPointerUp={end}
+            onPointerCancel={end}
+            className="absolute z-20 flex h-9 w-9 -translate-x-1/2 -translate-y-1/2 cursor-grab items-center justify-center rounded-full border-2 border-dashed active:cursor-grabbing"
+            style={{ left: `${x * 100}%`, top: `${y * 100}%`, borderColor: color, background: 'rgba(255,255,255,0.25)', touchAction: 'none' }}
+        >
+            <span className="h-2 w-2 rounded-full" style={{ background: color }} />
+        </div>
+    );
+}
+
 /* -------------------------------------------------------------------------- */
 /* Main component                                                             */
 /* -------------------------------------------------------------------------- */
 
 export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
-
-    // Inside your PhotoReelStudio main component:
-    // Add these states
     const [isProUser, setIsProUser] = useState(false);
     const [showUpgradeModal, setShowUpgradeModal] = useState(false);
 
-    // Add this helper function
     const handleFeatureClick = (isFeaturePro: boolean, action: () => void) => {
         if (isFeaturePro && !isProUser) {
             setShowUpgradeModal(true);
@@ -504,7 +531,7 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
         }
         action();
     };
-    /* ---- clips & look ---- */
+
     const [images, setImages] = useState<ReelImage[]>([]);
     const [selectedImageId, setSelectedImageId] = useState<string | null>(null);
     const [aspectRatio, setAspectRatio] = useState<PlatformAspect>('9:16');
@@ -517,7 +544,6 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
     const [template, setTemplate] = useState<ReelTemplate>('custom');
     const [fxBpm, setFxBpm] = useState(120);
 
-    /* ---- audio ---- */
     const [music, setMusic] = useState<{ file: File; url: string } | null>(null);
     const [musicVolume, setMusicVolume] = useState(70);
     const [loadingTrack, setLoadingTrack] = useState<string | null>(null);
@@ -527,25 +553,21 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
     const [voiceover, setVoiceover] = useState<{ file: File; url: string } | null>(null);
     const [isGeneratingVoice, setIsGeneratingVoice] = useState(false);
 
-    /* ---- brand logo ---- */
     const [logo, setLogo] = useState<{ file: File; url: string } | null>(null);
     const [logoImage, setLogoImage] = useState<HTMLImageElement | null>(null);
     const [logoCorner, setLogoCorner] = useState<Corner>('tr');
     const [logoSize, setLogoSize] = useState(18);
 
-    /* ---- preview ---- */
     const [isPreviewPlaying, setIsPreviewPlaying] = useState(false);
     const [previewTimeMs, setPreviewTimeMs] = useState(0);
     const [isDraggingCaption, setIsDraggingCaption] = useState(false);
     const [isFullscreen, setIsFullscreen] = useState(false);
 
-    /* ---- export ---- */
     const [isExporting, setIsExporting] = useState(false);
     const [exportProgress, setExportProgress] = useState(0);
     const [exportStatus, setExportStatus] = useState<string | null>(null);
     const [completedExportUrl, setCompletedExportUrl] = useState<string | null>(null);
 
-    /* ---- drafts & errors ---- */
     const [drafts, setDrafts] = useState<PhotoReelDraftSummary[]>([]);
     const [currentDraftId, setCurrentDraftId] = useState<string | null>(null);
     const [isSavingDraft, setIsSavingDraft] = useState(false);
@@ -553,15 +575,12 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
     const [error, setError] = useState<string | null>(null);
     const [notice, setNotice] = useState<string | null>(null);
 
-    /* ---- product templates ---- */
     const [productTemplateId, setProductTemplateId] = useState<string | null>(null);
     const [showAdvanced, setShowAdvanced] = useState(false);
 
-    /* ---- depth ---- */
     const [depthStatus, setDepthStatus] = useState<Record<string, 'ready' | 'failed'>>({});
     const [depthMaps, setDepthMaps] = useState<Record<string, HTMLCanvasElement>>({});
 
-    /* ---- refs ---- */
     const stageRef = useRef<HTMLDivElement>(null);
     const frameRef = useRef<HTMLDivElement>(null);
     const imageInputRef = useRef<HTMLInputElement>(null);
@@ -585,7 +604,6 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
     const logoInputRef = useRef<HTMLInputElement>(null);
     const previewTimeRef = useRef(0);
 
-    /* ---- derived ---- */
     const getClipDurationMs = (clip: ReelImage) => (clip.type === 'image' ? (secondsPerImage * 1000) / (clip.speed ?? 1) : clip.durationMs);
     const durationMs = images.reduce((total, clip) => total + getClipDurationMs(clip), 0);
     const getStartAtIndex = (targetIndex: number) => images.slice(0, targetIndex).reduce((total, clip) => total + getClipDurationMs(clip), 0);
@@ -597,7 +615,6 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
         }
         return Math.max(0, images.length - 1);
     };
-
 
     const safePreviewIndex = getIndexAtTime(previewTimeMs);
     const activeImage = images[safePreviewIndex] ?? null;
@@ -644,14 +661,13 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
             if (voiceover) URL.revokeObjectURL(voiceover.url);
             setVoiceover(result);
 
-            // Compare the voiceover length with the reel so the ending is not cut off by surprise.
             const voiceMs = await new Promise<number>((resolve) => {
                 const probe = new Audio(result.url);
                 probe.onloadedmetadata = () => resolve(Number.isFinite(probe.duration) ? probe.duration * 1000 : 0);
                 probe.onerror = () => resolve(0);
             });
             if (durationMs > 0 && voiceMs > durationMs + 500) {
-                setNotice(`The voiceover is ${(voiceMs / 1000).toFixed(1)}s but your reel is ${(durationMs / 1000).toFixed(1)}s, so the end will be cut off. Add clips, slow clips down, or shorten the script.`);
+                setNotice(`The voiceover is ${(voiceMs / 1000).toFixed(1)}s but your reel is ${(durationMs / 1000).toFixed(1)}s, so the end will be cut off.`);
             } else {
                 setNotice('Voiceover ready. Press Play preview to hear it with your reel.');
             }
@@ -879,6 +895,8 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
                 scale: 1,
                 motion: type === 'image' ? 'zoom-in' : 'none',
                 transition: 'fade',
+                rippleScale: 0.5, // Default ripple scale reduced to 0.5 for a smaller wave radius
+                cursorScale: 1.0,  // Default independent cursor click radius/scale
             };
             const clip: ReelImage = productTemplate
                 ? { ...baseClip, ...getTemplateClipStyle(productTemplate, images.length + fileIndex, type) }
@@ -1392,6 +1410,15 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
                     scale: clip.scale,
                     motion: clip.motion,
                     transition: clip.transition,
+                    cursorTargetX: clip.cursorTargetX,
+                    cursorTargetY: clip.cursorTargetY,
+                    cursorColor: clip.cursorColor,
+                    cursorScale: clip.cursorScale,
+                    rippleTargetX: clip.rippleTargetX,
+                    rippleTargetY: clip.rippleTargetY,
+                    rippleScale: clip.rippleScale,
+                    rippleColor: clip.rippleColor,
+                    rippleSpeed: clip.rippleSpeed,
                 })),
                 music: music ? { fileName: music.file.name, fileType: music.file.type, blob: music.file } : undefined,
                 voiceover: voiceover ? { fileName: voiceover.file.name, fileType: voiceover.file.type, blob: voiceover.file } : undefined,
@@ -1459,6 +1486,8 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
                     scale: clip.scale ?? 1,
                     motion: clip.motion ?? (clip.type === 'image' ? 'zoom-in' : 'none'),
                     transition: clip.transition ?? 'fade',
+                    rippleScale: clip.rippleScale ?? 0.5,
+                    cursorScale: clip.cursorScale ?? 1.0,
                 };
             });
 
@@ -1947,9 +1976,7 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
                                             label="3D Camera Motion"
                                             value={selectedImage.motion ?? 'none'}
                                             onChange={(value) => {
-                                                // Check if the selected motion is a Pro feature (e.g., depth-orbit, depth-sway, depth-dolly)
                                                 const isProMotion = ['depth-orbit', 'depth-sway', 'depth-dolly'].includes(value);
-
                                                 handleFeatureClick(isProMotion, () => updateSelected({ motion: value as ReelImage['motion'] }));
                                             }}
                                         >
@@ -2141,12 +2168,19 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
                                 </div>
                             ))}
 
-                            {/* --- Cursor Click Position Controls (Light Theme) --- */}
+                            {/* Cursor Click Controls with Custom Color & Independent Radius/Scale */}
                             {selectedImage.fx?.includes('cursor-click') && (
                                 <div className="space-y-3 rounded-xl border border-[#14121F]/15 bg-[#F7F6FB] p-3">
-                                    <label className="text-xs font-semibold text-[#14121F]">🖱️ Cursor Click Position</label>
-
-                                    {/* Quick Position Presets */}
+                                    <div className="flex items-center justify-between">
+                                        <label className="text-xs font-semibold text-[#14121F]">🖱️ Cursor Click Position & Color</label>
+                                        <input
+                                            type="color"
+                                            value={selectedImage.cursorColor ?? '#6A4CFF'}
+                                            onChange={(e) => updateSelected({ cursorColor: e.target.value })}
+                                            className="h-6 w-8 cursor-pointer rounded-md border border-[#14121F]/20 bg-transparent p-0"
+                                            title="Cursor Color"
+                                        />
+                                    </div>
                                     <div className="grid grid-cols-3 gap-2">
                                         <button
                                             type="button"
@@ -2171,7 +2205,6 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
                                         </button>
                                     </div>
 
-                                    {/* Fine-tune Sliders */}
                                     <div className="space-y-1">
                                         <div className="flex justify-between text-[10px] font-medium text-[#14121F]/60">
                                             <span>X Position ({Math.round((selectedImage.cursorTargetX ?? 0.5) * 100)}%)</span>
@@ -2194,9 +2227,76 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
                                             className="w-full accent-[#6A4CFF] bg-[#14121F]/10 h-1.5 rounded-full"
                                         />
                                     </div>
+                                    <div className="space-y-1">
+                                        <div className="flex justify-between text-[10px] font-medium text-[#14121F]/60">
+                                            <span>Cursor Click Radius Scale</span>
+                                            <span>{(selectedImage.cursorScale ?? 1.0).toFixed(1)}x</span>
+                                        </div>
+                                        <input
+                                            type="range" min="0.2" max="2.5" step="0.1"
+                                            value={selectedImage.cursorScale ?? 1.0}
+                                            onChange={(e) => updateSelected({ cursorScale: parseFloat(e.target.value) })}
+                                            className="w-full accent-[#6A4CFF] bg-[#14121F]/10 h-1.5 rounded-full"
+                                        />
+                                    </div>
                                 </div>
                             )}
-                            {/* --------------------------------------------------- */}
+
+                            {/* Ripple Wave Controls (Smaller Default Radius & Adjustable Slider) */}
+                            {selectedImage.fx?.includes('ripple-effect') && (
+                                <div className="space-y-3 rounded-xl border border-[#14121F]/15 bg-[#F7F6FB] p-3 mt-3">
+                                    <label className="text-xs font-semibold text-[#14121F]">💧 Ripple Wave Settings</label>
+
+                                    <div className="space-y-1">
+                                        <div className="flex justify-between text-[10px] font-medium text-[#14121F]/60">
+                                            <span>Ripple X Position</span>
+                                            <span>{Math.round((selectedImage.rippleTargetX ?? 0.5) * 100)}%</span>
+                                        </div>
+                                        <input
+                                            type="range" min="0.05" max="0.95" step="0.01"
+                                            value={selectedImage.rippleTargetX ?? 0.5}
+                                            onChange={(e) => updateSelected({ rippleTargetX: parseFloat(e.target.value) })}
+                                            className="w-full accent-[#6A4CFF] bg-[#14121F]/10 h-1.5 rounded-full"
+                                        />
+                                    </div>
+
+                                    <div className="space-y-1">
+                                        <div className="flex justify-between text-[10px] font-medium text-[#14121F]/60">
+                                            <span>Ripple Y Position</span>
+                                            <span>{Math.round((selectedImage.rippleTargetY ?? 0.4) * 100)}%</span>
+                                        </div>
+                                        <input
+                                            type="range" min="0.05" max="0.95" step="0.01"
+                                            value={selectedImage.rippleTargetY ?? 0.4}
+                                            onChange={(e) => updateSelected({ rippleTargetY: parseFloat(e.target.value) })}
+                                            className="w-full accent-[#6A4CFF] bg-[#14121F]/10 h-1.5 rounded-full"
+                                        />
+                                    </div>
+
+                                    <div className="space-y-1">
+                                        <div className="flex justify-between text-[10px] font-medium text-[#14121F]/60">
+                                            <span>Ripple Radius Scale</span>
+                                            <span>{(selectedImage.rippleScale ?? 0.5).toFixed(1)}x</span>
+                                        </div>
+                                        <input
+                                            type="range" min="0.2" max="2.0" step="0.1"
+                                            value={selectedImage.rippleScale ?? 0.5}
+                                            onChange={(e) => updateSelected({ rippleScale: parseFloat(e.target.value) })}
+                                            className="w-full accent-[#6A4CFF] bg-[#14121F]/10 h-1.5 rounded-full"
+                                        />
+                                    </div>
+
+                                    <div className="flex items-center justify-between pt-1">
+                                        <span className="text-xs font-semibold text-[#14121F]">Ripple Color</span>
+                                        <input
+                                            type="color"
+                                            value={selectedImage.rippleColor ?? '#f97316'}
+                                            onChange={(e) => updateSelected({ rippleColor: e.target.value })}
+                                            className="h-7 w-9 cursor-pointer rounded-lg border border-[#14121F]/20 bg-transparent p-0"
+                                        />
+                                    </div>
+                                </div>
+                            )}
 
                             <RangeField label="Beat speed" display={`${fxBpm} BPM`} min={60} max={180} value={fxBpm} onChange={setFxBpm} />
 
@@ -2367,11 +2467,6 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
                             className={`relative flex items-center justify-center overflow-hidden rounded-2xl shadow-xl ${frameSizeClass}`}
                             style={{ backgroundColor, containerType: 'inline-size', ...transitionStyle }}
                         >
-                            {/* 
-                          --- TRUE 3D TURNTABLE TRANSFORMATION WRAPPER --- 
-                          Added perspective, transformOrigin, and backfaceVisibility 
-                          so the product rotates smoothly around its center axis in 3D space.
-                        */}
                             <div
                                 className="h-full w-full"
                                 style={{
@@ -2421,16 +2516,42 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
                             )}
 
                             {activeImage && (
-                                <EffectsOverlay clip={activeImage} progress={activeClipProgress} seconds={activeClipSeconds} aspectRatio={aspectRatio} logoImage={logoImage} logoCorner={logoCorner} logoSize={logoSize} />
-                            )}
+                                <>
+                                    <EffectsOverlay clip={activeImage} progress={activeClipProgress} seconds={activeClipSeconds} aspectRatio={aspectRatio} logoImage={logoImage} logoCorner={logoCorner} logoSize={logoSize} />
+                                    {!isPreviewPlaying && selectedImageId === activeImage.id && (
+                                        <>
+                                            {activeImage.fx?.includes('ripple-effect') && (
+                                                <RipplePlacer
+                                                    frameRef={frameRef}
+                                                    label="Drag to place the ripple"
+                                                    x={activeImage.rippleTargetX ?? 0.5}
+                                                    y={activeImage.rippleTargetY ?? 0.4}
+                                                    color={activeImage.rippleColor ?? DEFAULT_RIPPLE_COLOR}
+                                                    onChange={(x, y) => updateClip(activeImage.id, { rippleTargetX: x, rippleTargetY: y })}
+                                                />
+                                            )}
+                                            {activeImage.fx?.includes('cursor-click') && (
+                                                <RipplePlacer
+                                                    frameRef={frameRef}
+                                                    label="Drag to place the cursor click"
+                                                    x={activeImage.cursorTargetX ?? 0.5}
+                                                    y={activeImage.cursorTargetY ?? 0.4}
+                                                    color={activeImage.cursorColor ?? '#6A4CFF'}
+                                                    onChange={(x, y) => updateClip(activeImage.id, { cursorTargetX: x, cursorTargetY: y })}
+                                                />
+                                            )}
+                                        </>
+                                    )}
 
-                            {activeImage?.overlayText && (
-                                <CaptionOverlay
-                                    clip={activeImage}
-                                    onPointerDown={handleCaptionPointerDown}
-                                    onPointerMove={handleCaptionPointerMove}
-                                    onPointerUp={handleCaptionPointerUp}
-                                />
+                                    {activeImage?.overlayText && (
+                                        <CaptionOverlay
+                                            clip={activeImage}
+                                            onPointerDown={handleCaptionPointerDown}
+                                            onPointerMove={handleCaptionPointerMove}
+                                            onPointerUp={handleCaptionPointerUp}
+                                        />
+                                    )}
+                                </>
                             )}
                         </div>
 
@@ -2538,23 +2659,11 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
                                 className="h-1.5 w-full cursor-pointer rounded-full bg-[#14121F]/10 accent-[#6A4CFF]"
                             />
 
-                            {selectedImage.type === 'video' && (
-                                <RangeField
-                                    label="Clip length"
-                                    display={`${(selectedImage.durationMs / 1000).toFixed(1)}s`}
-                                    min={0.5}
-                                    max={Math.max(0.6, Math.floor(((selectedImage.sourceDurationMs ?? selectedImage.durationMs) / (selectedImage.speed ?? 1) / 1000) * 10) / 10)}
-                                    step={0.1}
-                                    value={selectedImage.durationMs / 1000}
-                                    onChange={(value: number) => updateSelected({ durationMs: Math.round(value * 1000) })}
-                                />
-                            )}
-
                             <div className="flex flex-wrap items-center justify-between gap-2">
                                 <p className="text-[11px] leading-relaxed text-[#14121F]/55">
                                     {selectedImage.type === 'video'
-                                        ? 'Slow-mo or fast-forward. The clip length adjusts automatically, and you can trim it with the length slider.'
-                                        : 'Faster means a shorter clip with quicker camera motion. Slower gives a longer, calmer shot.'}
+                                        ? 'Slow-mo or fast-forward. The clip length adjusts automatically.'
+                                        : 'Faster means a shorter clip with quicker camera motion.'}
                                 </p>
                                 <button
                                     type="button"
@@ -2580,10 +2689,10 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
                     {error && <p role="alert" className="w-full max-w-4xl rounded-2xl border border-red-200 bg-red-50 p-3.5 text-xs font-medium text-red-600 shadow-xs">{error}</p>}
                     <canvas ref={canvasRef} className="hidden" />
                 </div>
-                {/* UPGRADE MODAL */}
+
                 {showUpgradeModal && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-                        <div className="bg-slate-900 border border-purple-500/30 rounded-3xl max-w-md w-full p-6 text-center shadow-2xl relative">
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-4">
+                        <div className="bg-slate-900 border border-purple-500/35 rounded-3xl max-w-md w-full p-6 text-center shadow-2xl relative">
                             <h3 className="text-2xl font-bold text-white mb-2">Unlock Pro Studio</h3>
                             <p className="text-slate-400 text-sm mb-6">
                                 Get unlimited access to all 3D effects, AI tools, and 4K exports.
@@ -2593,7 +2702,7 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
                                     setIsProUser(true);
                                     setShowUpgradeModal(false);
                                 }}
-                                className="w-full py-3.5 bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-semibold rounded-2xl mb-3"
+                                className="w-full py-3.5 bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-semibold rounded-2xl mb-3 shadow-lg"
                             >
                                 Upgrade to Pro ($9/month)
                             </button>

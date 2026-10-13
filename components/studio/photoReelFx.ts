@@ -9,15 +9,120 @@
 /* -------------------------------------------------------------------------- */
 
 export type FxId =
-    | '360-spin' | 'whip-zoom' | 'beat-pulse' | 'shake' | 'click-pop' | 'cursor-click'
+    | '360-spin' | 'whip-zoom' | 'beat-pulse' | 'shake' | 'click-pop' | 'cursor-click' | 'ripple-effect' | 'ripple-click'
     | 'tilt-left' | 'tilt-right' | 'tilt-both' | 'zoom-tilt-left' | 'zoom-tilt-right'
     | 'flash' | 'glitch' | 'rgb-split' | 'speed-lines'
     | 'sparks' | 'bokeh' | 'confetti'
     | 'light-leak' | 'bloom' | 'film-grain' | 'scanlines' | 'letterbox';
 
+export interface RippleConfig {
+    targetX: number;   // 0..1
+    targetY: number;   // 0..1
+    sizeScale: number; // 0.5..3
+    color: string;     // hex
+    speed: number;     // 0.25..4
+}
+export interface OverlayConfig { ripple: RippleConfig; cursor: RippleConfig; }
+export const DEFAULT_RIPPLE_COLOR = '#f97316';
+
+/** One place that turns a clip's saved fields into draw config, so preview, export and UI always agree. */
+export function buildOverlayConfig(clip: {
+    rippleTargetX?: number; rippleTargetY?: number; rippleScale?: number; rippleColor?: string; rippleSpeed?: number;
+    cursorTargetX?: number; cursorTargetY?: number;
+}): OverlayConfig {
+    const base = { sizeScale: clip.rippleScale ?? 1, color: clip.rippleColor ?? DEFAULT_RIPPLE_COLOR, speed: clip.rippleSpeed ?? 1 };
+    return {
+        ripple: { ...base, targetX: clip.rippleTargetX ?? 0.5, targetY: clip.rippleTargetY ?? 0.4 },
+        cursor: { ...base, targetX: clip.cursorTargetX ?? 0.5, targetY: clip.cursorTargetY ?? 0.4 },
+    };
+}
+
+const hexToRgb = (hex: string) => {
+    const raw = hex.replace('#', '');
+    const full = raw.length === 3 ? raw.split('').map((c) => c + c).join('') : raw;
+    return { r: parseInt(full.slice(0, 2), 16) || 0, g: parseInt(full.slice(2, 4), 16) || 0, b: parseInt(full.slice(4, 6), 16) || 0 };
+};
+/** Glowing click dot that presses down, then sends out 3 expanding rings. Optional cursor arrow glides in. */
+function drawClickRipple(ctx: CanvasRenderingContext2D, w: number, h: number, seconds: number, cfg: RippleConfig, u: number, withCursor: boolean) {
+    const k = Math.max(0.25, cfg.speed);
+    const CYCLE = 2.4;
+    const lt = (seconds * k) % CYCLE;            // normalized time inside one loop
+    const c01 = (v: number) => Math.max(0, Math.min(1, v));
+    const { r, g, b } = hexToRgb(cfg.color);
+    const rgba = (a: number) => `rgba(${r},${g},${b},${a})`;
+    const x = w * cfg.targetX;
+    const y = h * cfg.targetY;
+    const scale = cfg.sizeScale;
+
+    ctx.save();
+    ctx.globalCompositeOperation = 'source-over';
+
+    // rings
+    const maxR = w * 0.16 * scale;
+    for (let i = 0; i < 3; i += 1) {
+        const p = (lt - (0.5 + i * 0.22)) / 1.1;
+        if (p <= 0 || p >= 1) continue;
+        const eased = 1 - (1 - p) ** 3;
+        const radius = Math.max(1, maxR * eased);
+        const alpha = (1 - p) * 0.85;
+        if (i === 0) {
+            const fill = ctx.createRadialGradient(x, y, 0, x, y, radius);
+            fill.addColorStop(0, rgba(0));
+            fill.addColorStop(1, rgba(alpha * 0.25));
+            ctx.fillStyle = fill;
+            ctx.beginPath();
+            ctx.arc(x, y, radius, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        ctx.beginPath();
+        ctx.arc(x, y, radius, 0, Math.PI * 2);
+        ctx.strokeStyle = rgba(alpha);
+        ctx.lineWidth = Math.max(1, 3.5 * u * scale * (1 - p * 0.6));
+        ctx.stroke();
+    }
+
+    // click dot (fades in, presses down, fades out)
+    const dotAlpha = c01((lt - 0.1) / 0.2) * (1 - c01((lt - 1.9) / 0.5));
+    if (dotAlpha > 0) {
+        const press = lt > 0.45 && lt < 0.65 ? 1 - 0.25 * Math.sin((Math.PI * (lt - 0.45)) / 0.2) : 1;
+        const dotR = 16 * u * scale * press;
+        const dot = ctx.createRadialGradient(x, y, 0, x, y, dotR);
+        dot.addColorStop(0, rgba(0.9 * dotAlpha));
+        dot.addColorStop(1, rgba(0.55 * dotAlpha));
+        ctx.shadowColor = rgba(0.8 * dotAlpha);
+        ctx.shadowBlur = 14 * u;
+        ctx.fillStyle = dot;
+        ctx.beginPath();
+        ctx.arc(x, y, dotR, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+    }
+
+    // cursor arrow glides to the target
+    if (withCursor) {
+        const glide = 1 - (1 - c01(lt / 0.45)) ** 3;
+        const cx = x + (1 - glide) * w * 0.14;
+        const cy = y + (1 - glide) * h * 0.1;
+        ctx.globalAlpha = c01(lt / 0.15) * (1 - c01((lt - 1.9) / 0.5));
+        ctx.translate(cx, cy);
+        ctx.fillStyle = '#ffffff';
+        ctx.strokeStyle = '#1e293b';
+        ctx.lineWidth = 2 * u;
+        ctx.shadowColor = 'rgba(0,0,0,0.35)';
+        ctx.shadowBlur = 6 * u;
+        ctx.beginPath();
+        ctx.moveTo(0, 0); ctx.lineTo(0, 24 * u); ctx.lineTo(7 * u, 18 * u); ctx.lineTo(13 * u, 28 * u);
+        ctx.lineTo(16 * u, 26 * u); ctx.lineTo(10 * u, 16 * u); ctx.lineTo(18 * u, 16 * u);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+    }
+    ctx.restore();
+}
 export const FX_LIST: Array<{ id: FxId; label: string; emoji: string; group: 'Motion' | 'Hit' | 'Particles' | 'Look'; blurb?: string }> = [
     { id: '360-spin', label: '360° 3D Turntable Spin', emoji: '🔄', group: 'Motion', blurb: 'Continuous 3D horizontal turntable rotation' },
     { id: 'cursor-click', label: 'Cursor Click & Glow', emoji: '🖱️', group: 'Motion' },
+    { id: 'ripple-effect', label: 'Ripple Click Pulse', emoji: '💧', group: 'Motion', blurb: 'Custom positioned ripple wave effect' },
     { id: 'click-pop', label: 'Click & Pop', emoji: '👆', group: 'Motion' },
     { id: 'whip-zoom', label: 'Punch-in zoom', emoji: '🎯', group: 'Motion' },
     { id: 'beat-pulse', label: 'Beat pulse', emoji: '💓', group: 'Motion' },
@@ -88,9 +193,9 @@ export function getCameraTransform(fx: FxId[] | undefined, seconds: number, bpm 
     if (!fx || fx.length === 0) return { scale, dx, dy, rot, tiltY, spinY };
 
     if (has(fx, '360-spin')) {
-        const spinDuration = (60 / bpm) * 4; // Complete 360-degree rotation every 4 beats
+        const spinDuration = (60 / bpm) * 4;
         spinY = (seconds % spinDuration) * ((Math.PI * 2) / spinDuration);
-        scale *= 1.15; // Slightly zoom in so edges look clean during 3D rotation
+        scale *= 1.15;
     }
     if (has(fx, 'whip-zoom')) {
         const e = Math.exp(-seconds * 6.5);
@@ -159,7 +264,6 @@ export function applyCameraFx(ctx: CanvasRenderingContext2D, fx: FxId[] | undefi
 
     if (t.spinY !== 0) {
         const cosY = Math.cos(t.spinY);
-        // Using absolute cosine ensures the object maintains 3D solidity volume instead of collapsing completely flat
         const effectiveWidthScale = Math.max(0.15, Math.abs(cosY));
         ctx.scale(effectiveWidthScale, 1);
     }
@@ -180,8 +284,6 @@ export function cameraCss(fx: FxId[] | undefined, seconds: number, bpm = 120): s
 
     const perspective = 'perspective(1200px)';
     const translate = `translate(${(t.dx * 100).toFixed(3)}%, ${(t.dy * 100).toFixed(3)}%)`;
-
-    // Rotate Y for 3D spin, but add a slight scaleX buffer or depth translation so it doesn't vanish into a paper-thin line
     const rotateY3D = `rotateY(${t.spinY.toFixed(4)}rad)`;
     const tiltRotateY = `rotateY(${(t.tiltY || 0).toFixed(4)}rad)`;
     const rotateZ = `rotate(${t.rot.toFixed(4)}rad)`;
@@ -276,78 +378,14 @@ export function drawOverlayFx(
     w: number,
     h: number,
     seconds: number,
-    targetX = 0.5,
-    targetY = 0.4
+    config: OverlayConfig = buildOverlayConfig({})
 ) {
     if (!fx || fx.length === 0) return;
     const u = w / 540;
     ctx.save();
 
-    if (has(fx, 'cursor-click')) {
-        const animTime = seconds % 3.0;
-        let cursorX = w * 0.5;
-        let cursorY = h * 1.1;
-        let scale = 1;
-        let ringAlpha = 0;
-        let ringRadius = 0;
-
-        const destX = w * targetX;
-        const destY = h * targetY;
-
-        if (animTime < 0.9) {
-            const p = Math.min(animTime / 0.8, 1);
-            const easeP = p < 0.5 ? 2 * p * p : -1 + (4 - 2 * p) * p;
-            cursorX = w * 0.5 + (destX - w * 0.5) * easeP;
-            cursorY = (h * 1.1) + (destY - (h * 1.1)) * easeP;
-        } else {
-            cursorX = destX;
-            cursorY = destY;
-            const clickProgress = animTime - 0.9;
-            if (clickProgress < 0.2) {
-                scale = 0.85;
-            } else {
-                scale = 1;
-                const waveTime = clickProgress - 0.2;
-                ringRadius = waveTime * w * 0.35;
-                ringAlpha = Math.max(0, 1 - waveTime * 1.5);
-            }
-        }
-
-        if (ringAlpha > 0) {
-            ctx.save();
-            ctx.beginPath();
-            ctx.arc(destX, destY, ringRadius, 0, Math.PI * 2);
-            ctx.strokeStyle = `rgba(59, 130, 246, ${ringAlpha})`;
-            ctx.lineWidth = 3.5 * u;
-            ctx.shadowColor = '#3b82f6';
-            ctx.shadowBlur = 12 * u;
-            ctx.stroke();
-            ctx.restore();
-        }
-
-        ctx.save();
-        ctx.translate(cursorX, cursorY);
-        ctx.scale(scale, scale);
-
-        ctx.fillStyle = '#ffffff';
-        ctx.strokeStyle = '#1e293b';
-        ctx.lineWidth = 2 * u;
-        ctx.shadowColor = 'rgba(0, 0, 0, 0.35)';
-        ctx.shadowBlur = 6 * u;
-
-        ctx.beginPath();
-        ctx.moveTo(0, 0);
-        ctx.lineTo(0, 24 * u);
-        ctx.lineTo(7 * u, 18 * u);
-        ctx.lineTo(13 * u, 28 * u);
-        ctx.lineTo(16 * u, 26 * u);
-        ctx.lineTo(10 * u, 16 * u);
-        ctx.lineTo(18 * u, 16 * u);
-        ctx.closePath();
-        ctx.fill();
-        ctx.stroke();
-        ctx.restore();
-    }
+    if (has(fx, 'ripple-effect') || has(fx, 'ripple-click')) drawClickRipple(ctx, w, h, seconds, config.ripple, u, false);
+    if (has(fx, 'cursor-click')) drawClickRipple(ctx, w, h, seconds, config.cursor, u, true);
 
     if (has(fx, 'light-leak')) {
         ctx.globalCompositeOperation = 'screen';
@@ -456,7 +494,7 @@ export function drawOverlayFx(
             const inner = reach * (0.28 + rand(i, 3) * 0.2);
             const outer = reach * 0.9;
             const width = 0.01 + rand(i, 4) * 0.02;
-            ctx.fillStyle = `rgba(255,255,255,${a * 0.35 * (0.5 + rand(i, 5) * 0.5)})`;
+            ctx.fillStyle = `rgba(255,255,255,${a * (0.35 * (0.5 + rand(i, 5) * 0.5))})`;
             ctx.beginPath();
             ctx.moveTo(Math.cos(angle) * inner, Math.sin(angle) * inner);
             ctx.lineTo(Math.cos(angle - width) * outer, Math.sin(angle - width) * outer);
