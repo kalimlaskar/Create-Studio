@@ -5,8 +5,8 @@ export type TextOverlayStyle = 'classic' | 'banner' | 'highlight' | 'outline';
 
 export interface BaseClip {
     id: string;
-    startMs: number;
-    endMs: number;
+    startMs: number; // Timeline position start
+    endMs: number;   // Timeline position end
 }
 
 export interface TimeRange {
@@ -14,16 +14,27 @@ export interface TimeRange {
     endMs: number;
 }
 
+export type TimelineClipType = 'video' | 'image';
+
+export interface TimelineClip extends BaseClip {
+    type: TimelineClipType;
+    url: string;
+    name: string;
+    trimStartMs: number;
+    trimEndMs: number;
+    speed: number; // Independent speed multiplier (e.g. 0.5 for slow motion)
+}
+
 export interface OverlayClip extends BaseClip {
     type: OverlayType;
-    content: string;           // text string, or icon identifier
-    x: number;                 // 0-1, fraction of canvas width
-    y: number;                 // 0-1, fraction of canvas height
-    fontSize?: number;         // text only
+    content: string;
+    x: number;
+    y: number;
+    fontSize?: number;
     color?: string;
     textStyle?: TextOverlayStyle;
-    width?: number;            // image width as a fraction of canvas width
-    iconSize?: number;         // icon only
+    width?: number;
+    iconSize?: number;
 }
 
 export interface CaptionCue extends BaseClip {
@@ -37,9 +48,9 @@ export type EditorTabId = 'color' | 'text' | 'captions' | 'zoom' | 'speed' | 'mu
 export type TransitionType = 'particles' | 'portal' | 'warp';
 
 export interface ClipTransition {
-    atMs: number;       // the split point the transition starts at
+    atMs: number;
     type: TransitionType;
-    durationMs: number; // 500-2000
+    durationMs: number;
 }
 
 export interface VideoEditState {
@@ -47,14 +58,14 @@ export interface VideoEditState {
     trimEndMs: number;
     splitPointsMs: number[];
     transitions?: ClipTransition[];
-    deletedRanges?: TimeRange[]; // source-time sections cut out; sorted, non-overlapping
+    deletedRanges?: TimeRange[];
 }
 
 export type BackgroundKind = 'none' | 'color' | 'gradient' | 'image';
 
 export interface BackgroundSegment extends BaseClip {
     kind: BackgroundKind;
-    value: string; // hex color, CSS gradient string, or image URL depending on kind
+    value: string;
 }
 
 export interface AudioTrackClip extends BaseClip {
@@ -66,23 +77,24 @@ export interface AudioTrackClip extends BaseClip {
 }
 
 export interface SpeedSegment extends BaseClip {
-    rate: number; // 0.25-1.0 playback speed
+    rate: number;
 }
 
 export interface ColorGradeSettings {
-    brightness: number; // 100 = neutral
+    brightness: number;
     contrast: number;
     saturation: number;
-    temperature: number; // -100 (cool) to 100 (warm)
+    temperature: number;
 }
 
 export interface ZoomKeyframe {
     id: string;
     atMs: number;
-    scale: number; // 1 = 100% (no zoom), 1.5 = 150%, etc.
+    scale: number;
 }
 
 export interface EditorTracks {
+    clips: TimelineClip[]; // Multiple video footages & images across timeline
     background: BackgroundSegment[];
     overlays: OverlayClip[];
     captions: CaptionCue[];
@@ -133,6 +145,19 @@ export function createEmptyProject(
         videoEdit: { trimStartMs: 0, trimEndMs: durationMs, splitPointsMs: [], deletedRanges: [] },
         muteOriginalAudio: false,
         tracks: {
+            clips: [
+                {
+                    id: 'primary-source-clip',
+                    type: 'video',
+                    url: sourceVideoUrl,
+                    name: 'Main Video',
+                    startMs: 0,
+                    endMs: durationMs,
+                    trimStartMs: 0,
+                    trimEndMs: durationMs,
+                    speed: 1.0,
+                },
+            ],
             background: [],
             overlays: [],
             captions: [],

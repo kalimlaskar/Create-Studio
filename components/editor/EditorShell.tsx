@@ -1,15 +1,15 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react'; // CUT: useEffect
+import React, { useEffect, useRef, useState } from 'react';
 import { Download, ArrowLeft, Loader2, Volume2, VolumeX, Bookmark, MoreHorizontal, ChevronDown } from 'lucide-react';
 import { useEditorProject } from '@/hooks/useEditorProject';
 import { PreviewCanvas } from './PreviewCanvas';
 import { Timeline } from './Timeline';
-import { TranscriptPanel } from './TranscriptPanel'; // CUT
+import { TranscriptPanel } from './TranscriptPanel';
 import { EditorSidebar } from './EditorSidebar';
 import { buildColorGradeFilter } from './colorGrade';
 import { saveEditorDraft } from './drafts';
-import { EditorProject, TimeRange } from '@/types/editor'; // CUT: TimeRange
+import { EditorProject, TimeRange } from '@/types/editor';
 import { createExportRecorder, getExportDimensions, getFrameCrop, getRecordingDimensions, RECORDING_FRAME_RATE, ExportFormat, ExportResolution } from '@/components/recordingQuality';
 import { AspectRatioType } from '@/types/studio';
 import { CameraArtEffect, ScriptLanguage } from '@/types/studio';
@@ -22,7 +22,7 @@ import { drawActiveOverlays } from './overlayRendering';
 import { getZoomScale } from './zoom';
 import { createTransitionRenderer, TransitionRenderer } from './transitionRenderer';
 import { drawTransitionFrame, getInitialPerformanceMode, storePerformanceMode, TransitionSnapshots } from './transitions';
-import { addDeletedRange, removeDeletedRange, getKeepRanges, skipTarget, sourceToOutput } from '@/lib/cuts'; // CUT
+import { addDeletedRange, removeDeletedRange, getKeepRanges, skipTarget, sourceToOutput } from '@/lib/cuts';
 
 interface EditorShellProps {
     isPro?: boolean;
@@ -95,6 +95,32 @@ export function EditorShell({ isPro = false, sourceVideoUrl, aspectRatio, initia
     const [draftSaved, setDraftSaved] = useState(false);
     const [performanceMode, setPerformanceMode] = useState(getInitialPerformanceMode);
 
+    // Draggable Timeline Height State
+    const [timelineHeight, setTimelineHeight] = useState<number>(340);
+    const isDraggingTimelineRef = useRef<boolean>(false);
+
+    const handleMouseDownTimelineSplitter = (e: React.MouseEvent) => {
+        e.preventDefault();
+        isDraggingTimelineRef.current = true;
+
+        const handleMouseMove = (mouseEvent: MouseEvent) => {
+            if (!isDraggingTimelineRef.current) return;
+            const newHeight = window.innerHeight - mouseEvent.clientY - 40;
+            if (newHeight >= 180 && newHeight <= 700) {
+                setTimelineHeight(newHeight);
+            }
+        };
+
+        const handleMouseUp = () => {
+            isDraggingTimelineRef.current = false;
+            document.removeEventListener('mousemove', handleMouseMove);
+            document.removeEventListener('mouseup', handleMouseUp);
+        };
+
+        document.addEventListener('mousemove', handleMouseMove);
+        document.addEventListener('mouseup', handleMouseUp);
+    };
+
     const handlePerformanceModeChange = (enabled: boolean) => {
         setPerformanceMode(enabled);
         storePerformanceMode(enabled);
@@ -106,25 +132,22 @@ export function EditorShell({ isPro = false, sourceVideoUrl, aspectRatio, initia
         if (!isPlaying) togglePlay();
     };
 
-    // CUT: remove a section and join the rest
     const handleDeleteRange = (range: TimeRange) => {
         if (!project) return;
         const { trimStartMs, trimEndMs, deletedRanges } = project.videoEdit;
         const next = addDeletedRange(deletedRanges ?? [], range);
         const keptMs = getKeepRanges(trimStartMs, trimEndMs, next).reduce((sum, k) => sum + k.endMs - k.startMs, 0);
-        if (keptMs < 250) return; // never delete everything
+        if (keptMs < 250) return;
         beginVideoEdit();
         updateVideoEdit({ deletedRanges: next });
     };
 
-    // CUT: bring a removed section back
     const handleRestoreRange = (atMs: number) => {
         if (!project) return;
         beginVideoEdit();
         updateVideoEdit({ deletedRanges: removeDeletedRange(project.videoEdit.deletedRanges ?? [], atMs) });
     };
 
-    // CUT: preview jumps over removed sections while playing
     useEffect(() => {
         if (!project || !isPlaying || isExporting) return;
         const target = skipTarget(playheadMs, project.videoEdit.deletedRanges);
@@ -165,7 +188,6 @@ export function EditorShell({ isPro = false, sourceVideoUrl, aspectRatio, initia
         const wasPlaying = !video.paused;
         const trimStartMs = project.videoEdit.trimStartMs;
         const trimEndMs = project.videoEdit.trimEndMs;
-        // CUT: length after removed sections
         const keep = getKeepRanges(trimStartMs, trimEndMs, project.videoEdit.deletedRanges);
         const keptDurationMs = Math.max(1, keep.reduce((sum, k) => sum + k.endMs - k.startMs, 0));
         if (keptDurationMs > FREE_VIDEO_LIMIT_MS) {
@@ -264,7 +286,6 @@ export function EditorShell({ isPro = false, sourceVideoUrl, aspectRatio, initia
                     return;
                 }
 
-                // CUT: skip removed sections, so picture and audio are both cut
                 const jumpMs = skipTarget(video.currentTime * 1000, project.videoEdit.deletedRanges);
                 if (jumpMs !== null) {
                     video.currentTime = jumpMs / 1000;
@@ -295,7 +316,6 @@ export function EditorShell({ isPro = false, sourceVideoUrl, aspectRatio, initia
                     drawFreeTierWatermark(ctx, exportCanvas.width, exportCanvas.height);
                 }
 
-                // CUT: progress measured on the joined timeline
                 const outputMs = sourceToOutput(currentMs, keep) ?? 0;
                 const percent = Math.min(85, Math.floor((outputMs / keptDurationMs) * 85));
                 if (percent !== lastPercent) {
@@ -574,29 +594,45 @@ export function EditorShell({ isPro = false, sourceVideoUrl, aspectRatio, initia
                 <video ref={videoRef} src={sourceVideoUrl} className="hidden" playsInline />
 
                 {project ? (
-                    <div className={`flex min-h-0 flex-1 flex-col gap-3.5 overflow-hidden ${isExporting ? 'pointer-events-none opacity-70' : ''}`}>
-                        <PreviewCanvas videoRef={videoRef} project={project} performanceMode={performanceMode} isPro={isPro} />
-                        <Timeline
-                            durationMs={project.durationMs}
-                            playheadMs={playheadMs}
-                            isPlaying={isPlaying}
-                            onSeek={seekTo}
-                            onTogglePlay={togglePlay}
-                            videoEdit={project.videoEdit}
-                            onTrimChange={updateVideoEdit}
-                            onTrimStart={beginVideoEdit}
-                            onSplit={() => splitVideoAt(playheadMs)}
-                            onRemoveSplit={removeVideoSplit}
-                            onSetTransition={setTransitionAt}
-                            onPreviewTransition={handlePreviewTransition}
-                            onDeleteRange={handleDeleteRange}   // CUT
-                            onRestoreRange={handleRestoreRange} // CUT
-                            performanceMode={performanceMode}
-                            onPerformanceModeChange={handlePerformanceModeChange}
-                        />
-                        {/* CUT: clickable script, shown once captions exist */}
+                    <div className={`flex min-h-0 flex-1 flex-col gap-0 overflow-hidden ${isExporting ? 'pointer-events-none opacity-70' : ''}`}>
+                        {/* Upper Video Preview Canvas Container */}
+                        <div className="flex-1 min-h-0 flex flex-col overflow-hidden relative">
+                            <PreviewCanvas videoRef={videoRef} project={project} performanceMode={performanceMode} isPro={isPro} />
+                        </div>
+
+                        {/* Draggable Resizing Splitter Bar for Timeline */}
+                        <div
+                            onMouseDown={handleMouseDownTimelineSplitter}
+                            className="h-2 w-full bg-[#14121F]/10 hover:bg-[#6A4CFF] cursor-row-resize flex items-center justify-center transition-colors group z-30 select-none my-1"
+                            title="Drag to resize timeline height"
+                        >
+                            <div className="w-12 h-1 bg-[#14121F]/20 rounded-full group-hover:bg-white transition-colors" />
+                        </div>
+
+                        {/* Resizable Timeline Panel */}
+                        <div style={{ height: `${timelineHeight}px` }} className="flex flex-col shrink-0 overflow-y-auto transition-all duration-75">
+                            <Timeline
+                                durationMs={project.durationMs}
+                                playheadMs={playheadMs}
+                                isPlaying={isPlaying}
+                                onSeek={seekTo}
+                                onTogglePlay={togglePlay}
+                                videoEdit={project.videoEdit}
+                                onTrimChange={updateVideoEdit}
+                                onTrimStart={beginVideoEdit}
+                                onSplit={() => splitVideoAt(playheadMs)}
+                                onRemoveSplit={removeVideoSplit}
+                                onSetTransition={setTransitionAt}
+                                onPreviewTransition={handlePreviewTransition}
+                                onDeleteRange={handleDeleteRange}
+                                onRestoreRange={handleRestoreRange}
+                                performanceMode={performanceMode}
+                                onPerformanceModeChange={handlePerformanceModeChange}
+                            />
+                        </div>
+
                         {project.tracks.captions.length > 0 && (
-                            <div className="max-h-40 shrink-0 overflow-y-auto">
+                            <div className="max-h-40 shrink-0 overflow-y-auto mt-2">
                                 <TranscriptPanel
                                     words={project.tracks.captions.map((cue) => ({ text: cue.text, startMs: cue.startMs, endMs: cue.endMs }))}
                                     playheadMs={playheadMs}
