@@ -24,7 +24,7 @@ interface VideoCanvasProps {
     countdown: number | null;
     screenShareStream: MediaStream | null;
     onScreenFrame?: (video: HTMLVideoElement) => void;
-    isProUser: boolean; // Added Pro user flag
+    isProUser: boolean;
 }
 
 type FaceLandmarkerLike = {
@@ -229,7 +229,7 @@ export function VideoCanvas({
     countdown,
     screenShareStream,
     onScreenFrame,
-    isProUser, // Destructure Pro user state
+    isProUser,
 }: VideoCanvasProps) {
     const visibleCanvasRef = useRef<HTMLCanvasElement>(null);
     const screenVideoRef = useRef<HTMLVideoElement>(null);
@@ -552,7 +552,6 @@ export function VideoCanvas({
         }
         drawAirStrokes(ctx, canvas);
 
-        // Watermark is skipped entirely if the user is Pro
         if (isRecordingRef.current && !isProUser) {
             drawFreeTierWatermark(ctx, canvas.width, canvas.height);
         }
