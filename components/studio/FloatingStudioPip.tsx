@@ -2,13 +2,19 @@
 
 import { memo, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Circle, Crosshair, Highlighter, MoveUpRight, Pause, Pencil, Play, Square } from 'lucide-react';
+import { Circle, Crosshair, Highlighter, MoveUpRight, Pause, Pencil, Play, Square, ZoomIn } from 'lucide-react';
 import { StudioSettings } from '@/types/studio';
 import { TeleprompterOverlay } from './TeleprompterOverlay';
 
 type AirSettings = Pick<
     StudioSettings,
-    'airDrawingEnabled' | 'airDrawingTool' | 'airDrawingColor' | 'airDrawingFade' | 'airDrawingSnapShapes'
+    | 'airDrawingEnabled'
+    | 'airDrawingTool'
+    | 'airDrawingColor'
+    | 'airDrawingFade'
+    | 'airDrawingSnapShapes'
+    | 'airZoomEnabled'
+    | 'airZoomScale'
 >;
 
 interface FloatingStudioPipProps {
@@ -125,7 +131,7 @@ function MarkerPanel({ settings, onChange }: { settings: AirSettings; onChange: 
     return (
         <div className="shrink-0 space-y-2.5 border-b border-white/10 bg-[#1d1a2e] px-3 py-2.5">
             <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-white/60">Marker</span>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-white/60">Marker & Gestures</span>
                 <button
                     type="button"
                     role="switch"
@@ -139,7 +145,7 @@ function MarkerPanel({ settings, onChange }: { settings: AirSettings; onChange: 
             </div>
 
             {!settings.airDrawingEnabled ? (
-                <p className="text-[10px] leading-4 text-white/50">Turn on to draw circles, arrows and highlights with your hand.</p>
+                <p className="text-[10px] leading-4 text-white/50">Turn on to draw shapes, highlight, and zoom with hand gestures.</p>
             ) : (
                 <>
                     <div className="grid grid-cols-4 gap-1.5" role="group" aria-label="Drawing tool">
@@ -155,6 +161,24 @@ function MarkerPanel({ settings, onChange }: { settings: AirSettings; onChange: 
                                 {label}
                             </button>
                         ))}
+                    </div>
+
+                    {/* Hand Gesture Zoom Toggle */}
+                    <div className="flex items-center justify-between rounded-xl bg-white/5 px-3 py-2">
+                        <div className="flex items-center gap-2">
+                            <ZoomIn className="h-4 w-4 text-[#22d3ee]" />
+                            <span className="text-[11px] font-semibold text-white/90">Pinch Gesture Zoom</span>
+                        </div>
+                        <button
+                            type="button"
+                            role="switch"
+                            aria-checked={settings.airZoomEnabled}
+                            aria-label="Pinch gesture zoom"
+                            onClick={() => onChange({ airZoomEnabled: !settings.airZoomEnabled })}
+                            className={`relative h-4 w-7 rounded-full transition-colors ${settings.airZoomEnabled ? 'bg-[#22d3ee]' : 'bg-white/25'}`}
+                        >
+                            <span className={`absolute top-0.5 h-3 w-3 rounded-full bg-white transition-all ${settings.airZoomEnabled ? 'left-[0.9rem]' : 'left-0.5'}`} />
+                        </button>
                     </div>
 
                     <div className="flex items-center justify-between gap-2">
@@ -194,7 +218,7 @@ function MarkerPanel({ settings, onChange }: { settings: AirSettings; onChange: 
                     </div>
 
                     <p className="text-[10px] leading-4 text-white/50">
-                        ☝️ point to draw · ✌️ two fingers erase · ✊ undo · 🖐 hold 1s to clear
+                        ☝️ point to draw · 🤏 pinch to zoom word · ✌️ erase · ✊ undo
                     </p>
                 </>
             )}

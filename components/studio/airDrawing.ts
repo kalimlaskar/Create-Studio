@@ -42,6 +42,7 @@ export interface AirDrawingOptions {
     language: AirWritingLanguage;
     snapShapes?: boolean;
     rainbow?: boolean;
+    zoomEnabled?: boolean;
 }
 
 export interface FrameMapping {
@@ -199,6 +200,7 @@ export class AirDrawingEngine {
     private candidateCount = 0;
     private actionFired = false;
     private cursor: (Point & { gesture: HandGesture; space: AnnotationSpace }) | null = null;
+    private zoomInput: { ratio: number; x: number; y: number; active: boolean } | null = null;
     private clearProgress = 0;
     private layout: { width: number; height: number; rect: TargetRect; space: AnnotationSpace } | null = null;
 
@@ -254,6 +256,7 @@ export class AirDrawingEngine {
 
         const hand = this.landmarker.detectForVideo(video, timestamp).landmarks?.[0];
         if (!hand) {
+            this.zoomInput = null;
             if (this.cursor) this.revision++;
             this.cursor = null;
             this.clearProgress = 0;
@@ -289,6 +292,25 @@ export class AirDrawingEngine {
         if (map.mirror) nx = 1 - nx;
 
         this.clearProgress = raw === 'palm' ? Math.min(1, held / CLEAR_HOLD_MS) : 0;
+        if (opts.zoomEnabled && !writing) {
+            this.endStroke(now);
+            const palm = dist(hand[0], hand[9]) || 1;
+            const curled = dist(hand[12], hand[0]) < dist(hand[10], hand[0]) * 1.12
+                && dist(hand[16], hand[0]) < dist(hand[14], hand[0]) * 1.12;
+            let zx = ((hand[4].x + hand[8].x) / 2 * map.videoWidth - map.crop.x) / map.crop.width;
+            const zy = ((hand[4].y + hand[8].y) / 2 * map.videoHeight - map.crop.y) / map.crop.height;
+            if (map.mirror) zx = 1 - zx;
+            this.zoomInput = {
+                ratio: dist(hand[4], hand[8]) / palm,   // ~0.2 pinched, ~1.2 spread
+                x: Math.min(1, Math.max(0, zx)),
+                y: Math.min(1, Math.max(0, zy)),
+                active: curled,                          // only zoom with middle/ring/pinky folded
+            };
+            this.cursor = null;
+            this.revision++;
+            return;
+        }
+        this.zoomInput = null;
 
         const isLaser = !writing && opts.tool === 'laser';
         const drawPose: HandGesture = writing ? 'pinch' : 'point';
@@ -515,6 +537,8 @@ export class AirDrawingEngine {
         if (this.items.some((item) => item.space === space)) return true;
         return Boolean(!opts.writeMode && opts.tool === 'laser' && this.cursor?.gesture === 'point' && this.cursor.space === space);
     }
+    getZoomInput() { return this.zoomInput; }
+
 
     /** Changes whenever the rendered layer would look different; used to skip identical recording snapshots. */
     signature(now: number, opts: AirDrawingOptions, space: AnnotationSpace) {

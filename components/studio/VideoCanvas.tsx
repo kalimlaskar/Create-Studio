@@ -32,6 +32,8 @@ type FaceLandmarkerLike = {
     close: () => void;
 };
 type FrameCrop = ReturnType<typeof getFrameCrop>;
+type ZoomState = { scale: number; x: number; y: number };
+type PixelRect = { x: number; y: number; width: number; height: number };
 
 const WASM_FILESET_URL = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm';
 const MODEL_ASSET_URL =
@@ -45,6 +47,9 @@ const SEGMENTATION_MODES = ['green', 'blur', 'image', 'transparent'];
 
 const OFFSCREEN_VIDEO_CLASS =
     'pointer-events-none fixed left-0 top-0 z-[-1] h-px w-px opacity-[0.01]';
+
+const DEFAULT_ZOOM: ZoomState = { scale: 1, x: 0.5, y: 0.5 };
+const DEFAULT_MAX_ZOOM = 3;
 
 function getVideoFilter(settings: StudioSettings) {
     const neutral = settings.brightness === 100 && settings.contrast === 100 && settings.filterPreset === 'none';
@@ -110,6 +115,21 @@ function getMaskCropRect(
     };
 }
 
+/** Redraws the zoomed portion of the shared screen over the screen's content rectangle. */
+function drawZoomedScreen(ctx: CanvasRenderingContext2D, screen: HTMLVideoElement, rect: PixelRect, zoom: ZoomState) {
+    if (zoom.scale < 1.02) return;
+    const sw = screen.videoWidth / zoom.scale;
+    const sh = screen.videoHeight / zoom.scale;
+    const sx = Math.min(screen.videoWidth - sw, Math.max(0, zoom.x * screen.videoWidth - sw / 2));
+    const sy = Math.min(screen.videoHeight - sh, Math.max(0, zoom.y * screen.videoHeight - sh / 2));
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(rect.x, rect.y, rect.width, rect.height);
+    ctx.clip();
+    ctx.drawImage(screen, sx, sy, sw, sh, rect.x, rect.y, rect.width, rect.height);
+    ctx.restore();
+}
+
 function drawScreenShareFrame(
     ctx: CanvasRenderingContext2D,
     canvas: HTMLCanvasElement,
@@ -118,7 +138,9 @@ function drawScreenShareFrame(
     cameraFilter: string,
     mirror = true,
     frame?: ScreenFrameOptions,
-    showCamera = true
+    showCamera = true,
+    zoom?: ZoomState,
+    zoomRect?: PixelRect
 ) {
     const { width, height } = canvas;
 
@@ -142,6 +164,9 @@ function drawScreenShareFrame(
         const sh = screen.videoHeight * scale;
         ctx.drawImage(screen, (width - sw) / 2, (height - sh) / 2, sw, sh);
     }
+
+    // Zoom is drawn before the camera card so the card stays on top.
+    if (zoom && zoomRect) drawZoomedScreen(ctx, screen, zoomRect, zoom);
 
     if (showCamera && camera.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && camera.videoWidth > 0) {
         const cardWidth = Math.round(width * 0.25);
@@ -241,6 +266,7 @@ export function VideoCanvas({
     const settingsRef = useRef(settings);
     const isRecordingRef = useRef(isRecording);
     const screenFrameStartRef = useRef<number | null>(null);
+    const zoomRef = useRef<ZoomState>({ ...DEFAULT_ZOOM });
 
     const prevMaskRef = useRef<Float32Array | null>(null);
     const maskCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -306,6 +332,7 @@ export function VideoCanvas({
     useEffect(() => {
         screenShareStreamRef.current = screenShareStream;
         screenFrameStartRef.current = null;
+        zoomRef.current = { ...DEFAULT_ZOOM };
         const screenVideo = screenVideoRef.current;
         if (!screenVideo) return;
         if (!screenShareStream) {
@@ -462,7 +489,18 @@ export function VideoCanvas({
             language: s.airWriteLanguage,
             snapShapes: s.airDrawingSnapShapes,
             rainbow: s.airDrawingRainbow,
+            zoomEnabled: s.airZoomEnabled,
         };
+    };
+
+    const isScreenFrameReady = () => {
+        const screen = screenVideoRef.current;
+        return Boolean(
+            screenShareStreamRef.current
+            && screen
+            && screen.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA
+            && screen.videoWidth > 0
+        );
     };
 
     const getAirSpace = (canvas: HTMLCanvasElement): { space: AnnotationSpace; rect: TargetRect } => {
@@ -498,13 +536,34 @@ export function VideoCanvas({
         }
     };
 
+    /** Moves the zoom state toward the pinch input; eases back to 1x when there is no input. */
+    const updateZoom = (engine: AirDrawingEngine | null, enabled: boolean, maxScale: number) => {
+        const z = zoomRef.current;
+        const input = enabled && engine ? engine.getZoomInput() : null;
+        if (input) {
+            if (input.active) {
+                const k = Math.min(1, Math.max(0, (input.ratio - 0.3) / 0.9));
+                const target = 1 + k * (maxScale - 1);
+                z.scale += (target - z.scale) * 0.2;
+                z.x += (input.x - z.x) * 0.2;
+                z.y += (input.y - z.y) * 0.2;
+            } // wrong pose: hold current zoom
+        } else {
+            z.scale += (1 - z.scale) * 0.1;
+        }
+    };
+
     const updateAirDrawing = (video: HTMLVideoElement) => {
         const engine = airDrawingRef.current;
         const current = settingsRef.current;
-        if (!engine || !current.airDrawingEnabled || video.videoWidth === 0) return;
+        if (!engine || !current.airDrawingEnabled || video.videoWidth === 0) {
+            updateZoom(null, false, 1);
+            return;
+        }
         const canvas = visibleCanvasRef.current;
         if (!canvas) return;
         const { space } = getAirSpace(canvas);
+
         engine.update(video, clockMs(), getAirOptions(), {
             videoWidth: video.videoWidth,
             videoHeight: video.videoHeight,
@@ -513,6 +572,8 @@ export function VideoCanvas({
                 : getFrameCrop(video.videoWidth, video.videoHeight, current.aspectRatio),
             mirror: current.cameraFacing !== 'environment',
         }, space);
+
+        updateZoom(engine, Boolean(current.airZoomEnabled), current.airZoomScale ?? DEFAULT_MAX_ZOOM);
     };
 
     const buildSmoothedMaskCanvas = (confidenceMask: Float32Array, width: number, height: number) => {
@@ -557,16 +618,6 @@ export function VideoCanvas({
         }
     };
 
-    const isScreenFrameReady = () => {
-        const screen = screenVideoRef.current;
-        return Boolean(
-            screenShareStreamRef.current
-            && screen
-            && screen.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA
-            && screen.videoWidth > 0
-        );
-    };
-
     const renderFrame = (result?: ImageSegmenterResult) => {
         const video = videoRef.current;
         const canvas = visibleCanvasRef.current;
@@ -589,12 +640,23 @@ export function VideoCanvas({
 
         if (isScreenFrameReady()) {
             if (screenFrameStartRef.current === null) screenFrameStartRef.current = clockMs();
-            drawScreenShareFrame(ctx, canvas, screenVideoRef.current!, video, filter, mirror, {
-                style: current.screenFrameStyle ?? 'browser',
-                background: current.screenFrameBackground ?? 'aurora',
-                label: current.screenFrameLabel || 'Screen share',
-                progress: getFrameProgress(clockMs(), screenFrameStartRef.current),
-            }, current.screenShareShowCamera !== false);
+            drawScreenShareFrame(
+                ctx,
+                canvas,
+                screenVideoRef.current!,
+                video,
+                filter,
+                mirror,
+                {
+                    style: current.screenFrameStyle ?? 'browser',
+                    background: current.screenFrameBackground ?? 'aurora',
+                    label: current.screenFrameLabel || 'Screen share',
+                    progress: getFrameProgress(clockMs(), screenFrameStartRef.current),
+                },
+                current.screenShareShowCamera !== false,
+                zoomRef.current,
+                getAirSpace(canvas).rect
+            );
             finishFrame(ctx, canvas, false);
             return;
         }

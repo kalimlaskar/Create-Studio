@@ -54,4 +54,8 @@ export interface StudioSettings {
     uploadedVideoUrl?: string;  // Added
     airDrawingSnapShapes: boolean;   // new
     airDrawingRainbow: boolean;      // new
+    airZoomEnabled: boolean;
+    airZoomScale: number; // e.g., 1.5x to 3.0x zoom
+    airZoomX: number;     // Normalized coordinates (0-1) where zoom centers
+    airZoomY: number;
 }
