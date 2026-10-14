@@ -76,20 +76,30 @@ export function SidebarControls({ settings, onUpdateSettings, onCameraArtEffectC
 
                 {/* Aspect Ratio Selector */}
                 <div className="mb-6">
-                    <label className="text-[11px] font-bold uppercase tracking-wider text-[#14121F]/70 mb-2 block">Device Frame</label>
-                    <div className="grid grid-cols-3 gap-2">
-                        {(['9:16', '16:9', '1:1'] as AspectRatioType[]).map((ratio) => {
-                            const Icon = ratio === '9:16' ? Smartphone : ratio === '16:9' ? Monitor : Square;
-                            const label = ratio === '9:16' ? 'Reels' : ratio === '16:9' ? 'YouTube' : 'Square';
+                    <div className="flex items-center justify-between mb-2">
+                        <label className="text-[11px] font-bold uppercase tracking-wider text-[#14121F]/70">Video Format</label>
+                        <span className="text-[10px] font-medium text-[#14121F]/40">Layout & Canvas</span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2.5">
+                        {[
+                            { ratio: '16:9', label: 'Landscape', sub: 'YouTube / Web', icon: Monitor },
+                            { ratio: '9:16', label: 'Vertical', sub: 'Reels / TikTok', icon: Smartphone },
+                            { ratio: '1:1', label: 'Square', sub: 'Feed / Posts', icon: Square },
+                        ].map(({ ratio, label, sub, icon: Icon }) => {
+                            const isSelected = settings.aspectRatio === ratio;
                             return (
                                 <button
                                     key={ratio}
-                                    onClick={() => setAspectRatio(ratio)}
-                                    className={`flex flex-col items-center justify-center p-2.5 rounded-2xl border text-xs font-medium gap-1 transition-all ${settings.aspectRatio === ratio
-                                        ? 'bg-[#6A4CFF] border-[#6A4CFF] text-white shadow-sm'
-                                        : 'border-[#14121F]/10 bg-[#F7F6FB] text-[#14121F]/70 hover:bg-[#14121F]/5 hover:text-[#14121F]'
-                                        }`}>
-                                    <Icon className="w-4 h-4" /> {label} ({ratio})
+                                    type="button"
+                                    onClick={() => setAspectRatio(ratio as AspectRatioType)}
+                                    className={`flex flex-col items-center justify-center p-3 rounded-2xl border text-xs transition-all ${isSelected
+                                        ? 'bg-[#6A4CFF] border-[#6A4CFF] text-white shadow-md shadow-[#6A4CFF]/20'
+                                        : 'border-[#14121F]/10 bg-[#F7F6FB] text-[#14121F]/80 hover:bg-[#14121F]/5 hover:text-[#14121F]'
+                                        }`}
+                                >
+                                    <Icon className={`w-4 h-4 mb-1.5 ${isSelected ? 'text-white' : 'text-[#6A4CFF]'}`} />
+                                    <span className="font-semibold">{label}</span>
+                                    <span className={`text-[9px] mt-0.5 ${isSelected ? 'text-white/80' : 'text-[#14121F]/50'}`}>{sub}</span>
                                 </button>
                             );
                         })}

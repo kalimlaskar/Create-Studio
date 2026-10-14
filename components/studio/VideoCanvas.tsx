@@ -12,6 +12,7 @@ import { getHandwritingService } from './handwriting';
 import { annotationTimeline } from './annotationTimeline';
 import { applyArtisticEffect, CameraArtEffect, drawPhotoAvatar, drawTrackedAvatar, FaceLandmarkPoint } from './artisticEffects';
 import { computeScreenFrameLayout, drawScreenFrame, getFrameProgress, ScreenFrameOptions } from './screenFrame';
+import { Sparkles, Radio } from 'lucide-react';
 
 interface VideoCanvasProps {
     videoRef: RefObject<HTMLVideoElement | null>;
@@ -115,7 +116,6 @@ function getMaskCropRect(
     };
 }
 
-/** Redraws the zoomed portion of the shared screen over the screen's content rectangle. */
 function drawZoomedScreen(ctx: CanvasRenderingContext2D, screen: HTMLVideoElement, rect: PixelRect, zoom: ZoomState) {
     if (zoom.scale < 1.02) return;
     const sw = screen.videoWidth / zoom.scale;
@@ -146,7 +146,7 @@ function drawScreenShareFrame(
 
     ctx.save();
     ctx.clearRect(0, 0, width, height);
-    ctx.fillStyle = '#14121F';
+    ctx.fillStyle = '#0B0A10';
     ctx.fillRect(0, 0, width, height);
 
     let framed: ReturnType<typeof drawScreenFrame> = null;
@@ -165,22 +165,28 @@ function drawScreenShareFrame(
         ctx.drawImage(screen, (width - sw) / 2, (height - sh) / 2, sw, sh);
     }
 
-    // Zoom is drawn before the camera card so the card stays on top.
     if (zoom && zoomRect) drawZoomedScreen(ctx, screen, zoomRect, zoom);
 
     if (showCamera && camera.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && camera.videoWidth > 0) {
-        const cardWidth = Math.round(width * 0.25);
-        const cardHeight = Math.round(cardWidth * 0.66);
-        const inset = Math.max(18, Math.round(width * 0.018));
+        const cardWidth = Math.round(width * 0.24);
+        const cardHeight = Math.round(cardWidth * 0.62);
+        const inset = Math.max(20, Math.round(width * 0.02));
         const cardX = width - cardWidth - inset;
         const cardY = height - cardHeight - inset;
-        const radius = Math.max(16, Math.round(cardWidth * 0.08));
+        const radius = Math.max(20, Math.round(cardWidth * 0.09));
         const crop = getFrameCrop(camera.videoWidth, camera.videoHeight, '16:9');
 
+        // Futuristic Glow Backdrop for Camera PIP
         ctx.save();
-        ctx.shadowColor = 'rgba(20,18,31,0.2)';
-        ctx.shadowBlur = Math.max(16, Math.round(width * 0.015));
-        ctx.shadowOffsetY = Math.max(6, Math.round(width * 0.005));
+        ctx.shadowColor = 'rgba(106,76,255,0.4)';
+        ctx.shadowBlur = 24;
+        ctx.fillStyle = 'rgba(20, 18, 31, 0.85)';
+        ctx.beginPath();
+        ctx.roundRect(cardX - 4, cardY - 4, cardWidth + 8, cardHeight + 8, radius + 4);
+        ctx.fill();
+        ctx.restore();
+
+        ctx.save();
         ctx.beginPath();
         ctx.roundRect(cardX, cardY, cardWidth, cardHeight, radius);
         ctx.clip();
@@ -194,23 +200,25 @@ function drawScreenShareFrame(
         ctx.drawImage(camera, crop.x, crop.y, crop.width, crop.height, 0, 0, cardWidth, cardHeight);
         ctx.restore();
 
-        ctx.lineWidth = Math.max(3, width * 0.002);
-        ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+        // High-end cyber border stroke
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = 'rgba(255,255,255,0.25)';
         ctx.beginPath();
         ctx.roundRect(cardX, cardY, cardWidth, cardHeight, radius);
         ctx.stroke();
 
-        ctx.font = `700 ${Math.max(11, Math.round(width * 0.012))}px var(--font-display, sans-serif)`;
-        ctx.textAlign = 'left';
-        ctx.textBaseline = 'middle';
-        const pad = Math.max(8, Math.round(cardWidth * 0.035));
-        const labelHeight = Math.max(22, Math.round(cardHeight * 0.15));
-        ctx.fillStyle = 'rgba(20,18,31,0.75)';
+        // LIVE Telemetry Pill inside camera view
+        const pad = Math.max(10, Math.round(cardWidth * 0.04));
+        const labelHeight = Math.max(20, Math.round(cardHeight * 0.14));
+        ctx.fillStyle = 'rgba(10, 9, 15, 0.8)';
         ctx.beginPath();
-        ctx.roundRect(cardX + pad, cardY + pad, Math.max(48, cardWidth * 0.2), labelHeight, labelHeight / 2);
+        ctx.roundRect(cardX + pad, cardY + pad, Math.max(54, cardWidth * 0.26), labelHeight, labelHeight / 2);
         ctx.fill();
-        ctx.fillStyle = '#fff';
-        ctx.fillText('YOU', cardX + pad * 2, cardY + pad + labelHeight / 2);
+
+        ctx.font = `700 ${Math.max(10, Math.round(width * 0.011))}px sans-serif`;
+        ctx.fillStyle = '#A78BFA';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('● LIVE FEED', cardX + pad + 8, cardY + pad + labelHeight / 2);
     }
 
     ctx.restore();
@@ -229,7 +237,6 @@ function createBackgroundTicker(onTick: () => void, fps: number) {
             URL.revokeObjectURL(url);
         };
     } catch (error) {
-        console.warn('Worker ticker unavailable, using main-thread interval:', error);
         const id = window.setInterval(onTick, intervalMs);
         return () => window.clearInterval(id);
     }
@@ -390,7 +397,6 @@ export function VideoCanvas({
                 if (cancelled) { segmenter.close(); return; }
                 segmenterRef.current = segmenter;
             } catch (err) {
-                console.error('GPU segmenter init failed, falling back to CPU:', err);
                 try {
                     const segmenter = await createSegmenter('CPU');
                     if (cancelled) { segmenter.close(); return; }
@@ -465,7 +471,7 @@ export function VideoCanvas({
             onStatus: setAirStatus,
         });
         airDrawingRef.current = engine;
-        engine.load().catch((error) => console.error('Hand Landmarker could not be initialized:', error));
+        engine.load().catch((error) => console.error('Hand Landmarker initialization failed:', error));
         return () => {
             if (airDrawingRef.current === engine) airDrawingRef.current = null;
             engine.dispose();
@@ -536,7 +542,6 @@ export function VideoCanvas({
         }
     };
 
-    /** Moves the zoom state toward the pinch input; eases back to 1x when there is no input. */
     const updateZoom = (engine: AirDrawingEngine | null, enabled: boolean, maxScale: number) => {
         const z = zoomRef.current;
         const input = enabled && engine ? engine.getZoomInput() : null;
@@ -547,7 +552,7 @@ export function VideoCanvas({
                 z.scale += (target - z.scale) * 0.2;
                 z.x += (input.x - z.x) * 0.2;
                 z.y += (input.y - z.y) * 0.2;
-            } // wrong pose: hold current zoom
+            }
         } else {
             z.scale += (1 - z.scale) * 0.1;
         }
@@ -694,7 +699,7 @@ export function VideoCanvas({
             } else if (mode === 'image' && bgImageRef.current?.complete) {
                 drawImageCover(ctx, bgImageRef.current, width, height);
             } else if (mode !== 'transparent') {
-                ctx.fillStyle = '#14121F';
+                ctx.fillStyle = '#0B0A10';
                 ctx.fillRect(0, 0, width, height);
                 ctx.globalAlpha = 0.15;
                 drawMirrored(ctx, video, crop, width, height, 'none', mirror);
@@ -737,7 +742,7 @@ export function VideoCanvas({
             } else if (bgImageRef.current?.complete) {
                 drawImageCover(ctx, bgImageRef.current, width, height);
             } else {
-                ctx.fillStyle = '#14121F';
+                ctx.fillStyle = '#0B0A10';
                 ctx.fillRect(0, 0, width, height);
             }
 
@@ -897,16 +902,17 @@ export function VideoCanvas({
     const isPhotoAvatarEditable = settings.cameraArtEffect === 'photo-avatar' && Boolean(settings.cameraAvatarImageUrl);
 
     return (
-        <div className="relative flex min-h-0 flex-1 flex-col items-center justify-center overflow-hidden bg-[#14121F] p-3 sm:p-6">
+        <div className="relative flex min-h-0 flex-1 flex-col items-center justify-center overflow-hidden bg-gradient-to-br from-[#0B0A10] via-[#14121F] to-[#1A162B] p-4 sm:p-8">
             {countdown !== null && (
-                <div className="absolute inset-0 z-30 flex items-center justify-center bg-[#14121F]/80 backdrop-blur-md">
-                    <span className="animate-pulse text-8xl font-extrabold text-[#6A4CFF] font-[family-name:var(--font-display)]">{countdown}</span>
+                <div className="absolute inset-0 z-30 flex items-center justify-center bg-[#0B0A10]/85 backdrop-blur-xl">
+                    <span className="animate-bounce text-8xl font-black text-[#8B5CF6] font-[family-name:var(--font-display)] drop-shadow-[0_0_40px_rgba(139,92,246,0.6)]">{countdown}</span>
                 </div>
             )}
 
             <video ref={videoRef} autoPlay playsInline muted aria-hidden="true" className={OFFSCREEN_VIDEO_CLASS} />
             <video ref={screenVideoRef} autoPlay playsInline muted aria-hidden="true" className={OFFSCREEN_VIDEO_CLASS} />
 
+            {/* Futuristic Holographic Stage Wrapper */}
             <div
                 style={{ aspectRatio: settings.aspectRatio.replace(':', ' / ') }}
                 onPointerDown={(event) => {
@@ -917,7 +923,7 @@ export function VideoCanvas({
                         Math.max(0.35, Math.min(0.9, (event.clientY - rect.top) / rect.height))
                     );
                 }}
-                className={`relative h-full max-h-full max-w-full shrink-0 overflow-hidden rounded-[2.2rem] border border-white/10 bg-black shadow-[0_20px_50px_-15px_rgba(20,18,31,0.25)] transition-all duration-300 ${getAspectRatioClass(settings.aspectRatio)} ${isPhotoAvatarEditable ? 'cursor-crosshair' : ''}`}
+                className={`relative h-full max-h-full max-w-full shrink-0 overflow-hidden rounded-[2.5rem] border border-white/20 bg-[#0B0A10] shadow-[0_25px_70px_-15px_rgba(106,76,255,0.25)] ring-1 ring-white/10 transition-all duration-300 ${getAspectRatioClass(settings.aspectRatio)} ${isPhotoAvatarEditable ? 'cursor-crosshair' : ''}`}
             >
                 <canvas
                     ref={visibleCanvasRef}
@@ -926,7 +932,7 @@ export function VideoCanvas({
                 />
 
                 {airStatus && (
-                    <div role="status" className="pointer-events-none absolute left-1/2 top-4 z-30 max-w-[90%] -translate-x-1/2 rounded-full border border-white/10 bg-white/90 px-4 py-2 text-center text-xs font-semibold text-[#14121F] shadow-lg backdrop-blur-md">
+                    <div role="status" className="pointer-events-none absolute left-1/2 top-4 z-30 max-w-[90%] -translate-x-1/2 rounded-full border border-white/15 bg-[#14121F]/90 px-4 py-2 text-center text-xs font-semibold text-white shadow-xl backdrop-blur-xl">
                         {airStatus}
                     </div>
                 )}
@@ -938,28 +944,28 @@ export function VideoCanvas({
                             event.preventDefault();
                             applyEdit((engine, id) => engine.setText(id, editing.draft));
                         }}
-                        className="absolute z-40 w-64 -translate-x-1/2 space-y-2.5 rounded-3xl border border-[#14121F]/10 bg-white p-4 shadow-2xl text-[#14121F] backdrop-blur-xl"
+                        className="absolute z-40 w-64 -translate-x-1/2 space-y-2.5 rounded-3xl border border-white/15 bg-[#14121F]/95 p-4 shadow-2xl text-white backdrop-blur-2xl"
                         style={{ left: `${Math.min(80, Math.max(20, editing.left * 100))}%`, top: `${Math.min(75, editing.top * 100 + 4)}%` }}
                     >
-                        <label className="block text-[11px] font-bold uppercase tracking-wider text-[#14121F]/70" htmlFor="air-text-edit">Correct text</label>
+                        <label className="block text-[11px] font-bold uppercase tracking-wider text-white/70" htmlFor="air-text-edit">Correct text</label>
                         <input
                             id="air-text-edit"
                             autoFocus
                             value={editing.draft}
                             onChange={(event) => setEditing({ ...editing, draft: event.target.value })}
-                            className="w-full rounded-2xl border border-[#14121F]/15 bg-[#F7F6FB] px-3.5 py-2.5 text-sm font-medium text-[#14121F] outline-none focus:border-[#6A4CFF] focus:bg-white"
+                            className="w-full rounded-2xl border border-white/15 bg-white/10 px-3.5 py-2.5 text-sm font-medium text-white outline-none focus:border-[#8B5CF6] focus:bg-white/20"
                         />
                         <div className="flex gap-2 text-xs font-semibold">
-                            <button type="submit" className="flex-1 rounded-full bg-[#6A4CFF] px-3 py-2 text-white shadow-sm hover:bg-[#5839e0]">Save</button>
+                            <button type="submit" className="flex-1 rounded-full bg-[#8B5CF6] px-3 py-2 text-white shadow-lg shadow-purple-500/30 hover:bg-[#7c4dff] transition">Save</button>
                             {editing.status === 'done' && (
                                 <button
                                     type="button"
                                     onClick={() => applyEdit((engine, id) => engine.setShowOriginal(id, !editing.showOriginal))}
-                                    className="flex-1 rounded-full border border-[#14121F]/15 bg-[#F7F6FB] px-3 py-2 text-[#14121F] hover:bg-[#14121F] hover:text-white transition">
+                                    className="flex-1 rounded-full border border-white/15 bg-white/10 px-3 py-2 text-white hover:bg-white/20 transition">
                                     {editing.showOriginal ? 'Use typed' : 'My writing'}
                                 </button>
                             )}
-                            <button type="button" aria-label="Delete word" onClick={() => applyEdit((engine, id) => engine.removeItem(id))} className="rounded-full border border-red-200 bg-red-50 px-3 py-2 text-red-600 hover:bg-red-600 hover:text-white transition">Delete</button>
+                            <button type="button" aria-label="Delete word" onClick={() => applyEdit((engine, id) => engine.removeItem(id))} className="rounded-full border border-red-500/30 bg-red-500/20 px-3 py-2 text-red-300 hover:bg-red-500 hover:text-white transition">Delete</button>
                         </div>
                     </form>
                 )}
@@ -970,7 +976,7 @@ export function VideoCanvas({
                         className="pointer-events-none absolute z-30 -translate-x-1/2 -translate-y-1/2"
                         style={{ left: `${settings.cameraAvatarMouthX * 100}%`, top: `${settings.cameraAvatarMouthY * 100}%` }}
                     >
-                        <span className="block h-6 w-6 rounded-full border-2 border-white bg-[#6A4CFF]/50 shadow-[0_0_15px_rgba(106,76,255,.8)]" />
+                        <span className="block h-6 w-6 rounded-full border-2 border-white bg-[#8B5CF6]/50 shadow-[0_0_20px_rgba(139,92,246,.9)] animate-pulse" />
                         <span className="absolute left-1/2 top-1/2 h-px w-8 -translate-x-1/2 -translate-y-1/2 bg-white" />
                         <span className="absolute left-1/2 top-1/2 h-8 w-px -translate-x-1/2 -translate-y-1/2 bg-white" />
                     </div>
@@ -978,10 +984,11 @@ export function VideoCanvas({
 
                 {!screenShareStream && <TeleprompterOverlay scriptText={settings.scriptText} />}
 
+                {/* Futuristic Recording Badge / Telemetry Status */}
                 {isRecording && (
-                    <div className={`absolute left-4 top-4 z-30 flex items-center gap-2 rounded-full px-4 py-2 text-xs font-bold text-white shadow-lg backdrop-blur-md sm:left-5 sm:top-5 ${isRecordingPaused ? 'bg-amber-500/90' : isProUser ? 'bg-[#6A4CFF]/90 shadow-[0_4px_20px_rgba(106,76,255,0.4)]' : 'bg-[#FF3D81]/90 shadow-[0_4px_20px_rgba(255,61,129,0.4)]'}`}>
-                        <span className={`h-2.5 w-2.5 rounded-full bg-white ${isRecordingPaused ? '' : 'animate-pulse'}`} />
-                        {isRecordingPaused ? 'PAUSED' : 'RECORDING'} · {isProUser ? 'PRO PLAN' : 'FREE PLAN'}
+                    <div className={`absolute left-4 top-4 z-30 flex items-center gap-2 rounded-full px-4 py-2 text-xs font-bold text-white shadow-2xl backdrop-blur-xl sm:left-5 sm:top-5 border border-white/15 ${isRecordingPaused ? 'bg-amber-500/90' : isProUser ? 'bg-[#8B5CF6]/90 shadow-[0_4px_25px_rgba(139,92,246,0.5)]' : 'bg-[#EC4899]/90 shadow-[0_4px_25px_rgba(236,72,153,0.5)]'}`}>
+                        <span className={`h-2.5 w-2.5 rounded-full bg-white ${isRecordingPaused ? '' : 'animate-ping'}`} />
+                        {isRecordingPaused ? 'PAUSED' : 'RECORDING'} · {isProUser ? 'CLIPRAME PRO' : 'FREE'}
                     </div>
                 )}
             </div>
