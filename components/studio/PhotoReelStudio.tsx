@@ -1657,7 +1657,12 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
                 }
             }
 
-            recorder = createExportRecorder(new MediaStream(tracks), 'mp4', '1080p');
+            // Use supported MIME type fallback for broader compatibility
+            const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus')
+                ? 'video/webm;codecs=vp9,opus'
+                : 'video/webm';
+
+            recorder = new MediaRecorder(new MediaStream(tracks), { mimeType });
             const chunks: Blob[] = [];
             const activeRecorder = recorder;
             let renderingError: Error | null = null;
@@ -1676,18 +1681,19 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
             });
 
             setExportStatus('Rendering your reel…');
-            activeRecorder.start(250);
+            activeRecorder.start(); // Start without slice interval to collect continuous stream chunks cleanly
+
             const audioPlayback = Promise.all([
                 audioElement?.play().catch(() => { }),
                 voiceoverAudioElement?.play().catch(() => { }),
             ]);
 
-            // Deterministic frame stepping based on RECORDING_FRAME_RATE
             const frameIntervalMs = 1000 / RECORDING_FRAME_RATE;
             let elapsed = 0;
             let activeVideoId: string | null = null;
             let lastReportedClip = -1;
 
+            // Synchronous-safe frame stepping loop using a reliable async timer step
             while (elapsed <= durationMs) {
                 const index = getIndexAtTime(elapsed);
                 const clip = images[index];
@@ -1704,11 +1710,17 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
                     video.muted = true;
                     if (activeVideoId !== clip.id) {
                         videoCacheRef.current.forEach((item, id) => { if (id !== clip.id) item.pause(); });
-                        const targetTime = Math.min((localTimeMs / 1000) * (clip.speed ?? 1), Math.max(0, video.duration - 0.05));
+                        activeVideoId = clip.id;
+                    }
+                    const targetTime = Math.min((localTimeMs / 1000) * (clip.speed ?? 1), Math.max(0, video.duration - 0.05));
+                    if (Math.abs(video.currentTime - targetTime) > 0.08) {
                         video.currentTime = targetTime;
+                        // Wait briefly for video element to seek frame cleanly
+                        await new Promise((r) => requestAnimationFrame(r));
+                    }
+                    if (video.paused) {
                         video.playbackRate = clip.speed ?? 1;
                         await video.play().catch(() => { });
-                        activeVideoId = clip.id;
                     }
                 } else {
                     if (activeVideoId) {
@@ -1720,17 +1732,15 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
                 const transitionProgress = clip.transition === 'cut' ? 1 : Math.min(1, localTimeMs / TRANSITION_MS);
                 const motionProgress = localTimeMs / Math.max(1, getClipDurationMs(clip));
 
-                // Draw exact match frame
                 drawSlide(exportContext, clip, exportCanvas.width, exportCanvas.height, transitionProgress, motionProgress);
                 drawFreeTierWatermark(exportContext, exportCanvas.width, exportCanvas.height);
 
                 setExportProgress(5 + Math.min(80, Math.floor((elapsed / durationMs) * 80)));
 
-                // Advance deterministic timer
                 elapsed += frameIntervalMs;
 
-                // Yield control briefly to prevent UI blocking
-                await new Promise((r) => setTimeout(r, 0));
+                // Frame-pacing yield using requestAnimationFrame instead of bare setTimeout
+                await new Promise((resolve) => requestAnimationFrame(resolve));
             }
 
             if (activeRecorder.state === 'recording') activeRecorder.stop();
