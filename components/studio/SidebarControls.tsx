@@ -1,12 +1,16 @@
 'use client';
 
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import Image from 'next/image';
-import { Sun, Smartphone, Monitor, Square, Upload, X, Camera } from 'lucide-react';
+import {
+    Camera, Circle, Droplets, ImageIcon, Leaf, Monitor, PenTool, RotateCcw, Scissors, ScrollText,
+    SlidersHorizontal, Smartphone, Sparkles, Square, Sun, Upload, X,
+} from 'lucide-react';
 import { AirWritingFont, AirWritingLanguage, AspectRatioType, CameraArtEffect, FilterPresetType, StudioSettings } from '@/types/studio';
 import { Teleprompter } from './Teleprompter';
 import { AIR_FONTS } from './airDrawing';
 import { WRITING_LANGUAGES } from './handwriting';
+import { ACCENT, Card, Hint, PINK, SelectField, Segmented, Slider, TextInput, Toggle, ToggleRow } from './SidebarPrimitives';
 
 interface SidebarControlsProps {
     settings: StudioSettings;
@@ -15,490 +19,464 @@ interface SidebarControlsProps {
     cameraSwitchDisabled?: boolean;
 }
 
+/* ------------------------------ config ------------------------------ */
+type TabId = 'setup' | 'look' | 'effects' | 'script';
+
+const TABS: Array<{ id: TabId; label: string; icon: typeof Camera }> = [
+    { id: 'setup', label: 'Setup', icon: Camera },
+    { id: 'look', label: 'Look', icon: SlidersHorizontal },
+    { id: 'effects', label: 'Effects', icon: Sparkles },
+    { id: 'script', label: 'Script', icon: ScrollText },
+];
+
+const ASPECTS = [
+    { value: '16:9', label: 'Landscape', hint: 'YouTube', icon: Monitor },
+    { value: '9:16', label: 'Vertical', hint: 'Reels', icon: Smartphone },
+    { value: '1:1', label: 'Square', hint: 'Feed', icon: Square },
+] as const;
+
+const BACKGROUNDS: Array<{ value: StudioSettings['backgroundMode']; label: string; icon: typeof Circle; swatch: string }> = [
+    { value: 'none', label: 'Normal', icon: Circle, swatch: 'bg-gradient-to-br from-slate-100 to-slate-200' },
+    { value: 'blur', label: 'Blur', icon: Droplets, swatch: 'bg-gradient-to-br from-sky-100 to-indigo-200' },
+    { value: 'green', label: 'Green', icon: Leaf, swatch: 'bg-gradient-to-br from-emerald-300 to-emerald-500' },
+    { value: 'transparent', label: 'Cutout', icon: Scissors, swatch: 'bg-[conic-gradient(#e5e7eb_25%,#fff_0_50%,#e5e7eb_0_75%,#fff_0)] bg-[length:12px_12px]' },
+    { value: 'image', label: 'Image', icon: ImageIcon, swatch: 'bg-gradient-to-br from-violet-200 to-pink-200' },
+];
+
+const FILTERS: Array<{ value: FilterPresetType; label: string; swatch: string }> = [
+    { value: 'none', label: 'Normal', swatch: 'from-slate-100 to-slate-300' },
+    { value: 'cinematic', label: 'Cinematic', swatch: 'from-teal-300 to-orange-300' },
+    { value: 'warm', label: 'Warm', swatch: 'from-amber-200 to-rose-300' },
+    { value: 'mono', label: 'B&W', swatch: 'from-zinc-200 to-zinc-600' },
+];
+
+const ART_EFFECTS: Array<{ value: CameraArtEffect; label: string }> = [
+    { value: 'none', label: 'Original' },
+    { value: 'comic', label: 'Comic ink' },
+    { value: 'sketch', label: 'Pencil' },
+    { value: 'pixel', label: 'Pixel art' },
+    { value: 'anime', label: 'Anime' },
+    { value: 'avatar', label: 'Tracked avatar' },
+    { value: 'photo-avatar', label: 'Photo avatar' },
+];
+
+const HOLOGRAM_COLORS = [
+    { value: 'cyan', label: 'Cyan', dot: 'bg-cyan-500' },
+    { value: 'purple', label: 'Purple', dot: 'bg-[#6A4CFF]' },
+    { value: 'green', label: 'Green', dot: 'bg-emerald-500' },
+] as const;
+
+const DRAW_TOOLS = [
+    { value: 'pen', label: 'Pen' },
+    { value: 'highlighter', label: 'Marker' },
+    { value: 'arrow', label: 'Arrow' },
+    { value: 'laser', label: 'Laser' },
+] as const;
+
+const MAX_AVATAR_BYTES = 12 * 1024 * 1024;
+
+/* ----------------------------- component ---------------------------- */
 export function SidebarControls({ settings, onUpdateSettings, onCameraArtEffectChange, cameraSwitchDisabled = false }: SidebarControlsProps) {
-    const fileInputRef = useRef<HTMLInputElement>(null);
+    const [tab, setTab] = useState<TabId>('setup');
+    const bgInputRef = useRef<HTMLInputElement>(null);
     const avatarInputRef = useRef<HTMLInputElement>(null);
 
-    const setAspectRatio = (ratio: AspectRatioType) => onUpdateSettings({ aspectRatio: ratio });
-    const setBrightness = (brightness: number) => onUpdateSettings({ brightness });
-    const setContrast = (contrast: number) => onUpdateSettings({ contrast });
-    const setFilterPreset = (filterPreset: FilterPresetType) => onUpdateSettings({ filterPreset });
-    const setScriptText = (scriptText: string) => onUpdateSettings({ scriptText });
+    const lightingChanged = settings.brightness !== 100 || settings.contrast !== 100;
 
-    const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
+    /* ---- background ---- */
+    const handleBackgroundImage = (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
         if (!file) return;
-
-        if (settings.backgroundImageUrl) {
-            URL.revokeObjectURL(settings.backgroundImageUrl);
-        }
-
-        const url = URL.createObjectURL(file);
-        onUpdateSettings({ backgroundMode: 'image', backgroundImageUrl: url });
-        e.target.value = '';
+        if (settings.backgroundImageUrl) URL.revokeObjectURL(settings.backgroundImageUrl);
+        onUpdateSettings({ backgroundMode: 'image', backgroundImageUrl: URL.createObjectURL(file) });
+        event.target.value = '';
     };
 
-    const clearImage = () => {
-        if (settings.backgroundImageUrl) {
-            URL.revokeObjectURL(settings.backgroundImageUrl);
-        }
+    const clearBackgroundImage = () => {
+        if (settings.backgroundImageUrl) URL.revokeObjectURL(settings.backgroundImageUrl);
         onUpdateSettings({ backgroundMode: 'none', backgroundImageUrl: null });
     };
 
+    const pickBackground = (mode: StudioSettings['backgroundMode']) => {
+        if (mode === 'image' && !settings.backgroundImageUrl) {
+            bgInputRef.current?.click();
+            return;
+        }
+        onUpdateSettings({ backgroundMode: mode });
+    };
+
+    /* ---- cartoon avatar ---- */
+    const handleAvatarFile = (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+        if (file.size > MAX_AVATAR_BYTES) {
+            window.alert('Choose an image smaller than 12 MB.');
+            event.target.value = '';
+            return;
+        }
+        if (settings.cameraAvatarImageUrl) URL.revokeObjectURL(settings.cameraAvatarImageUrl);
+        onUpdateSettings({ cameraAvatarImageUrl: URL.createObjectURL(file) });
+        event.target.value = '';
+    };
+
+    const pickArtEffect = (effect: CameraArtEffect) => {
+        if (effect !== 'none') onUpdateSettings({ hologramEnabled: false });
+        onCameraArtEffectChange(effect);
+        if (effect === 'photo-avatar' && !settings.cameraAvatarImageUrl) avatarInputRef.current?.click();
+    };
+
+    const toggleHologram = (next: boolean) => {
+        if (next && settings.cameraArtEffect !== 'none') onCameraArtEffectChange('none');
+        onUpdateSettings({ hologramEnabled: next });
+    };
+
+    /* ------------------------------ render ----------------------------- */
     return (
-        <aside className="flex w-full min-h-0 flex-1 flex-col justify-between overflow-y-auto bg-white p-5 font-[family-name:var(--font-body)] text-[#14121F] md:h-full md:w-80 md:flex-none md:border-r md:border-[#14121F]/10">
-            <div>
-                {/* Header */}
-                <div className="flex items-center gap-2.5 mb-6">
+        <aside className="flex min-h-0 w-full flex-1 flex-col bg-[#F7F6FB] font-[family-name:var(--font-body)] text-[#14121F] md:h-full md:w-80 md:flex-none md:border-r md:border-[#14121F]/10">
+            {/* Brand + tabs (sticky) */}
+            <div className="shrink-0 border-b border-[#14121F]/8 bg-white/80 px-4 pb-3 pt-4 backdrop-blur">
+                <div className="mb-3.5 flex items-center gap-2.5">
                     <Image src="/cliprame-icon.svg" alt="" width={32} height={32} className="h-8 w-8" />
-                    <h1 className="font-[family-name:var(--font-display)] text-lg font-bold tracking-tight text-[#14121F]">Cliprame</h1>
+                    <h1 className="font-[family-name:var(--font-display)] text-lg font-bold tracking-tight">Cliprame</h1>
                 </div>
-
-                {/* Camera Selector */}
-                <div className="mb-6">
-                    <label className="text-[11px] font-bold uppercase tracking-wider text-[#14121F]/70 mb-2 block">Camera</label>
-                    <div className="grid grid-cols-2 gap-2">
-                        {([['user', 'Selfie (front)'], ['environment', 'Back camera']] as const).map(([facing, label]) => (
+                <nav role="tablist" aria-label="Studio controls" className="grid grid-cols-4 gap-1 rounded-2xl bg-[#14121F]/5 p-1">
+                    {TABS.map(({ id, label, icon: Icon }) => {
+                        const active = tab === id;
+                        return (
                             <button
-                                key={facing}
+                                key={id}
                                 type="button"
-                                disabled={cameraSwitchDisabled}
-                                onClick={() => onUpdateSettings({ cameraFacing: facing })}
-                                className={`flex items-center justify-center gap-1.5 rounded-2xl border p-2.5 text-xs font-semibold transition-all disabled:cursor-not-allowed disabled:opacity-50 ${settings.cameraFacing === facing
-                                    ? 'bg-[#14121F] border-[#14121F] text-white shadow-sm'
-                                    : 'border-[#14121F]/10 bg-[#F7F6FB] text-[#14121F]/70 hover:bg-[#14121F]/5 hover:text-[#14121F]'
-                                    }`}>
-                                <Camera className="w-4 h-4" /> {label}
+                                role="tab"
+                                id={`studio-tab-${id}`}
+                                aria-selected={active}
+                                aria-controls="studio-tabpanel"
+                                onClick={() => setTab(id)}
+                                className={`flex flex-col items-center gap-0.5 rounded-xl px-1 py-1.5 text-[10px] font-semibold transition-all ${active ? 'bg-white text-[#14121F] shadow-sm' : 'text-[#14121F]/50 hover:text-[#14121F]'}`}>
+                                <Icon className="h-4 w-4" style={{ color: active ? ACCENT : undefined }} />
+                                {label}
                             </button>
-                        ))}
-                    </div>
-                </div>
+                        );
+                    })}
+                </nav>
+            </div>
 
-                {/* Aspect Ratio Selector */}
-                <div className="mb-6">
-                    <div className="flex items-center justify-between mb-2">
-                        <label className="text-[11px] font-bold uppercase tracking-wider text-[#14121F]/70">Video Format</label>
-                        <span className="text-[10px] font-medium text-[#14121F]/40">Layout & Canvas</span>
-                    </div>
-                    <div className="grid grid-cols-3 gap-2.5">
-                        {[
-                            { ratio: '16:9', label: 'Landscape', sub: 'YouTube / Web', icon: Monitor },
-                            { ratio: '9:16', label: 'Vertical', sub: 'Reels / TikTok', icon: Smartphone },
-                            { ratio: '1:1', label: 'Square', sub: 'Feed / Posts', icon: Square },
-                        ].map(({ ratio, label, sub, icon: Icon }) => {
-                            const isSelected = settings.aspectRatio === ratio;
-                            return (
-                                <button
-                                    key={ratio}
-                                    type="button"
-                                    onClick={() => setAspectRatio(ratio as AspectRatioType)}
-                                    className={`flex flex-col items-center justify-center p-3 rounded-2xl border text-xs transition-all ${isSelected
-                                        ? 'bg-[#6A4CFF] border-[#6A4CFF] text-white shadow-md shadow-[#6A4CFF]/20'
-                                        : 'border-[#14121F]/10 bg-[#F7F6FB] text-[#14121F]/80 hover:bg-[#14121F]/5 hover:text-[#14121F]'
-                                        }`}
-                                >
-                                    <Icon className={`w-4 h-4 mb-1.5 ${isSelected ? 'text-white' : 'text-[#6A4CFF]'}`} />
-                                    <span className="font-semibold">{label}</span>
-                                    <span className={`text-[9px] mt-0.5 ${isSelected ? 'text-white/80' : 'text-[#14121F]/50'}`}>{sub}</span>
-                                </button>
-                            );
-                        })}
-                    </div>
-                </div>
-
-                {/* Screen share frame */}
-                <div className="mb-6 space-y-2">
-                    <label htmlFor="screen-frame-style" className="text-[11px] font-bold uppercase tracking-wider text-[#14121F]/70 block">Screen share frame</label>
-                    <select
-                        id="screen-frame-style"
-                        value={settings.screenFrameStyle}
-                        onChange={(e) => onUpdateSettings({ screenFrameStyle: e.target.value as StudioSettings['screenFrameStyle'] })}
-                        className="w-full bg-[#F7F6FB] border border-[#14121F]/10 text-xs rounded-2xl p-2.5 text-[#14121F] focus:outline-none focus:border-[#6A4CFF]">
-                        <option value="browser">Browser window</option>
-                        <option value="macos">macOS window</option>
-                        <option value="minimal">Minimal card</option>
-                        <option value="off">No frame</option>
-                    </select>
-                    {settings.screenFrameStyle !== 'off' && (
-                        <>
-                            <select
-                                aria-label="Frame background"
-                                value={settings.screenFrameBackground}
-                                onChange={(e) => onUpdateSettings({ screenFrameBackground: e.target.value as StudioSettings['screenFrameBackground'] })}
-                                className="w-full bg-[#F7F6FB] border border-[#14121F]/10 text-xs rounded-2xl p-2.5 text-[#14121F] focus:outline-none focus:border-[#6A4CFF]">
-                                <option value="aurora">Aurora</option>
-                                <option value="sunset">Sunset</option>
-                                <option value="midnight">Midnight</option>
-                                <option value="paper">Paper (light)</option>
-                            </select>
-                            {settings.screenFrameStyle === 'browser' && (
+            {/* Scrollable panel */}
+            <div id="studio-tabpanel" role="tabpanel" aria-labelledby={`studio-tab-${tab}`} className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
+                {tab === 'setup' && (
+                    <>
+                        <Card title="Source" description="Where your video comes from" icon={Camera}>
+                            <Segmented
+                                ariaLabel="Studio source"
+                                columns={2}
+                                value={settings.inputMode === 'upload' ? 'upload' : 'camera'}
+                                options={[{ value: 'camera', label: 'Live camera' }, { value: 'upload', label: 'Upload video' }]}
+                                onChange={(inputMode) => onUpdateSettings({ inputMode })}
+                            />
+                            {settings.inputMode === 'upload' ? (
                                 <input
-                                    value={settings.screenFrameLabel}
-                                    maxLength={40}
-                                    aria-label="Address bar text"
-                                    placeholder="Address bar text, e.g. yourproduct.com"
-                                    onChange={(e) => onUpdateSettings({ screenFrameLabel: e.target.value })}
-                                    className="w-full bg-[#F7F6FB] border border-[#14121F]/10 text-xs rounded-2xl p-2.5 text-[#14121F] placeholder:text-[#14121F]/40 focus:outline-none focus:border-[#6A4CFF]"
+                                    type="file"
+                                    accept="video/*"
+                                    aria-label="Upload a video"
+                                    onChange={(event) => {
+                                        const file = event.target.files?.[0];
+                                        if (file) onUpdateSettings({ uploadedVideoUrl: URL.createObjectURL(file) });
+                                    }}
+                                    className="w-full cursor-pointer text-xs text-[#14121F]/60 file:mr-3 file:cursor-pointer file:rounded-xl file:border-0 file:bg-[#6A4CFF] file:px-4 file:py-2 file:text-xs file:font-semibold file:text-white hover:file:bg-[#5839e0]"
+                                />
+                            ) : (
+                                <Segmented
+                                    ariaLabel="Camera"
+                                    columns={2}
+                                    value={settings.cameraFacing}
+                                    disabled={cameraSwitchDisabled}
+                                    options={[{ value: 'user', label: 'Front', icon: Camera }, { value: 'environment', label: 'Back', icon: Camera }]}
+                                    onChange={(cameraFacing) => onUpdateSettings({ cameraFacing })}
                                 />
                             )}
-                        </>
-                    )}
-                    <p className="text-[11px] leading-relaxed text-[#14121F]/50">Shows the shared screen inside a styled window. Before you share, the studio looks normal.</p>
-                </div>
+                        </Card>
 
-                {/* Background Removal / Effects Module */}
-                <div className="mb-6 space-y-2">
-                    <label className="text-[11px] font-bold uppercase tracking-wider text-[#14121F]/70 block">Background Effect</label>
-                    <select
-                        value={settings.backgroundMode}
-                        onChange={(e) => {
-                            const mode = e.target.value as StudioSettings['backgroundMode'];
-                            if (mode === 'image' && !settings.backgroundImageUrl) {
-                                fileInputRef.current?.click();
-                                return;
-                            }
-                            onUpdateSettings({ backgroundMode: mode });
-                        }}
-                        className="w-full bg-[#F7F6FB] border border-[#14121F]/10 text-xs rounded-2xl p-2.5 text-[#14121F] focus:outline-none focus:border-[#6A4CFF]">
-                        <option value="none">Normal Background</option>
-                        <option value="blur">AI Background Blur</option>
-                        <option value="green">Solid Green Screen (Chroma)</option>
-                        <option value="transparent">Transparent / Clean Cutout</option>
-                        <option value="image">Custom Image</option>
-                    </select>
-
-                    <input
-                        ref={fileInputRef}
-                        type="file"
-                        accept="image/*"
-                        onChange={handleImageSelect}
-                        className="hidden"
-                    />
-
-                    {settings.backgroundImageUrl ? (
-                        <div className="relative rounded-2xl overflow-hidden border border-[#14121F]/10 group">
-                            <img src={settings.backgroundImageUrl} alt="Background" className="w-full h-20 object-cover" />
-                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                                <button
-                                    onClick={() => fileInputRef.current?.click()}
-                                    className="p-1.5 bg-white/90 rounded-xl hover:bg-[#6A4CFF] hover:text-white text-[#14121F]">
-                                    <Upload className="w-3.5 h-3.5" />
-                                </button>
-                                <button
-                                    onClick={clearImage}
-                                    className="p-1.5 bg-white/90 rounded-xl hover:bg-red-600 hover:text-white text-[#14121F]">
-                                    <X className="w-3.5 h-3.5" />
-                                </button>
-                            </div>
-                        </div>
-                    ) : (
-                        <button
-                            onClick={() => fileInputRef.current?.click()}
-                            className="w-full flex items-center justify-center gap-2 border border-dashed border-[#14121F]/20 rounded-2xl py-3 text-xs text-[#14121F]/60 hover:border-[#6A4CFF] hover:text-[#6A4CFF] transition-colors">
-                            <Upload className="w-3.5 h-3.5" /> Upload background image
-                        </button>
-                    )}
-                </div>
-
-                {/* Mode Selector */}
-                <div className="mb-6 space-y-2">
-                    <label className="text-[11px] font-bold uppercase tracking-wider text-[#14121F]/70 block">Studio Source</label>
-                    <div className="grid grid-cols-2 gap-2">
-                        <button
-                            onClick={() => onUpdateSettings({ inputMode: 'camera' })}
-                            className={`p-2.5 rounded-2xl border text-xs font-semibold transition-all ${settings.inputMode !== 'upload'
-                                ? 'bg-[#14121F] border-[#14121F] text-white shadow-sm'
-                                : 'border-[#14121F]/10 bg-[#F7F6FB] text-[#14121F]/70 hover:bg-[#14121F]/5 hover:text-[#14121F]'
-                                }`}>
-                            Live Camera
-                        </button>
-                        <button
-                            onClick={() => onUpdateSettings({ inputMode: 'upload' })}
-                            className={`p-2.5 rounded-2xl border text-xs font-semibold transition-all ${settings.inputMode === 'upload'
-                                ? 'bg-[#14121F] border-[#14121F] text-white shadow-sm'
-                                : 'border-[#14121F]/10 bg-[#F7F6FB] text-[#14121F]/70 hover:bg-[#14121F]/5 hover:text-[#14121F]'
-                                }`}>
-                            Upload Video
-                        </button>
-                    </div>
-
-                    {settings.inputMode === 'upload' && (
-                        <div className="mt-3">
-                            <input
-                                type="file"
-                                accept="video/*"
-                                onChange={(e) => {
-                                    const file = e.target.files?.[0];
-                                    if (file) {
-                                        const url = URL.createObjectURL(file);
-                                        onUpdateSettings({ uploadedVideoUrl: url });
-                                    }
-                                }}
-                                className="w-full text-xs text-[#14121F]/60 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-[#6A4CFF] file:text-white hover:file:bg-[#5839e0] cursor-pointer"
+                        <Card title="Video format" description="Canvas size and layout" icon={Monitor}>
+                            <Segmented
+                                ariaLabel="Aspect ratio"
+                                value={settings.aspectRatio}
+                                options={ASPECTS}
+                                onChange={(ratio) => onUpdateSettings({ aspectRatio: ratio as AspectRatioType })}
                             />
-                        </div>
-                    )}
-                </div>
+                        </Card>
 
-                {/* Virtual Lighting & Filters */}
-                <div className="mb-6 space-y-4">
-                    <label className="text-[11px] font-bold uppercase tracking-wider text-[#14121F]/70 flex items-center gap-1.5">
-                        <Sun className="w-3.5 h-3.5 text-[#6A4CFF]" /> Virtual Lighting & Tone
-                    </label>
-                    <div>
-                        <div className="flex justify-between text-xs text-[#14121F]/60 mb-1">
-                            <span>Brightness</span><span>{settings.brightness}%</span>
-                        </div>
-                        <input
-                            type="range" min="50" max="150" value={settings.brightness}
-                            onChange={(e) => setBrightness(Number(e.target.value))}
-                            className="w-full accent-[#6A4CFF] bg-[#14121F]/10 h-1.5 rounded-full cursor-pointer"
-                        />
-                    </div>
-                    <div>
-                        <div className="flex justify-between text-xs text-[#14121F]/60 mb-1">
-                            <span>Contrast</span><span>{settings.contrast}%</span>
-                        </div>
-                        <input
-                            type="range" min="50" max="150" value={settings.contrast}
-                            onChange={(e) => setContrast(Number(e.target.value))}
-                            className="w-full accent-[#6A4CFF] bg-[#14121F]/10 h-1.5 rounded-full cursor-pointer"
-                        />
-                    </div>
-                    <div>
-                        <label className="text-xs text-[#14121F]/60 mb-1 block font-medium">Color Preset</label>
-                        <select
-                            value={settings.filterPreset}
-                            onChange={(e) => setFilterPreset(e.target.value as FilterPresetType)}
-                            className="w-full bg-[#F7F6FB] border border-[#14121F]/10 text-xs rounded-2xl p-2.5 text-[#14121F] focus:outline-none focus:border-[#6A4CFF]">
-                            <option value="none">Normal Studio</option>
-                            <option value="cinematic">Cinematic Teal/Orange</option>
-                            <option value="warm">Warm Vibe</option>
-                            <option value="mono">B&W Documentary</option>
-                        </select>
-                    </div>
-                </div>
-
-                <div className="mb-6 space-y-2">
-                    <input
-                        ref={avatarInputRef}
-                        type="file"
-                        accept="image/png,image/jpeg,image/webp"
-                        className="hidden"
-                        aria-label="Upload cartoon avatar photo"
-                        onChange={(event) => {
-                            const file = event.target.files?.[0];
-                            if (!file) return;
-                            if (file.size > 12 * 1024 * 1024) {
-                                window.alert('Choose an image smaller than 12 MB.');
-                                event.target.value = '';
-                                return;
-                            }
-                            if (settings.cameraAvatarImageUrl) URL.revokeObjectURL(settings.cameraAvatarImageUrl);
-                            onUpdateSettings({ cameraAvatarImageUrl: URL.createObjectURL(file) });
-                            event.target.value = '';
-                        }}
-                    />
-                    <label htmlFor="camera-art-effect" className="text-[11px] font-bold uppercase tracking-wider text-[#14121F]/70">Cartoon & sketch</label>
-                    <select
-                        id="camera-art-effect"
-                        value={settings.cameraArtEffect}
-                        onChange={(event) => {
-                            const effect = event.target.value as StudioSettings['cameraArtEffect'];
-                            if (effect !== 'none') onUpdateSettings({ hologramEnabled: false });
-                            onCameraArtEffectChange(effect);
-                            if (effect === 'photo-avatar' && !settings.cameraAvatarImageUrl) avatarInputRef.current?.click();
-                        }}
-                        className="w-full rounded-2xl border border-[#14121F]/10 bg-[#F7F6FB] p-2.5 text-xs text-[#14121F] focus:border-[#6A4CFF] focus:outline-none">
-                        <option value="none">Original camera</option>
-                        <option value="comic">Comic ink</option>
-                        <option value="sketch">Pencil sketch</option>
-                        <option value="pixel">Pixel art</option>
-                        <option value="anime">Anime color</option>
-                        <option value="avatar">Tracked cartoon avatar</option>
-                        <option value="photo-avatar">My cartoon photo · voice mouth</option>
-                    </select>
-                    {settings.cameraArtEffect === 'photo-avatar' && (
-                        <div className="space-y-2.5 rounded-2xl border border-[#14121F]/10 bg-[#F7F6FB] p-3.5">
-                            {settings.cameraAvatarImageUrl ? (
-                                <div className="flex items-center gap-2">
-                                    <img src={settings.cameraAvatarImageUrl} alt="Selected cartoon avatar" className="h-14 w-12 rounded-xl border border-[#14121F]/10 object-cover" />
-                                    <button type="button" onClick={() => avatarInputRef.current?.click()} className="flex-1 rounded-xl border border-[#14121F]/15 bg-white px-3 py-2 text-xs font-semibold text-[#14121F] hover:bg-[#14121F] hover:text-white transition">Change photo</button>
-                                    <button type="button" onClick={() => { URL.revokeObjectURL(settings.cameraAvatarImageUrl!); onUpdateSettings({ cameraAvatarImageUrl: null }); }} aria-label="Remove avatar photo" className="rounded-xl px-2.5 py-2 text-xs text-red-600 hover:bg-red-50">Remove</button>
-                                </div>
-                            ) : (
-                                <button type="button" onClick={() => avatarInputRef.current?.click()} className="w-full rounded-xl border border-dashed border-[#6A4CFF]/60 px-3 py-3 text-xs font-semibold text-[#6A4CFF] hover:bg-[#6A4CFF]/10">Choose a cartoon portrait</button>
-                            )}
-                            <div className="rounded-xl border border-[#6A4CFF]/30 bg-[#6A4CFF]/5 px-3 py-2 text-[11px] leading-relaxed text-[#14121F]/80">
-                                Tap the mouth position on the large preview. The crosshair shows where voice animation will be drawn.
-                            </div>
-                            <div>
-                                <div className="flex justify-between text-[11px] text-[#14121F]/60"><label htmlFor="avatar-mouth-y">Vertical mouth position</label><span>{Math.round(settings.cameraAvatarMouthY * 100)}%</span></div>
-                                <input id="avatar-mouth-y" type="range" min="35" max="90" value={Math.round(settings.cameraAvatarMouthY * 100)} onChange={(event) => onUpdateSettings({ cameraAvatarMouthY: Number(event.target.value) / 100 })} className="w-full accent-[#6A4CFF]" />
-                            </div>
-                            <div>
-                                <div className="flex justify-between text-[11px] text-[#14121F]/60"><label htmlFor="avatar-mouth-x">Horizontal mouth position</label><span>{Math.round(settings.cameraAvatarMouthX * 100)}%</span></div>
-                                <input id="avatar-mouth-x" type="range" min="15" max="85" value={Math.round(settings.cameraAvatarMouthX * 100)} onChange={(event) => onUpdateSettings({ cameraAvatarMouthX: Number(event.target.value) / 100 })} className="w-full accent-[#6A4CFF]" />
-                            </div>
-                            <div>
-                                <div className="flex justify-between text-[11px] text-[#14121F]/60"><label htmlFor="avatar-mouth-width">Mouth width</label><span>{Math.round(settings.cameraAvatarMouthWidth * 100)}%</span></div>
-                                <input id="avatar-mouth-width" type="range" min="4" max="18" value={Math.round(settings.cameraAvatarMouthWidth * 100)} onChange={(event) => onUpdateSettings({ cameraAvatarMouthWidth: Number(event.target.value) / 100 })} className="w-full accent-[#6A4CFF]" />
-                            </div>
-                            <p className="text-[11px] leading-relaxed text-[#14121F]/50">The mouth opens with your voice volume. This is lightweight live mouth animation, not phoneme-perfect lip sync. Photo stays on this device.</p>
-                        </div>
-                    )}
-                    <p className="text-[11px] leading-relaxed text-[#14121F]/50">
-                        Cartoon and sketch effects run locally and are included in recordings.
-                    </p>
-                </div>
-
-                <div className="space-y-3 rounded-2xl border border-[#14121F]/10 bg-[#F7F6FB] p-3.5">
-                    <div className="flex items-center justify-between gap-3">
-                        <div>
-                            <p className="text-[11px] font-bold uppercase tracking-wider text-[#14121F]/70">Hologram</p>
-                            <p className="text-[11px] text-[#14121F]/50">Glowing projection of you</p>
-                        </div>
-                        <button
-                            type="button"
-                            role="switch"
-                            aria-checked={settings.hologramEnabled}
-                            aria-label="Hologram effect"
-                            onClick={() => {
-                                const next = !settings.hologramEnabled;
-                                if (next && settings.cameraArtEffect !== 'none') onCameraArtEffectChange('none');
-                                onUpdateSettings({ hologramEnabled: next });
-                            }}
-                            className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${settings.hologramEnabled ? 'bg-[#6A4CFF]' : 'bg-[#14121F]/20'}`}>
-                            <span className={`absolute top-1 h-5 w-5 rounded-full bg-white transition-all shadow-sm ${settings.hologramEnabled ? 'left-6' : 'left-1'}`} />
-                        </button>
-                    </div>
-                    {settings.hologramEnabled && (
-                        <>
-                            <div className="grid grid-cols-3 gap-2" role="group" aria-label="Hologram color">
-                                {([['cyan', 'Cyan', 'bg-cyan-500'], ['purple', 'Purple', 'bg-[#6A4CFF]'], ['green', 'Green', 'bg-emerald-500']] as const).map(([value, label, swatch]) => (
-                                    <button
-                                        key={value}
-                                        type="button"
-                                        aria-pressed={settings.hologramColor === value}
-                                        onClick={() => onUpdateSettings({ hologramColor: value })}
-                                        className={`flex items-center justify-center gap-1.5 rounded-xl border px-2.5 py-2 text-xs font-semibold transition-colors ${settings.hologramColor === value ? 'border-[#6A4CFF] bg-white text-[#14121F] shadow-sm' : 'border-[#14121F]/10 text-[#14121F]/70 hover:text-[#14121F]'}`}>
-                                        <span className={`h-2.5 w-2.5 rounded-full ${swatch}`} />{label}
-                                    </button>
-                                ))}
-                            </div>
-                            <div>
-                                <div className="flex justify-between text-[11px] text-[#14121F]/60"><label htmlFor="hologram-intensity">Intensity</label><span>{settings.hologramIntensity}%</span></div>
-                                <input id="hologram-intensity" type="range" min="0" max="100" value={settings.hologramIntensity} onChange={(event) => onUpdateSettings({ hologramIntensity: Number(event.target.value) })} className="w-full accent-[#6A4CFF]" />
-                            </div>
-                            <div>
-                                <div className="flex justify-between text-[11px] text-[#14121F]/60"><label htmlFor="hologram-flicker">Flicker</label><span>{settings.hologramFlicker}%</span></div>
-                                <input id="hologram-flicker" type="range" min="0" max="100" value={settings.hologramFlicker} onChange={(event) => onUpdateSettings({ hologramFlicker: Number(event.target.value) })} className="w-full accent-[#6A4CFF]" />
-                            </div>
-                            <p className="text-[11px] leading-relaxed text-[#14121F]/50">Works with your background choice and is included in recordings and exports.</p>
-                        </>
-                    )}
-                </div>
-
-                <div className="mt-6 space-y-3 rounded-2xl border border-[#14121F]/10 bg-[#F7F6FB] p-3.5">
-                    <div className="flex items-center justify-between gap-3">
-                        <div>
-                            <p className="text-[11px] font-bold uppercase tracking-wider text-[#14121F]/70">Air Drawing</p>
-                            <p className="text-[11px] text-[#14121F]/50">Draw with your index finger</p>
-                        </div>
-                        <button
-                            type="button"
-                            role="switch"
-                            aria-checked={settings.airDrawingEnabled}
-                            aria-label="Air drawing"
-                            onClick={() => onUpdateSettings({ airDrawingEnabled: !settings.airDrawingEnabled })}
-                            className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${settings.airDrawingEnabled ? 'bg-[#FF3D81]' : 'bg-[#14121F]/20'}`}>
-                            <span className={`absolute top-1 h-5 w-5 rounded-full bg-white transition-all shadow-sm ${settings.airDrawingEnabled ? 'left-6' : 'left-1'}`} />
-                        </button>
-                    </div>
-                    {settings.airDrawingEnabled && (
-                        <>
-                            <div className="grid grid-cols-4 gap-1.5" role="group" aria-label="Drawing tool">
-                                {([['pen', 'Pen'], ['highlighter', 'Marker'], ['arrow', 'Arrow'], ['laser', 'Laser']] as const).map(([tool, label]) => (
-                                    <button
-                                        key={tool}
-                                        type="button"
-                                        aria-pressed={settings.airDrawingTool === tool}
-                                        disabled={settings.airWriteMode}
-                                        onClick={() => onUpdateSettings({ airDrawingTool: tool })}
-                                        className={`rounded-xl border px-1.5 py-2 text-xs font-semibold transition-colors disabled:opacity-40 ${settings.airDrawingTool === tool ? 'border-[#FF3D81] bg-white text-[#14121F] shadow-sm' : 'border-[#14121F]/10 text-[#14121F]/70 hover:text-[#14121F]'}`}>
-                                        {label}
-                                    </button>
-                                ))}
-                            </div>
-                            <div className="flex items-center justify-between text-xs font-medium text-[#14121F]/80">
-                                <label htmlFor="air-color">Color</label>
-                                <input id="air-color" type="color" value={settings.airDrawingColor} onChange={(event) => onUpdateSettings({ airDrawingColor: event.target.value })} className="h-7 w-12 cursor-pointer rounded-lg border border-[#14121F]/10 bg-transparent" />
-                            </div>
-                            <div>
-                                <div className="flex justify-between text-[11px] text-[#14121F]/60"><label htmlFor="air-size">Brush size</label><span>{settings.airDrawingSize}</span></div>
-                                <input id="air-size" type="range" min="2" max="30" value={settings.airDrawingSize} onChange={(event) => onUpdateSettings({ airDrawingSize: Number(event.target.value) })} className="w-full accent-[#FF3D81]" />
-                            </div>
-                            <div>
-                                <div className="flex justify-between text-[11px] text-[#14121F]/60"><label htmlFor="air-glow">Glow</label><span>{settings.airDrawingGlow}%</span></div>
-                                <input id="air-glow" type="range" min="0" max="100" value={settings.airDrawingGlow} onChange={(event) => onUpdateSettings({ airDrawingGlow: Number(event.target.value) })} className="w-full accent-[#FF3D81]" />
-                            </div>
-                            {([
-                                ['airDrawingFade', 'Fade out after 3s (off = pinned)', settings.airDrawingFade],
-                                ['airDrawingPerformanceMode', 'Performance mode (slower detection)', settings.airDrawingPerformanceMode],
-                                ['airWriteMode', 'Write to Text (pinch to write)', settings.airWriteMode],
-                            ] as const).map(([key, label, value]) => (
-                                <label key={key} className="flex items-center justify-between gap-3 text-xs font-medium text-[#14121F]/80">
-                                    {label}
-                                    <input type="checkbox" checked={value} onChange={(event) => onUpdateSettings({ [key]: event.target.checked })} className="h-4 w-4 accent-[#FF3D81] rounded" />
-                                </label>
-                            ))}
-                            {settings.airWriteMode && (
-                                <div className="space-y-2.5 rounded-2xl border border-[#14121F]/10 bg-white p-3">
-                                    <div className="flex items-center justify-between gap-2 text-xs font-medium text-[#14121F]/80">
-                                        <label htmlFor="air-write-language">Language</label>
-                                        <select id="air-write-language" value={settings.airWriteLanguage} onChange={(event) => onUpdateSettings({ airWriteLanguage: event.target.value as AirWritingLanguage })} className="rounded-xl border border-[#14121F]/10 bg-[#F7F6FB] px-2.5 py-1.5 text-xs">
-                                            {WRITING_LANGUAGES.map((language) => (
-                                                <option key={language.value} value={language.value}>{language.label}{language.experimental ? ' — experimental' : ''}</option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                    <div className="flex items-center justify-between gap-2 text-xs font-medium text-[#14121F]/80">
-                                        <label htmlFor="air-write-font">Font</label>
-                                        <select id="air-write-font" value={settings.airWriteFont} onChange={(event) => onUpdateSettings({ airWriteFont: event.target.value as AirWritingFont })} className="rounded-xl border border-[#14121F]/10 bg-[#F7F6FB] px-2.5 py-1.5 text-xs">
-                                            {AIR_FONTS.map((font) => <option key={font.value} value={font.value}>{font.label}</option>)}
-                                        </select>
-                                    </div>
-                                    <div className="flex items-center justify-between gap-2 text-xs font-medium text-[#14121F]/80">
-                                        <label htmlFor="air-write-color">Text color</label>
-                                        <input id="air-write-color" type="color" value={settings.airWriteColor} onChange={(event) => onUpdateSettings({ airWriteColor: event.target.value })} className="h-7 w-12 cursor-pointer rounded-lg border border-[#14121F]/10 bg-transparent" />
-                                    </div>
-                                    {settings.airWriteLanguage === 'hi' && (
-                                        <p className="text-[11px] leading-relaxed text-amber-600">Hindi is experimental and needs a browser with Hindi handwriting recognition; otherwise tap a word to type it.</p>
+                        <Card title="Screen share frame" description="Shown once you start sharing" icon={Monitor}>
+                            <SelectField
+                                id="screen-frame-style"
+                                aria-label="Frame style"
+                                value={settings.screenFrameStyle}
+                                onChange={(event) => onUpdateSettings({ screenFrameStyle: event.target.value as StudioSettings['screenFrameStyle'] })}>
+                                <option value="browser">Browser window</option>
+                                <option value="macos">macOS window</option>
+                                <option value="minimal">Minimal card</option>
+                                <option value="off">No frame</option>
+                            </SelectField>
+                            {settings.screenFrameStyle !== 'off' && (
+                                <>
+                                    <SelectField
+                                        id="screen-frame-bg"
+                                        aria-label="Frame background"
+                                        value={settings.screenFrameBackground}
+                                        onChange={(event) => onUpdateSettings({ screenFrameBackground: event.target.value as StudioSettings['screenFrameBackground'] })}>
+                                        <option value="aurora">Aurora</option>
+                                        <option value="sunset">Sunset</option>
+                                        <option value="midnight">Midnight</option>
+                                        <option value="paper">Paper (light)</option>
+                                    </SelectField>
+                                    {settings.screenFrameStyle === 'browser' && (
+                                        <TextInput
+                                            value={settings.screenFrameLabel}
+                                            maxLength={40}
+                                            aria-label="Address bar text"
+                                            placeholder="Address bar, e.g. yourproduct.com"
+                                            onChange={(event) => onUpdateSettings({ screenFrameLabel: event.target.value })}
+                                        />
                                     )}
+                                </>
+                            )}
+                        </Card>
+                    </>
+                )}
+
+                {tab === 'look' && (
+                    <>
+                        <Card title="Background" description="Replace or soften what's behind you" icon={ImageIcon}>
+                            <input ref={bgInputRef} type="file" accept="image/*" onChange={handleBackgroundImage} className="hidden" aria-label="Upload background image" />
+                            <div className="grid grid-cols-3 gap-2" role="group" aria-label="Background effect">
+                                {BACKGROUNDS.map(({ value, label, icon: Icon, swatch }) => {
+                                    const selected = settings.backgroundMode === value;
+                                    return (
+                                        <button
+                                            key={value}
+                                            type="button"
+                                            aria-pressed={selected}
+                                            onClick={() => pickBackground(value)}
+                                            className={`group flex flex-col items-center gap-1.5 rounded-2xl border p-1.5 text-[11px] font-semibold transition-all ${selected ? 'border-[#6A4CFF] bg-[#6A4CFF]/5 ring-2 ring-[#6A4CFF]/20' : 'border-[#14121F]/10 bg-white hover:border-[#6A4CFF]/40'}`}>
+                                            <span className={`flex h-10 w-full items-center justify-center rounded-xl ${swatch}`}>
+                                                <Icon className="h-4 w-4 text-[#14121F]/60" />
+                                            </span>
+                                            {label}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                            {settings.backgroundImageUrl && (
+                                <div className="group relative overflow-hidden rounded-2xl border border-[#14121F]/10">
+                                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                                    <img src={settings.backgroundImageUrl} alt="Selected background" className="h-20 w-full object-cover" />
+                                    <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/40 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+                                        <button type="button" onClick={() => bgInputRef.current?.click()} aria-label="Replace background image" className="rounded-xl bg-white/90 p-1.5 text-[#14121F] hover:bg-[#6A4CFF] hover:text-white">
+                                            <Upload className="h-3.5 w-3.5" />
+                                        </button>
+                                        <button type="button" onClick={clearBackgroundImage} aria-label="Remove background image" className="rounded-xl bg-white/90 p-1.5 text-[#14121F] hover:bg-red-600 hover:text-white">
+                                            <X className="h-3.5 w-3.5" />
+                                        </button>
+                                    </div>
                                 </div>
                             )}
-                            <p className="text-[11px] leading-relaxed text-[#14121F]/50">
-                                {settings.airWriteMode
-                                    ? '🤏 Pinch and move to write, release to lift · pause 0.8s to finish a word · tap a word on the preview to correct it or restore your writing · 🖐 hold palm 1s to clear · ✊ fist to undo.'
-                                    : '☝️ Point to draw (laser: point to aim) · 🤏 Pinch to pause · 🖐 Hold open palm 1s to clear · ✊ Fist to undo.'}
-                                {' '}Works over a shared screen too, and is included in recordings and exports.
-                            </p>
-                        </>
-                    )}
+                        </Card>
+
+                        <Card
+                            title="Lighting & tone"
+                            description="Virtual studio lights"
+                            icon={Sun}
+                            action={lightingChanged && (
+                                <button
+                                    type="button"
+                                    onClick={() => onUpdateSettings({ brightness: 100, contrast: 100 })}
+                                    className="flex items-center gap-1 rounded-full bg-[#14121F]/5 px-2.5 py-1 text-[11px] font-semibold text-[#14121F]/70 transition hover:bg-[#14121F] hover:text-white">
+                                    <RotateCcw className="h-3 w-3" /> Reset
+                                </button>
+                            )}>
+                            <Slider id="brightness" label="Brightness" min={50} max={150} suffix="%" value={settings.brightness} onChange={(brightness) => onUpdateSettings({ brightness })} />
+                            <Slider id="contrast" label="Contrast" min={50} max={150} suffix="%" value={settings.contrast} onChange={(contrast) => onUpdateSettings({ contrast })} />
+                        </Card>
+
+                        <Card title="Color preset" description="One-tap grading" icon={Sparkles}>
+                            <div className="grid grid-cols-2 gap-2" role="group" aria-label="Color preset">
+                                {FILTERS.map(({ value, label, swatch }) => {
+                                    const selected = settings.filterPreset === value;
+                                    return (
+                                        <button
+                                            key={value}
+                                            type="button"
+                                            aria-pressed={selected}
+                                            onClick={() => onUpdateSettings({ filterPreset: value })}
+                                            className={`flex items-center gap-2.5 rounded-2xl border p-2 text-xs font-semibold transition-all ${selected ? 'border-[#6A4CFF] bg-[#6A4CFF]/5 ring-2 ring-[#6A4CFF]/20' : 'border-[#14121F]/10 bg-white hover:border-[#6A4CFF]/40'}`}>
+                                            <span className={`h-7 w-7 shrink-0 rounded-lg bg-gradient-to-br ${swatch}`} />
+                                            {label}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </Card>
+                    </>
+                )}
+
+                {tab === 'effects' && (
+                    <>
+                        <Card title="Cartoon & sketch" description="Runs locally, included in recordings" icon={Sparkles}>
+                            <input ref={avatarInputRef} type="file" accept="image/png,image/jpeg,image/webp" className="hidden" aria-label="Upload cartoon avatar photo" onChange={handleAvatarFile} />
+                            <div className="grid grid-cols-2 gap-1.5" role="group" aria-label="Cartoon and sketch effect">
+                                {ART_EFFECTS.map(({ value, label }) => {
+                                    const selected = settings.cameraArtEffect === value;
+                                    return (
+                                        <button
+                                            key={value}
+                                            type="button"
+                                            aria-pressed={selected}
+                                            onClick={() => pickArtEffect(value)}
+                                            className={`rounded-xl border px-3 py-2 text-left text-xs font-semibold transition-all ${value === 'photo-avatar' ? 'col-span-2' : ''} ${selected ? 'border-[#6A4CFF] bg-[#6A4CFF] text-white shadow-md shadow-[#6A4CFF]/20' : 'border-[#14121F]/10 bg-white text-[#14121F]/75 hover:border-[#6A4CFF]/40'}`}>
+                                            {value === 'photo-avatar' ? 'My cartoon photo · voice mouth' : label}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+
+                            {settings.cameraArtEffect === 'photo-avatar' && (
+                                <div className="space-y-3 rounded-2xl bg-[#F7F6FB] p-3">
+                                    {settings.cameraAvatarImageUrl ? (
+                                        <div className="flex items-center gap-2">
+                                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                                            <img src={settings.cameraAvatarImageUrl} alt="Selected cartoon avatar" className="h-14 w-12 rounded-xl border border-[#14121F]/10 object-cover" />
+                                            <button type="button" onClick={() => avatarInputRef.current?.click()} className="flex-1 rounded-xl border border-[#14121F]/15 bg-white px-3 py-2 text-xs font-semibold transition hover:bg-[#14121F] hover:text-white">Change photo</button>
+                                            <button
+                                                type="button"
+                                                aria-label="Remove avatar photo"
+                                                onClick={() => {
+                                                    if (settings.cameraAvatarImageUrl) URL.revokeObjectURL(settings.cameraAvatarImageUrl);
+                                                    onUpdateSettings({ cameraAvatarImageUrl: null });
+                                                }}
+                                                className="rounded-xl px-2.5 py-2 text-xs font-semibold text-red-600 hover:bg-red-50">
+                                                Remove
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <button type="button" onClick={() => avatarInputRef.current?.click()} className="w-full rounded-xl border border-dashed border-[#6A4CFF]/60 px-3 py-3 text-xs font-semibold text-[#6A4CFF] hover:bg-[#6A4CFF]/10">
+                                            Choose a cartoon portrait
+                                        </button>
+                                    )}
+                                    <Hint tone="info">Tap the mouth position on the large preview. The crosshair shows where the voice animation is drawn.</Hint>
+                                    <Slider id="avatar-mouth-y" label="Mouth height" min={35} max={90} suffix="%" value={Math.round(settings.cameraAvatarMouthY * 100)} onChange={(v) => onUpdateSettings({ cameraAvatarMouthY: v / 100 })} />
+                                    <Slider id="avatar-mouth-x" label="Mouth position" min={15} max={85} suffix="%" value={Math.round(settings.cameraAvatarMouthX * 100)} onChange={(v) => onUpdateSettings({ cameraAvatarMouthX: v / 100 })} />
+                                    <Slider id="avatar-mouth-width" label="Mouth width" min={4} max={18} suffix="%" value={Math.round(settings.cameraAvatarMouthWidth * 100)} onChange={(v) => onUpdateSettings({ cameraAvatarMouthWidth: v / 100 })} />
+                                    <Hint>The mouth opens with your voice volume. It&apos;s a lightweight live animation, not phoneme-perfect lip sync. Your photo stays on this device.</Hint>
+                                </div>
+                            )}
+                        </Card>
+
+                        <Card title="Hologram" description="Glowing projection of you" icon={Sparkles} action={
+                            <Toggle checked={settings.hologramEnabled} onChange={toggleHologram} label="Hologram effect" accent={ACCENT} />
+                        }>
+                            {settings.hologramEnabled && (
+                                <>
+                                    <div className="grid grid-cols-3 gap-1.5" role="group" aria-label="Hologram color">
+                                        {HOLOGRAM_COLORS.map(({ value, label, dot }) => {
+                                            const selected = settings.hologramColor === value;
+                                            return (
+                                                <button
+                                                    key={value}
+                                                    type="button"
+                                                    aria-pressed={selected}
+                                                    onClick={() => onUpdateSettings({ hologramColor: value })}
+                                                    className={`flex items-center justify-center gap-1.5 rounded-xl border px-2 py-2 text-xs font-semibold transition-all ${selected ? 'border-[#6A4CFF] bg-white shadow-sm' : 'border-[#14121F]/10 text-[#14121F]/65 hover:text-[#14121F]'}`}>
+                                                    <span className={`h-2.5 w-2.5 rounded-full ${dot}`} />{label}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                    <Slider id="hologram-intensity" label="Intensity" min={0} max={100} suffix="%" value={settings.hologramIntensity} onChange={(hologramIntensity) => onUpdateSettings({ hologramIntensity })} />
+                                    <Slider id="hologram-flicker" label="Flicker" min={0} max={100} suffix="%" value={settings.hologramFlicker} onChange={(hologramFlicker) => onUpdateSettings({ hologramFlicker })} />
+                                    <Hint>Works with your background choice and is included in recordings and exports.</Hint>
+                                </>
+                            )}
+                        </Card>
+
+                        <Card title="Air drawing" description="Draw with your index finger" icon={PenTool} accent={PINK} action={
+                            <Toggle accent={PINK} checked={settings.airDrawingEnabled} onChange={(airDrawingEnabled) => onUpdateSettings({ airDrawingEnabled })} label="Air drawing" />
+                        }>
+                            {settings.airDrawingEnabled && (
+                                <>
+                                    <Segmented
+                                        ariaLabel="Drawing tool"
+                                        columns={4}
+                                        accent={PINK}
+                                        disabled={settings.airWriteMode}
+                                        value={settings.airDrawingTool}
+                                        options={DRAW_TOOLS}
+                                        onChange={(airDrawingTool) => onUpdateSettings({ airDrawingTool })}
+                                    />
+                                    <div className="flex items-center justify-between text-xs font-medium text-[#14121F]/70">
+                                        <label htmlFor="air-color">Color</label>
+                                        <input id="air-color" type="color" value={settings.airDrawingColor} onChange={(event) => onUpdateSettings({ airDrawingColor: event.target.value })} className="h-7 w-12 cursor-pointer rounded-lg border border-[#14121F]/10 bg-transparent" />
+                                    </div>
+                                    <Slider id="air-size" label="Brush size" min={2} max={30} accent={PINK} value={settings.airDrawingSize} onChange={(airDrawingSize) => onUpdateSettings({ airDrawingSize })} />
+                                    <Slider id="air-glow" label="Glow" min={0} max={100} suffix="%" accent={PINK} value={settings.airDrawingGlow} onChange={(airDrawingGlow) => onUpdateSettings({ airDrawingGlow })} />
+
+                                    <div className="space-y-3 border-t border-[#14121F]/8 pt-3.5">
+                                        <ToggleRow accent={PINK} title="Fade out after 3s" description="Off keeps strokes pinned" checked={settings.airDrawingFade} onChange={(airDrawingFade) => onUpdateSettings({ airDrawingFade })} label="Fade out drawings" />
+                                        <ToggleRow accent={PINK} title="Performance mode" description="Slower hand detection, lighter on CPU" checked={settings.airDrawingPerformanceMode} onChange={(airDrawingPerformanceMode) => onUpdateSettings({ airDrawingPerformanceMode })} label="Performance mode" />
+                                        <ToggleRow accent={PINK} title="Write to text" description="Pinch to write words" checked={settings.airWriteMode} onChange={(airWriteMode) => onUpdateSettings({ airWriteMode })} label="Write to text" />
+                                    </div>
+
+                                    {settings.airWriteMode && (
+                                        <div className="space-y-3 rounded-2xl bg-[#F7F6FB] p-3">
+                                            <SelectField id="air-write-language" label="Language" value={settings.airWriteLanguage} onChange={(event) => onUpdateSettings({ airWriteLanguage: event.target.value as AirWritingLanguage })}>
+                                                {WRITING_LANGUAGES.map((language) => (
+                                                    <option key={language.value} value={language.value}>{language.label}{language.experimental ? ' — experimental' : ''}</option>
+                                                ))}
+                                            </SelectField>
+                                            <SelectField id="air-write-font" label="Font" value={settings.airWriteFont} onChange={(event) => onUpdateSettings({ airWriteFont: event.target.value as AirWritingFont })}>
+                                                {AIR_FONTS.map((font) => <option key={font.value} value={font.value}>{font.label}</option>)}
+                                            </SelectField>
+                                            <div className="flex items-center justify-between text-xs font-medium text-[#14121F]/70">
+                                                <label htmlFor="air-write-color">Text color</label>
+                                                <input id="air-write-color" type="color" value={settings.airWriteColor} onChange={(event) => onUpdateSettings({ airWriteColor: event.target.value })} className="h-7 w-12 cursor-pointer rounded-lg border border-[#14121F]/10 bg-transparent" />
+                                            </div>
+                                            {settings.airWriteLanguage === 'hi' && (
+                                                <Hint tone="warn">Hindi is experimental and needs a browser with Hindi handwriting recognition. Otherwise, tap a word to type it.</Hint>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    <Hint tone="info">
+                                        {settings.airWriteMode
+                                            ? '🤏 Pinch and move to write, release to lift · pause 0.8s to finish a word · tap a word on the preview to correct it · 🖐 hold palm 1s to clear · ✊ fist to undo.'
+                                            : '☝️ Point to draw (laser: point to aim) · 🤏 pinch to pause · 🖐 hold open palm 1s to clear · ✊ fist to undo.'}
+                                        {' '}Works over a shared screen and is included in recordings and exports.
+                                    </Hint>
+                                </>
+                            )}
+                        </Card>
+                    </>
+                )}
+
+                {tab === 'script' && (
+                    <Card title="Teleprompter" description="Read your script while recording" icon={ScrollText}>
+                        <Teleprompter
+                            scriptText={settings.scriptText}
+                            language={settings.scriptLanguage}
+                            onLanguageChange={(scriptLanguage) => onUpdateSettings({ scriptLanguage })}
+                            onScriptChange={(scriptText) => onUpdateSettings({ scriptText })}
+                        />
+                    </Card>
+                )}
+            </div>
+
+            {/* Footer status */}
+            <footer className="shrink-0 border-t border-[#14121F]/8 bg-white/80 px-4 py-2.5 backdrop-blur">
+                <div className="flex items-center justify-center gap-2 text-[11px] font-medium text-[#14121F]/55">
+                    <span className="relative flex h-2 w-2">
+                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
+                        <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+                    </span>
+                    AI noise suppression active
                 </div>
-
-                {/* Teleprompter Module */}
-                <Teleprompter
-                    scriptText={settings.scriptText}
-                    language={settings.scriptLanguage}
-                    onLanguageChange={(scriptLanguage) => onUpdateSettings({ scriptLanguage })}
-                    onScriptChange={setScriptText}
-                />
-            </div>
-
-            <div className="pt-4 border-t border-[#14121F]/10 text-xs font-medium text-[#14121F]/50 text-center">
-                AI Noise Suppression Active 🎙️
-            </div>
+            </footer>
         </aside>
     );
 }

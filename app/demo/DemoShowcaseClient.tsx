@@ -235,6 +235,7 @@ export default function DemoShowcaseClient({ isLoggedIn, userPlan, displayName }
                                 controls
                                 autoPlay
                                 playsInline
+                                preload="auto"
                                 className="h-full w-full object-contain"
                             />
                         </div>

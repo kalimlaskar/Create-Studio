@@ -1,12 +1,13 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
-import { Download, ArrowLeft, Loader2, Volume2, VolumeX, Bookmark, MoreHorizontal, ChevronDown } from 'lucide-react';
 import { useEditorProject } from '@/hooks/useEditorProject';
 import { PreviewCanvas } from './PreviewCanvas';
 import { Timeline } from './Timeline';
 import { TranscriptPanel } from './TranscriptPanel';
 import { EditorSidebar } from './EditorSidebar';
+import { EditorTopBar, ExportStage } from './EditorTopBar';
+import { ExportStatusCard, TimelineSplitter, EditorLoading, EditorError } from './EditorOverlays';
 import { buildColorGradeFilter } from './colorGrade';
 import { saveEditorDraft } from './drafts';
 import { EditorProject, TimeRange } from '@/types/editor';
@@ -24,6 +25,11 @@ import { createTransitionRenderer, TransitionRenderer } from './transitionRender
 import { drawTransitionFrame, getInitialPerformanceMode, storePerformanceMode, TransitionSnapshots } from './transitions';
 import { addDeletedRange, removeDeletedRange, getKeepRanges, skipTarget, sourceToOutput } from '@/lib/cuts';
 
+/** Keep in sync with MAX_AUDIO_BYTES in app/api/transcribe/route.ts. */
+const MAX_TRANSCRIBE_BYTES = 14 * 1024 * 1024;
+const MIN_TIMELINE_HEIGHT = 180;
+const MAX_TIMELINE_HEIGHT = 700;
+
 interface EditorShellProps {
     isPro?: boolean;
     sourceVideoUrl: string;
@@ -38,7 +44,10 @@ interface EditorShellProps {
     onDraftSaved?: () => void;
 }
 
-export function EditorShell({ isPro = false, sourceVideoUrl, aspectRatio, initialScript, initialScriptLanguage, creatorName, sourceDurationMs, initialCameraArtEffect, onBack, initialProject, onDraftSaved }: EditorShellProps) {
+export function EditorShell({
+    isPro = false, sourceVideoUrl, aspectRatio, initialScript, initialScriptLanguage, creatorName,
+    sourceDurationMs, initialCameraArtEffect, onBack, initialProject, onDraftSaved,
+}: EditorShellProps) {
     const {
         project,
         projectLoadError,
@@ -80,9 +89,10 @@ export function EditorShell({ isPro = false, sourceVideoUrl, aspectRatio, initia
         replaceCaptions,
     } = useEditorProject(sourceVideoUrl, initialProject, aspectRatio, initialScript, initialScriptLanguage, sourceDurationMs, initialCameraArtEffect);
 
+    /* ------------------------------ state ------------------------------ */
     const [isExporting, setIsExporting] = useState(false);
     const [exportProgress, setExportProgress] = useState(0);
-    const [exportStage, setExportStage] = useState<'idle' | 'preparing' | 'rendering' | 'converting' | 'saving' | 'complete' | 'error'>('idle');
+    const [exportStage, setExportStage] = useState<ExportStage>('idle');
     const [exportError, setExportError] = useState<string | null>(null);
     const [exportResolution, setExportResolution] = useState<ExportResolution>('1080p');
     const [exportFormat, setExportFormat] = useState<ExportFormat>('mp4');
@@ -91,24 +101,22 @@ export function EditorShell({ isPro = false, sourceVideoUrl, aspectRatio, initia
     const [transcriptionError, setTranscriptionError] = useState<string | null>(null);
     const exportCancelRef = useRef(false);
     const [isSavingDraft, setIsSavingDraft] = useState(false);
-    const [showMoreOptions, setShowMoreOptions] = useState(false);
     const [draftSaved, setDraftSaved] = useState(false);
     const [performanceMode, setPerformanceMode] = useState(getInitialPerformanceMode);
 
-    // Draggable Timeline Height State
+    // Draggable timeline height
     const [timelineHeight, setTimelineHeight] = useState<number>(340);
     const isDraggingTimelineRef = useRef<boolean>(false);
 
-    const handleMouseDownTimelineSplitter = (e: React.MouseEvent) => {
-        e.preventDefault();
+    /* --------------------------- small handlers ------------------------- */
+    const handleMouseDownTimelineSplitter = (event: React.MouseEvent) => {
+        event.preventDefault();
         isDraggingTimelineRef.current = true;
 
         const handleMouseMove = (mouseEvent: MouseEvent) => {
             if (!isDraggingTimelineRef.current) return;
-            const newHeight = window.innerHeight - mouseEvent.clientY - 40;
-            if (newHeight >= 180 && newHeight <= 700) {
-                setTimelineHeight(newHeight);
-            }
+            const nextHeight = window.innerHeight - mouseEvent.clientY - 40;
+            if (nextHeight >= MIN_TIMELINE_HEIGHT && nextHeight <= MAX_TIMELINE_HEIGHT) setTimelineHeight(nextHeight);
         };
 
         const handleMouseUp = () => {
@@ -124,6 +132,12 @@ export function EditorShell({ isPro = false, sourceVideoUrl, aspectRatio, initia
     const handlePerformanceModeChange = (enabled: boolean) => {
         setPerformanceMode(enabled);
         storePerformanceMode(enabled);
+    };
+
+    const dismissExportStatus = () => {
+        setExportStage('idle');
+        setExportError(null);
+        setExportProgress(0);
     };
 
     const handlePreviewTransition = (atMs: number) => {
@@ -148,6 +162,7 @@ export function EditorShell({ isPro = false, sourceVideoUrl, aspectRatio, initia
         updateVideoEdit({ deletedRanges: removeDeletedRange(project.videoEdit.deletedRanges ?? [], atMs) });
     };
 
+    // Skip over deleted ranges during playback
     useEffect(() => {
         if (!project || !isPlaying || isExporting) return;
         const target = skipTarget(playheadMs, project.videoEdit.deletedRanges);
@@ -170,6 +185,7 @@ export function EditorShell({ isPro = false, sourceVideoUrl, aspectRatio, initia
         }
     };
 
+    /* ------------------------------- export ----------------------------- */
     const handleDownload = async () => {
         const video = videoRef.current;
         if (!video || !project || isExporting || isTranscribing) return;
@@ -366,6 +382,7 @@ export function EditorShell({ isPro = false, sourceVideoUrl, aspectRatio, initia
         }
     };
 
+    /* ----------------------------- captions ----------------------------- */
     const handleGenerateCaptions = async (language: TranscriptionLanguage) => {
         const video = videoRef.current;
         if (!video || !project || isTranscribing || isExporting) return;
@@ -377,8 +394,8 @@ export function EditorShell({ isPro = false, sourceVideoUrl, aspectRatio, initia
             const audioStream = getSourceAudioStream();
             if (!audioStream) throw new Error('Could not access the video audio track.');
             const audioBlob = await captureSourceAudio(video, audioStream, setTranscriptionProgress, project.durationMs);
-            if (audioBlob.size > 25 * 1024 * 1024) {
-                throw new Error('The extracted audio exceeds the 25 MB transcription limit.');
+            if (audioBlob.size > MAX_TRANSCRIBE_BYTES) {
+                throw new Error('The extracted audio is too large to transcribe. Trim the video and try again.');
             }
 
             setTranscriptionProgress(0);
@@ -388,11 +405,16 @@ export function EditorShell({ isPro = false, sourceVideoUrl, aspectRatio, initia
             body.append('language', language);
             body.append('durationSeconds', String(Math.round(project.durationMs / 1000)));
             const response = await fetch('/api/transcribe', { method: 'POST', body });
-            const result = await response.json() as {
-                error?: string;
-                words?: Array<{ word: string; start: number; end: number }>;
-            };
-            if (!response.ok) throw new Error(result.error ?? 'Transcription failed. Try again.');
+
+            // Read as text first: host/platform errors (e.g. 413) are often not JSON.
+            const raw = await response.text();
+            let result: { error?: string; words?: Array<{ word: string; start: number; end: number }> } = {};
+            try { result = JSON.parse(raw); } catch { /* non-JSON response */ }
+            if (!response.ok) {
+                throw new Error(result.error ?? (response.status === 413
+                    ? 'The audio is too large to upload. Trim the video and try again.'
+                    : `Transcription failed (HTTP ${response.status}). Try again.`));
+            }
             if (!result.words?.length) throw new Error('No speech was detected. Try another language setting or add captions manually.');
 
             let groupIndex = 0;
@@ -430,8 +452,9 @@ export function EditorShell({ isPro = false, sourceVideoUrl, aspectRatio, initia
         if (videoRef.current) videoRef.current.currentTime = Math.max(0, startMs) / 1000;
     };
 
+    /* ------------------------------- render ----------------------------- */
     return (
-        <div className="flex h-dvh flex-col overflow-hidden bg-[#14121F] font-[family-name:var(--font-body)] text-[#14121F] md:flex-row relative grain">
+        <div className="relative flex h-dvh flex-col overflow-hidden bg-[#F7F6FB] font-[family-name:var(--font-body)] text-[#14121F] md:flex-row">
             {project ? (
                 <EditorSidebar
                     project={project}
@@ -466,151 +489,49 @@ export function EditorShell({ isPro = false, sourceVideoUrl, aspectRatio, initia
                     transcriptionError={transcriptionError}
                 />
             ) : (
-                <aside className="hidden w-full shrink-0 border-r border-[#14121F]/10 bg-[#F7F6FB] p-4 md:flex md:w-72 md:flex-col">
+                <aside className="hidden w-full shrink-0 border-r border-[#14121F]/10 bg-white p-4 md:flex md:w-[22.5rem] md:flex-col">
                     <h2 className="text-sm font-bold uppercase tracking-wider text-[#14121F]/70">Edit Studio</h2>
                 </aside>
             )}
 
             <div className="relative order-1 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden p-3 sm:p-4 md:order-2 lg:p-5">
-                {/* Top Floating Glass Header */}
-                <div className="mb-3 flex items-center justify-between gap-3 rounded-2xl border border-[#14121F]/10 bg-[#F7F6FB]/90 px-4 py-2.5 backdrop-blur-xl shadow-sm rise md:mb-4 md:px-5">
-                    <div className="flex min-w-0 items-center gap-3">
-                        <button
-                            onClick={onBack}
-                            disabled={isExporting}
-                            className="flex items-center gap-1.5 rounded-xl border border-[#14121F]/10 bg-white/80 px-3 py-1.5 text-xs font-semibold text-[#14121F]/80 transition hover:bg-white hover:border-[#6A4CFF]/40 disabled:opacity-50 shadow-xs">
-                            <ArrowLeft className="h-3.5 w-3.5 text-[#14121F]/60" /> <span className="hidden sm:inline">Studio</span>
-                        </button>
-                        <div className="min-w-0 border-l border-[#14121F]/15 pl-3">
-                            <input value={project?.title ?? 'Video editor'} onChange={(event) => renameProject(event.target.value)} aria-label="Project name" maxLength={80}
-                                className="w-32 max-w-[32vw] truncate border-b border-transparent bg-transparent text-xs font-bold text-[#14121F] hover:border-[#14121F]/20 focus:border-[#6A4CFF] focus:outline-none sm:w-44" />
-                            <p className="text-[10px] font-medium text-[#14121F]/50">{project?.aspectRatio ?? aspectRatio} frame</p>
-                        </div>
-                    </div>
-
-                    <div className="flex items-center gap-2 md:hidden">
-                        <button type="button" onClick={() => setShowMoreOptions((open) => !open)} aria-expanded={showMoreOptions} aria-label="More options" className="flex h-9 w-9 items-center justify-center rounded-xl border border-[#14121F]/15 bg-white text-[#14121F] shadow-xs"><MoreHorizontal className="h-4 w-4" /></button>
-                        <button onClick={handleDownload} disabled={isExporting || !project} className="flex h-9 items-center gap-1.5 rounded-xl bg-[#6A4CFF] px-3 text-xs font-semibold text-white disabled:opacity-50 shadow-xs">{isExporting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}{isExporting ? 'Export…' : 'Export'}</button>
-                    </div>
-
-                    <div className={`${showMoreOptions ? 'grid grid-cols-2' : 'hidden'} w-full gap-2 md:flex md:w-auto md:flex-wrap md:items-center md:gap-2`}>
-                        <div className="relative">
-                            <label className="sr-only" htmlFor="editor-art-effect">Cartoon filter</label>
-                            <select
-                                id="editor-art-effect"
-                                value={project?.cameraArtEffect === 'avatar' ? 'none' : project?.cameraArtEffect ?? 'none'}
-                                onChange={(event) => updateCameraArtEffect(event.target.value as CameraArtEffect)}
-                                disabled={isExporting || !project}
-                                className="w-full appearance-none rounded-xl border md:w-auto md:max-w-28 border-[#14121F]/15 bg-white pl-3 pr-8 py-1.5 text-xs font-medium text-[#14121F] focus:border-[#6A4CFF] focus:outline-none disabled:opacity-50 shadow-xs cursor-pointer"
-                                title="On-device cartoon and sketch effects">
-                                <option value="none">Original</option>
-                                <option value="comic">Comic</option>
-                                <option value="sketch">Sketch</option>
-                                <option value="pixel">Pixel</option>
-                                <option value="anime">Anime</option>
-                            </select>
-                            <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#14121F]/50" />
-                        </div>
-
-                        <button
-                            onClick={toggleSourceAudio}
-                            disabled={isExporting}
-                            aria-label={isSourceMuted ? 'Unmute original video audio' : 'Mute original video audio'}
-                            className="flex items-center gap-1.5 rounded-xl border border-[#14121F]/15 bg-white px-2.5 py-1.5 text-xs font-semibold text-[#14121F]/80 transition-colors hover:border-[#6A4CFF] hover:bg-white disabled:opacity-50 shadow-xs">
-                            {isSourceMuted ? <VolumeX className="h-3.5 w-3.5 text-[#14121F]/40" /> : <Volume2 className="h-3.5 w-3.5 text-[#6A4CFF]" />}
-                            <span className="hidden xl:inline">{isSourceMuted ? 'Unmute' : 'Mute'}</span>
-                        </button>
-
-                        <button
-                            onClick={handleSaveDraft}
-                            disabled={!project || isSavingDraft || isExporting}
-                            className="flex items-center gap-1.5 rounded-xl border border-[#14121F]/15 bg-white px-2.5 py-1.5 text-xs font-semibold text-[#14121F]/80 transition-colors hover:border-[#6A4CFF] hover:bg-white disabled:opacity-50 shadow-xs">
-                            {isSavingDraft ? <Loader2 className="h-3.5 w-3.5 animate-spin text-[#6A4CFF]" /> : <Bookmark className="h-3.5 w-3.5 text-[#6A4CFF]" />}
-                            <span className="hidden xl:inline">{isSavingDraft ? 'Saving…' : draftSaved ? 'Saved' : 'Draft'}</span>
-                        </button>
-
-                        <div className="relative">
-                            <label className="sr-only" htmlFor="export-resolution">Export resolution</label>
-                            <select
-                                id="export-resolution"
-                                value={exportResolution}
-                                onChange={(event) => setExportResolution(event.target.value as ExportResolution)}
-                                disabled={isExporting}
-                                className="appearance-none rounded-xl border border-[#14121F]/15 bg-white pl-3 pr-8 py-1.5 text-xs font-medium text-[#14121F] focus:border-[#6A4CFF] focus:outline-none disabled:opacity-50 shadow-xs cursor-pointer">
-                                <option value="720p">720p</option>
-                                <option value="1080p">1080p</option>
-                            </select>
-                            <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#14121F]/50" />
-                        </div>
-
-                        <div className="relative">
-                            <label className="sr-only" htmlFor="export-format">Export format</label>
-                            <select
-                                id="export-format"
-                                value={exportFormat}
-                                onChange={(event) => setExportFormat(event.target.value as ExportFormat)}
-                                disabled={isExporting}
-                                className="appearance-none rounded-xl border border-[#14121F]/15 bg-white pl-3 pr-8 py-1.5 text-xs font-medium text-[#14121F] focus:border-[#6A4CFF] focus:outline-none disabled:opacity-50 shadow-xs cursor-pointer">
-                                <option value="mp4">MP4</option>
-                                <option value="webm">WebM</option>
-                            </select>
-                            <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#14121F]/50" />
-                        </div>
-
-                        <button
-                            onClick={handleDownload}
-                            disabled={isExporting || !project}
-                            className="hidden items-center gap-1.5 rounded-xl bg-[#6A4CFF] px-3.5 py-1.5 text-xs font-semibold text-white shadow-sm shadow-[#6A4CFF]/20 transition-colors hover:bg-[#5839e0] disabled:opacity-50 md:flex">
-                            {isExporting ? (
-                                <>
-                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                    <span>{exportStage === 'converting' ? 'Encoding…' : exportStage === 'saving' ? 'Saving…' : 'Rendering…'}</span>
-                                </>
-                            ) : (
-                                <>
-                                    <Download className="h-3.5 w-3.5" /> <span>Export</span>
-                                </>
-                            )}
-                        </button>
-                    </div>
-                </div>
-
-                {(isExporting || exportStage === 'complete' || exportError) && (
-                    <div className="mb-3 rounded-2xl border border-[#14121F]/10 bg-[#F7F6FB] px-4 py-3 shadow-sm" role="status" aria-live="polite">
-                        <div className="mb-2 flex items-center justify-between gap-3 text-xs font-semibold">
-                            <span className={exportError ? 'text-red-600' : exportStage === 'complete' ? 'text-emerald-600' : 'text-[#14121F]'}>
-                                {exportError ?? (exportStage === 'preparing' ? 'Preparing export…' : exportStage === 'rendering' ? `Rendering video · ${exportProgress}%` : exportStage === 'converting' ? `Encoding MP4 · ${exportProgress}%` : exportStage === 'saving' ? 'Saving file…' : 'Export complete')}
-                            </span>
-                            {isExporting && exportStage === 'rendering' && (
-                                <button type="button" onClick={() => { exportCancelRef.current = true; }} className="text-[#14121F]/50 hover:text-[#14121F]">Cancel</button>
-                            )}
-                        </div>
-                        <div className="h-1.5 overflow-hidden rounded-full bg-[#14121F]/10" role="progressbar" aria-valuenow={exportProgress} aria-valuemin={0} aria-valuemax={100} aria-label="Video export progress">
-                            <div className={`h-full rounded-full transition-[width] duration-200 ${exportError ? 'bg-red-500' : exportStage === 'complete' ? 'bg-emerald-500' : 'bg-[#6A4CFF]'}`} style={{ width: `${exportProgress}%` }} />
-                        </div>
-                    </div>
-                )}
+                <EditorTopBar
+                    title={project?.title ?? 'Video editor'}
+                    aspectRatio={project?.aspectRatio ?? aspectRatio}
+                    hasProject={Boolean(project)}
+                    isPro={isPro}
+                    isExporting={isExporting}
+                    exportStage={exportStage}
+                    exportProgress={exportProgress}
+                    exportResolution={exportResolution}
+                    exportFormat={exportFormat}
+                    isSourceMuted={isSourceMuted}
+                    isSavingDraft={isSavingDraft}
+                    draftSaved={draftSaved}
+                    cameraArtEffect={project?.cameraArtEffect ?? 'none'}
+                    onTitleChange={renameProject}
+                    onBack={onBack}
+                    onToggleMute={toggleSourceAudio}
+                    onSaveDraft={handleSaveDraft}
+                    onCameraArtEffectChange={updateCameraArtEffect}
+                    onExportResolutionChange={setExportResolution}
+                    onExportFormatChange={setExportFormat}
+                    onExport={handleDownload}
+                />
 
                 <video ref={videoRef} src={sourceVideoUrl} className="hidden" playsInline />
 
                 {project ? (
                     <div className={`flex min-h-0 flex-1 flex-col gap-0 overflow-hidden ${isExporting ? 'pointer-events-none opacity-70' : ''}`}>
-                        {/* Upper Video Preview Canvas Container */}
-                        <div className="flex-1 min-h-0 flex flex-col overflow-hidden relative">
+                        {/* Video preview */}
+                        <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
                             <PreviewCanvas videoRef={videoRef} project={project} performanceMode={performanceMode} isPro={isPro} />
                         </div>
 
-                        {/* Draggable Resizing Splitter Bar for Timeline */}
-                        <div
-                            onMouseDown={handleMouseDownTimelineSplitter}
-                            className="h-2 w-full bg-[#14121F]/10 hover:bg-[#6A4CFF] cursor-row-resize flex items-center justify-center transition-colors group z-30 select-none my-1"
-                            title="Drag to resize timeline height"
-                        >
-                            <div className="w-12 h-1 bg-[#14121F]/20 rounded-full group-hover:bg-white transition-colors" />
-                        </div>
+                        <TimelineSplitter onMouseDown={handleMouseDownTimelineSplitter} />
 
-                        {/* Resizable Timeline Panel */}
-                        <div style={{ height: `${timelineHeight}px` }} className="flex flex-col shrink-0 overflow-y-auto transition-all duration-75">
+                        {/* Resizable timeline */}
+                        <div style={{ height: `${timelineHeight}px` }} className="flex shrink-0 flex-col overflow-y-auto transition-all duration-75">
                             <Timeline
                                 durationMs={project.durationMs}
                                 playheadMs={playheadMs}
@@ -632,7 +553,7 @@ export function EditorShell({ isPro = false, sourceVideoUrl, aspectRatio, initia
                         </div>
 
                         {project.tracks.captions.length > 0 && (
-                            <div className="max-h-40 shrink-0 overflow-y-auto mt-2">
+                            <div className="mt-2 max-h-40 shrink-0 overflow-y-auto">
                                 <TranscriptPanel
                                     words={project.tracks.captions.map((cue) => ({ text: cue.text, startMs: cue.startMs, endMs: cue.endMs }))}
                                     playheadMs={playheadMs}
@@ -645,18 +566,19 @@ export function EditorShell({ isPro = false, sourceVideoUrl, aspectRatio, initia
                         )}
                     </div>
                 ) : projectLoadError ? (
-                    <div className="flex flex-1 items-center justify-center p-6">
-                        <div role="alert" className="w-full max-w-lg rounded-3xl border border-red-200 bg-[#F7F6FB] p-6 text-center shadow-lg">
-                            <h2 className="text-sm font-bold uppercase tracking-wider text-[#14121F]">This video could not be opened</h2>
-                            <p className="mt-2 text-xs leading-relaxed text-[#14121F]/60">{projectLoadError}</p>
-                            <button type="button" onClick={onBack} className="mt-5 rounded-xl bg-[#6A4CFF] px-4 py-2.5 text-xs font-semibold text-white hover:bg-[#5839e0] shadow-sm">Back to studio</button>
-                        </div>
-                    </div>
+                    <EditorError message={projectLoadError} onBack={onBack} />
                 ) : (
-                    <div className="flex-1 flex items-center justify-center text-xs font-medium text-[#14121F]/50">
-                        Loading video metadata…
-                    </div>
+                    <EditorLoading />
                 )}
+
+                <ExportStatusCard
+                    stage={exportStage}
+                    progress={exportProgress}
+                    error={exportError}
+                    isExporting={isExporting}
+                    onCancel={() => { exportCancelRef.current = true; }}
+                    onDismiss={dismissExportStatus}
+                />
             </div>
         </div>
     );
