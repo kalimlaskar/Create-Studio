@@ -38,35 +38,34 @@ interface ReelImage {
     description: string;
     textStyle: TextOverlayStyle;
     textPosition: TextPosition;
-    textOffset?: { x: number; y: number }; // caption offset, % of frame
-    textSize?: number;                     // caption size multiplier (0.5 – 2.5)
-    textColor?: string;                    // caption color (hex)
-    fontFamily?: FontKey;                  // caption font
-    shine?: boolean;                       // light sweep across the product
-    vignette?: number;                     // 0 – 60 (% darkness at the edges)
-    softEdges?: boolean;                   // fade photo edges when zoomed out (3D clips)
-    badgeText?: string;                    // sticker such as "NEW" or "₹999"
+    textOffset?: { x: number; y: number };
+    textSize?: number;
+    textColor?: string;
+    fontFamily?: FontKey;
+    shine?: boolean;
+    vignette?: number;
+    softEdges?: boolean;
+    badgeText?: string;
     badgeColor?: string;
     badgeCorner?: Corner;
-    borderEffect?: BorderEffect;           // animated glowing / glitter border
-    borderColor?: string;                  // border accent color (hex)
-    fx?: FxId[];                           // trending wow effects
-    speed?: number;                        // playback speed (0.25 – 4). Photos: shorter + faster motion. Videos: playback rate
-    autoCaption?: boolean;                 // caption came from the template (safe to replace)
-    scale?: number;                        // image zoom (0.5 – 2.5)
+    borderEffect?: BorderEffect;
+    borderColor?: string;
+    fx?: FxId[];
+    speed?: number;
+    autoCaption?: boolean;
+    scale?: number;
     motion: 'none' | 'zoom-in' | 'zoom-out' | 'pan-left' | 'pan-right' | DepthMotion;
     transition: 'cut' | 'fade' | 'slide' | 'zoom';
 
-    // Interactive Effect Targets & Configurations
-    cursorTargetX?: number;                // 0 to 1 (left to right) for cursor click effect
-    cursorTargetY?: number;                // 0 to 1 (top to bottom) for cursor click effect
-    cursorColor?: string;                  // Specific color for the cursor click effect
-    cursorScale?: number;                  // Independent size scale multiplier for the cursor click effect
-    rippleTargetX?: number;                // 0 to 1 (left to right) for ripple effect center
-    rippleTargetY?: number;                // 0 to 1 (top to bottom) for ripple effect center
-    rippleScale?: number;                  // Size scale multiplier for the ripple wave
-    rippleColor?: string;                  // Specific color (hex) for the ripple wave
-    rippleSpeed?: number;                  // Animation speed multiplier for the ripple
+    cursorTargetX?: number;
+    cursorTargetY?: number;
+    cursorColor?: string;
+    cursorScale?: number;
+    rippleTargetX?: number;
+    rippleTargetY?: number;
+    rippleScale?: number;
+    rippleColor?: string;
+    rippleSpeed?: number;
 }
 
 const FONT_FAMILIES: Record<FontKey, string> = {
@@ -84,7 +83,7 @@ const GRADIENTS: Array<{ id: GradientPreset; label: string; colors: [string, str
     { id: 'warm', label: 'Warm', colors: ['234,179,8', '220,38,38'] },
 ];
 
-const TEXT_BASE_Y: Record<TextPosition, number> = { top: 15, center: 50, bottom: 82 }; // % of frame height
+const TEXT_BASE_Y: Record<TextPosition, number> = { top: 15, center: 50, bottom: 82 };
 
 const getCanvasSize = (aspect: PlatformAspect) => ({
     width: aspect === '16:9' ? 960 : 540,
@@ -105,7 +104,6 @@ const getCornerPosition = (corner: Corner, boxW: number, boxH: number, width: nu
     y: corner === 'tl' || corner === 'tr' ? margin * 1.6 : height - boxH - margin * 1.6,
 });
 
-/** Fades the edges of a drawn rectangle so a zoomed-out photo does not look like a hard-edged card. */
 let softEdgeScratch: HTMLCanvasElement | null = null;
 function drawSoftEdged(ctx: CanvasRenderingContext2D, source: CanvasImageSource, x: number, y: number, w: number, h: number, canvasW: number, canvasH: number, feather: number) {
     if (!softEdgeScratch) softEdgeScratch = document.createElement('canvas');
@@ -138,10 +136,6 @@ function drawSoftEdged(ctx: CanvasRenderingContext2D, source: CanvasImageSource,
     ctx.drawImage(softEdgeScratch, 0, 0);
 }
 
-/**
- * Vignette, shine sweep, badge sticker, brand logo and animated border.
- * Shared by the live preview and the export. `seconds` is the time inside the current clip.
- */
 function drawProductEffects(ctx: CanvasRenderingContext2D, clip: ReelImage, width: number, height: number, t: number, logo: { image: HTMLImageElement | null; corner: Corner; sizePct: number }, seconds = 0) {
     drawOverlayFx(ctx, clip.fx, width, height, seconds, buildOverlayConfig(clip));
 
@@ -201,10 +195,6 @@ function drawProductEffects(ctx: CanvasRenderingContext2D, clip: ReelImage, widt
 
     drawBorderEffect(ctx, clip.borderEffect, clip.borderColor, width, height, seconds);
 }
-
-/* -------------------------------------------------------------------------- */
-/* Product templates                                                          */
-/* -------------------------------------------------------------------------- */
 
 interface ProductTemplate {
     id: string;
@@ -344,10 +334,6 @@ const withSpeed = (clip: ReelImage, next: number): ReelImage => {
     const used = clip.durationMs * (clip.speed ?? 1);
     return { ...clip, speed, durationMs: Math.max(300, used / speed) };
 };
-
-/* -------------------------------------------------------------------------- */
-/* Small reusable UI pieces                                                   */
-/* -------------------------------------------------------------------------- */
 
 function SelectField({ label, value, onChange, children }: { label: string; value: string; onChange: (value: string) => void; children: React.ReactNode }) {
     return (
@@ -516,10 +502,6 @@ function RipplePlacer({ x, y, color, label, frameRef, onChange }: {
     );
 }
 
-/* -------------------------------------------------------------------------- */
-/* Main component                                                             */
-/* -------------------------------------------------------------------------- */
-
 export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
     const [isProUser, setIsProUser] = useState(false);
     const [showUpgradeModal, setShowUpgradeModal] = useState(false);
@@ -530,19 +512,6 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
             return;
         }
         action();
-    };
-    const setVoiceoverFile = (event: React.ChangeEvent<HTMLInputElement>) => {
-        const file = event.target.files?.[0];
-        event.target.value = '';
-        if (!file) return;
-        if (!file.type.startsWith('audio/')) {
-            setError('Choose an audio file (MP3, WAV) for the voiceover.');
-            return;
-        }
-        if (voiceover) URL.revokeObjectURL(voiceover.url);
-        setVoiceover({ file, url: URL.createObjectURL(file) });
-        setError(null);
-        setNotice('Custom voiceover loaded from your computer.');
     };
 
     const [images, setImages] = useState<ReelImage[]>([]);
@@ -617,6 +586,20 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
     const logoRef = useRef(logo);
     const logoInputRef = useRef<HTMLInputElement>(null);
     const previewTimeRef = useRef(0);
+
+    const setVoiceoverFile = (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        event.target.value = '';
+        if (!file) return;
+        if (!file.type.startsWith('audio/')) {
+            setError('Choose an audio file (MP3, WAV) for the voiceover.');
+            return;
+        }
+        if (voiceover) URL.revokeObjectURL(voiceover.url);
+        setVoiceover({ file, url: URL.createObjectURL(file) });
+        setError(null);
+        setNotice('Custom voiceover loaded from your computer.');
+    };
 
     const getClipDurationMs = (clip: ReelImage) => (clip.type === 'image' ? (secondsPerImage * 1000) / (clip.speed ?? 1) : clip.durationMs);
     const durationMs = images.reduce((total, clip) => total + getClipDurationMs(clip), 0);
@@ -909,8 +892,8 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
                 scale: 1,
                 motion: type === 'image' ? 'zoom-in' : 'none',
                 transition: 'fade',
-                rippleScale: 0.5, // Default ripple scale reduced to 0.5 for a smaller wave radius
-                cursorScale: 1.0,  // Default independent cursor click radius/scale
+                rippleScale: 0.5,
+                cursorScale: 1.0,
             };
             const clip: ReelImage = productTemplate
                 ? { ...baseClip, ...getTemplateClipStyle(productTemplate, images.length + fileIndex, type) }
@@ -1004,7 +987,7 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
                 if (Math.min(bitmap.width, bitmap.height) < 720) low.push(`${file.name} (${bitmap.width}×${bitmap.height})`);
                 bitmap.close();
             } catch {
-                /* ignore unreadable files */
+                /* ignore */
             }
         }
         setNotice(low.length ? `Low resolution, so it may look soft in the reel: ${low.join(', ')}. Use photos 1080 px or larger.` : null);
@@ -1657,7 +1640,6 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
                 }
             }
 
-            // Use supported MIME type fallback for broader compatibility
             const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus')
                 ? 'video/webm;codecs=vp9,opus'
                 : 'video/webm';
@@ -1681,7 +1663,7 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
             });
 
             setExportStatus('Rendering your reel…');
-            activeRecorder.start(); // Start without slice interval to collect continuous stream chunks cleanly
+            activeRecorder.start();
 
             const audioPlayback = Promise.all([
                 audioElement?.play().catch(() => { }),
@@ -1693,7 +1675,6 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
             let activeVideoId: string | null = null;
             let lastReportedClip = -1;
 
-            // Synchronous-safe frame stepping loop using a reliable async timer step
             while (elapsed <= durationMs) {
                 const index = getIndexAtTime(elapsed);
                 const clip = images[index];
@@ -1715,7 +1696,6 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
                     const targetTime = Math.min((localTimeMs / 1000) * (clip.speed ?? 1), Math.max(0, video.duration - 0.05));
                     if (Math.abs(video.currentTime - targetTime) > 0.08) {
                         video.currentTime = targetTime;
-                        // Wait briefly for video element to seek frame cleanly
                         await new Promise((r) => requestAnimationFrame(r));
                     }
                     if (video.paused) {
@@ -1738,8 +1718,6 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
                 setExportProgress(5 + Math.min(80, Math.floor((elapsed / durationMs) * 80)));
 
                 elapsed += frameIntervalMs;
-
-                // Frame-pacing yield using requestAnimationFrame instead of bare setTimeout
                 await new Promise((resolve) => requestAnimationFrame(resolve));
             }
 
@@ -2177,7 +2155,6 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
                                 </div>
                             ))}
 
-                            {/* Cursor Click Controls with Custom Color & Independent Radius/Scale */}
                             {selectedImage.fx?.includes('cursor-click') && (
                                 <div className="space-y-3 rounded-xl border border-[#14121F]/15 bg-[#F7F6FB] p-3">
                                     <div className="flex items-center justify-between">
@@ -2251,7 +2228,6 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
                                 </div>
                             )}
 
-                            {/* Ripple Wave Controls (Smaller Default Radius & Adjustable Slider) */}
                             {selectedImage.fx?.includes('ripple-effect') && (
                                 <div className="space-y-3 rounded-xl border border-[#14121F]/15 bg-[#F7F6FB] p-3 mt-3">
                                     <label className="text-xs font-semibold text-[#14121F]">💧 Ripple Wave Settings</label>
@@ -2390,7 +2366,7 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
                 <section className={CARD_CLASS}>
                     <div className="flex items-center justify-between">
                         <h2 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#14121F]/70">
-                            <Mic className="h-4 w-4 text-[#6A4CFF]" /> AI Voiceover
+                            <Mic className="h-4 w-4 text-[#6A4CFF]" /> Voiceover
                         </h2>
                         {voiceover && (
                             <button
@@ -2403,44 +2379,62 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
                         )}
                     </div>
 
-                    <textarea
-                        value={narrationText}
-                        onChange={(e) => setNarrationText(e.target.value)}
-                        maxLength={1500}
-                        placeholder={narrationLanguage === 'en'
-                            ? 'Write your script. It will be read exactly as written.'
-                            : 'Write your script in English. It will be translated and spoken in the selected language.'}
-                        rows={3}
-                        className="w-full resize-y rounded-xl border border-[#14121F]/15 bg-[#F7F6FB] px-3.5 py-2.5 text-xs text-[#14121F] shadow-xs placeholder:text-[#14121F]/40 focus:border-[#6A4CFF] focus:outline-none"
-                    />
+                    <div className="space-y-2 pt-1">
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-[#14121F]/50">Option A: AI Text-to-Speech</p>
+                        <textarea
+                            value={narrationText}
+                            onChange={(e) => setNarrationText(e.target.value)}
+                            maxLength={1500}
+                            placeholder={narrationLanguage === 'en'
+                                ? 'Write your script. It will be read exactly as written.'
+                                : 'Write your script in English. It will be translated and spoken in the selected language.'}
+                            rows={2}
+                            className="w-full resize-y rounded-xl border border-[#14121F]/15 bg-[#F7F6FB] px-3.5 py-2.5 text-xs text-[#14121F] shadow-xs placeholder:text-[#14121F]/40 focus:border-[#6A4CFF] focus:outline-none"
+                        />
 
-                    <div className="grid grid-cols-2 gap-2.5">
-                        <SelectField label="Language" value={narrationLanguage} onChange={(val) => setNarrationLanguage(val as any)}>
-                            <option value="en">English</option>
-                            <option value="hi">Hindi</option>
-                            <option value="bn">Bengali</option>
-                            <option value="ta">Tamil</option>
-                            <option value="te">Telugu</option>
-                        </SelectField>
+                        <div className="grid grid-cols-2 gap-2.5">
+                            <SelectField label="Language" value={narrationLanguage} onChange={(val) => setNarrationLanguage(val as any)}>
+                                <option value="en">English</option>
+                                <option value="hi">Hindi</option>
+                                <option value="bn">Bengali</option>
+                                <option value="ta">Tamil</option>
+                                <option value="te">Telugu</option>
+                            </SelectField>
 
-                        <SelectField label="Voice Gender" value={narrationVoiceGender} onChange={(val) => setNarrationVoiceGender(val as any)}>
-                            <option value="female">Female</option>
-                            <option value="male">Male</option>
-                        </SelectField>
+                            <SelectField label="Voice Gender" value={narrationVoiceGender} onChange={(val) => setNarrationVoiceGender(val as any)}>
+                                <option value="female">Female</option>
+                                <option value="male">Male</option>
+                            </SelectField>
+                        </div>
+
+                        <button
+                            type="button"
+                            onClick={() => void handleGenerateNarration()}
+                            disabled={isGeneratingVoice || !narrationText.trim()}
+                            className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#6A4CFF] px-3.5 py-2 text-xs font-semibold text-white shadow-xs transition hover:bg-[#5839e0] disabled:opacity-50"
+                        >
+                            {isGeneratingVoice ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                            {isGeneratingVoice ? 'Generating Voice...' : 'Generate AI Voiceover'}
+                        </button>
                     </div>
 
-                    <button
-                        type="button"
-                        onClick={() => void handleGenerateNarration()}
-                        disabled={isGeneratingVoice || !narrationText.trim()}
-                        className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#6A4CFF] px-3.5 py-2.5 text-xs font-semibold text-white shadow-xs transition hover:bg-[#5839e0] disabled:opacity-50"
-                    >
-                        {isGeneratingVoice ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                        {isGeneratingVoice ? 'Generating Voice...' : 'Generate Voiceover'}
-                    </button>
+                    <div className="space-y-2 border-t border-[#14121F]/10 pt-3">
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-[#14121F]/50">Option B: Upload audio file</p>
+                        <input ref={voiceoverInputRef} type="file" accept="audio/*" onChange={setVoiceoverFile} className="hidden" />
+                        <button
+                            type="button"
+                            onClick={() => voiceoverInputRef.current?.click()}
+                            className="w-full rounded-xl border border-[#14121F]/15 bg-[#F7F6FB] px-3.5 py-2.5 text-left text-xs font-semibold text-[#14121F] shadow-xs transition hover:border-[#6A4CFF]"
+                        >
+                            {voiceover && !narrationText ? voiceover.file.name : 'Upload voiceover from computer'}
+                        </button>
+                    </div>
 
                     {voiceover && (
-                        <audio ref={previewVoiceoverRef} src={voiceover.url} controls preload="auto" className="mt-2 w-full accent-[#6A4CFF]" />
+                        <div className="pt-2">
+                            <p className="mb-1 text-[10px] font-semibold text-[#14121F]/60">Voiceover Preview:</p>
+                            <audio ref={previewVoiceoverRef} src={voiceover.url} controls preload="auto" className="w-full accent-[#6A4CFF]" />
+                        </div>
                     )}
                 </section>
             </aside>
@@ -2549,16 +2543,16 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
                                                     onChange={(x, y) => updateClip(activeImage.id, { cursorTargetX: x, cursorTargetY: y })}
                                                 />
                                             )}
-                                        </>
-                                    )}
 
-                                    {activeImage?.overlayText && (
-                                        <CaptionOverlay
-                                            clip={activeImage}
-                                            onPointerDown={handleCaptionPointerDown}
-                                            onPointerMove={handleCaptionPointerMove}
-                                            onPointerUp={handleCaptionPointerUp}
-                                        />
+                                            {activeImage?.overlayText && (
+                                                <CaptionOverlay
+                                                    clip={activeImage}
+                                                    onPointerDown={handleCaptionPointerDown}
+                                                    onPointerMove={handleCaptionPointerMove}
+                                                    onPointerUp={handleCaptionPointerUp}
+                                                />
+                                            )}
+                                        </>
                                     )}
                                 </>
                             )}
@@ -2685,7 +2679,18 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
                         </div>
                     )}
 
+                    <div className="flex w-full max-w-4xl flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#14121F]/10 bg-white p-4 shadow-xs">
+                        <div className="text-xs font-semibold text-[#14121F]/70">{durationLabel} total</div>
+                        <button type="button" onClick={() => void exportReel()} disabled={!images.length || isExporting} className="flex items-center gap-2 rounded-xl bg-[#6A4CFF] px-6 py-3 text-xs font-bold text-white shadow-md shadow-[#6A4CFF]/20 transition hover:bg-[#5839e0] disabled:opacity-50">
+                            {isExporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                            {isExporting ? `Rendering (${exportProgress}%)...` : 'Create & download reel'}
+                        </button>
+                    </div>
 
+                    {isExporting && exportStatus && <p className="w-full max-w-4xl text-xs font-medium text-white/70">{exportStatus}</p>}
+                    {notice && <p role="status" className="w-full max-w-4xl rounded-2xl border border-amber-200 bg-amber-50 p-3.5 text-xs font-medium text-amber-800 shadow-xs">{notice}</p>}
+                    {error && <p role="alert" className="w-full max-w-4xl rounded-2xl border border-red-200 bg-red-50 p-3.5 text-xs font-medium text-red-600 shadow-xs">{error}</p>}
+                    <canvas ref={canvasRef} className="hidden" />
                 </div>
 
                 {showUpgradeModal && (
@@ -2713,94 +2718,6 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
                         </div>
                     </div>
                 )}
-            </section>
-            <section className={CARD_CLASS}>
-                <div className="flex items-center justify-between">
-                    <h2 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#14121F]/70">
-                        <Mic className="h-4 w-4 text-[#6A4CFF]" /> Voiceover
-                    </h2>
-                    {voiceover && (
-                        <button
-                            type="button"
-                            onClick={() => { URL.revokeObjectURL(voiceover.url); setVoiceover(null); }}
-                            className="text-xs font-semibold text-[#14121F]/50 hover:text-red-600"
-                        >
-                            Remove
-                        </button>
-                    )}
-                </div>
-
-                {/* AI Text Generator Option */}
-                <div className="space-y-2 pt-1">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-[#14121F]/50">Option A: AI Text-to-Speech</p>
-                    <textarea
-                        value={narrationText}
-                        onChange={(e) => setNarrationText(e.target.value)}
-                        maxLength={1500}
-                        placeholder={narrationLanguage === 'en'
-                            ? 'Write your script. It will be read exactly as written.'
-                            : 'Write your script in English. It will be translated and spoken in the selected language.'}
-                        rows={2}
-                        className="w-full resize-y rounded-xl border border-[#14121F]/15 bg-[#F7F6FB] px-3.5 py-2.5 text-xs text-[#14121F] shadow-xs placeholder:text-[#14121F]/40 focus:border-[#6A4CFF] focus:outline-none"
-                    />
-
-                    <div className="grid grid-cols-2 gap-2.5">
-                        <SelectField label="Language" value={narrationLanguage} onChange={(val) => setNarrationLanguage(val as any)}>
-                            <option value="en">English</option>
-                            <option value="hi">Hindi</option>
-                            <option value="bn">Bengali</option>
-                            <option value="ta">Tamil</option>
-                            <option value="te">Telugu</option>
-                        </SelectField>
-
-                        <SelectField label="Voice Gender" value={narrationVoiceGender} onChange={(val) => setNarrationVoiceGender(val as any)}>
-                            <option value="female">Female</option>
-                            <option value="male">Male</option>
-                        </SelectField>
-                    </div>
-
-                    <button
-                        type="button"
-                        onClick={() => void handleGenerateNarration()}
-                        disabled={isGeneratingVoice || !narrationText.trim()}
-                        className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#6A4CFF] px-3.5 py-2 text-xs font-semibold text-white shadow-xs transition hover:bg-[#5839e0] disabled:opacity-50"
-                    >
-                        {isGeneratingVoice ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                        {isGeneratingVoice ? 'Generating Voice...' : 'Generate AI Voiceover'}
-                    </button>
-                </div>
-
-                {/* Upload from Computer Option */}
-                <div className="space-y-2 border-t border-[#14121F]/10 pt-3">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-[#14121F]/50">Option B: Upload audio file</p>
-                    <input ref={voiceoverInputRef} type="file" accept="audio/*" onChange={setVoiceoverFile} className="hidden" />
-                    <button
-                        type="button"
-                        onClick={() => voiceoverInputRef.current?.click()}
-                        className="w-full rounded-xl border border-[#14121F]/15 bg-[#F7F6FB] px-3.5 py-2.5 text-left text-xs font-semibold text-[#14121F] shadow-xs transition hover:border-[#6A4CFF]"
-                    >
-                        {voiceover && !narrationText ? voiceover.file.name : 'Upload voiceover from computer'}
-                    </button>
-                </div>
-
-                {voiceover && (
-                    <div className="pt-2">
-                        <p className="mb-1 text-[10px] font-semibold text-[#14121F]/60">Voiceover Preview:</p>
-                        <audio ref={previewVoiceoverRef} src={voiceover.url} controls preload="auto" className="w-full accent-[#6A4CFF]" />
-                    </div>
-                )}
-                <div className="flex w-full max-w-4xl flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#14121F]/10 bg-white p-4 shadow-xs">
-                    <div className="text-xs font-semibold text-[#14121F]/70">{durationLabel} total</div>
-                    <button type="button" onClick={() => void exportReel()} disabled={!images.length || isExporting} className="flex items-center gap-2 rounded-xl bg-[#6A4CFF] px-6 py-3 text-xs font-bold text-white shadow-md shadow-[#6A4CFF]/20 transition hover:bg-[#5839e0] disabled:opacity-50">
-                        {isExporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-                        {isExporting ? `Rendering (${exportProgress}%)...` : 'Create & download reel'}
-                    </button>
-                </div>
-
-                {isExporting && exportStatus && <p className="w-full max-w-4xl text-xs font-medium text-white/70">{exportStatus}</p>}
-                {notice && <p role="status" className="w-full max-w-4xl rounded-2xl border border-amber-200 bg-amber-50 p-3.5 text-xs font-medium text-amber-800 shadow-xs">{notice}</p>}
-                {error && <p role="alert" className="w-full max-w-4xl rounded-2xl border border-red-200 bg-red-50 p-3.5 text-xs font-medium text-red-600 shadow-xs">{error}</p>}
-                <canvas ref={canvasRef} className="hidden" />
             </section>
         </main>
     );
