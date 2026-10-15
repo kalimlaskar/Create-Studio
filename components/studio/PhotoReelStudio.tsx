@@ -2685,18 +2685,7 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
                         </div>
                     )}
 
-                    <div className="flex w-full max-w-4xl flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#14121F]/10 bg-white p-4 shadow-xs">
-                        <div className="text-xs font-semibold text-[#14121F]/70">{durationLabel} total</div>
-                        <button type="button" onClick={() => void exportReel()} disabled={!images.length || isExporting} className="flex items-center gap-2 rounded-xl bg-[#6A4CFF] px-6 py-3 text-xs font-bold text-white shadow-md shadow-[#6A4CFF]/20 transition hover:bg-[#5839e0] disabled:opacity-50">
-                            {isExporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-                            {isExporting ? `Rendering (${exportProgress}%)...` : 'Create & download reel'}
-                        </button>
-                    </div>
 
-                    {isExporting && exportStatus && <p className="w-full max-w-4xl text-xs font-medium text-white/70">{exportStatus}</p>}
-                    {notice && <p role="status" className="w-full max-w-4xl rounded-2xl border border-amber-200 bg-amber-50 p-3.5 text-xs font-medium text-amber-800 shadow-xs">{notice}</p>}
-                    {error && <p role="alert" className="w-full max-w-4xl rounded-2xl border border-red-200 bg-red-50 p-3.5 text-xs font-medium text-red-600 shadow-xs">{error}</p>}
-                    <canvas ref={canvasRef} className="hidden" />
                 </div>
 
                 {showUpgradeModal && (
@@ -2800,6 +2789,18 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
                         <audio ref={previewVoiceoverRef} src={voiceover.url} controls preload="auto" className="w-full accent-[#6A4CFF]" />
                     </div>
                 )}
+                <div className="flex w-full max-w-4xl flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#14121F]/10 bg-white p-4 shadow-xs">
+                    <div className="text-xs font-semibold text-[#14121F]/70">{durationLabel} total</div>
+                    <button type="button" onClick={() => void exportReel()} disabled={!images.length || isExporting} className="flex items-center gap-2 rounded-xl bg-[#6A4CFF] px-6 py-3 text-xs font-bold text-white shadow-md shadow-[#6A4CFF]/20 transition hover:bg-[#5839e0] disabled:opacity-50">
+                        {isExporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                        {isExporting ? `Rendering (${exportProgress}%)...` : 'Create & download reel'}
+                    </button>
+                </div>
+
+                {isExporting && exportStatus && <p className="w-full max-w-4xl text-xs font-medium text-white/70">{exportStatus}</p>}
+                {notice && <p role="status" className="w-full max-w-4xl rounded-2xl border border-amber-200 bg-amber-50 p-3.5 text-xs font-medium text-amber-800 shadow-xs">{notice}</p>}
+                {error && <p role="alert" className="w-full max-w-4xl rounded-2xl border border-red-200 bg-red-50 p-3.5 text-xs font-medium text-red-600 shadow-xs">{error}</p>}
+                <canvas ref={canvasRef} className="hidden" />
             </section>
         </main>
     );
