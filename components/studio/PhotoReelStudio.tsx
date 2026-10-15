@@ -531,6 +531,19 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
         }
         action();
     };
+    const setVoiceoverFile = (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        event.target.value = '';
+        if (!file) return;
+        if (!file.type.startsWith('audio/')) {
+            setError('Choose an audio file (MP3, WAV) for the voiceover.');
+            return;
+        }
+        if (voiceover) URL.revokeObjectURL(voiceover.url);
+        setVoiceover({ file, url: URL.createObjectURL(file) });
+        setError(null);
+        setNotice('Custom voiceover loaded from your computer.');
+    };
 
     const [images, setImages] = useState<ReelImage[]>([]);
     const [selectedImageId, setSelectedImageId] = useState<string | null>(null);
@@ -551,6 +564,7 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
     const [narrationLanguage, setNarrationLanguage] = useState<'en' | 'hi' | 'bn' | 'ta' | 'te'>('en');
     const [narrationVoiceGender, setNarrationVoiceGender] = useState<'female' | 'male'>('female');
     const [voiceover, setVoiceover] = useState<{ file: File; url: string } | null>(null);
+    const voiceoverInputRef = useRef<HTMLInputElement>(null);
     const [isGeneratingVoice, setIsGeneratingVoice] = useState(false);
 
     const [logo, setLogo] = useState<{ file: File; url: string } | null>(null);
@@ -1560,7 +1574,6 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
         let recorder: MediaRecorder | null = null;
         let audioContext: AudioContext | null = null;
         let voiceoverAudioElement: HTMLAudioElement | null = null;
-        let frameId = 0;
 
         try {
             const dimensions = getExportDimensions(aspectRatio as unknown as AspectRatioType, '1080p');
@@ -1669,25 +1682,21 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
                 voiceoverAudioElement?.play().catch(() => { }),
             ]);
 
+            // Deterministic frame stepping based on RECORDING_FRAME_RATE
+            const frameIntervalMs = 1000 / RECORDING_FRAME_RATE;
             let elapsed = 0;
-            let previousFrameTimestamp: number | null = null;
             let activeVideoId: string | null = null;
             let lastReportedClip = -1;
 
-            const renderFrame = async (timestamp: number) => {
-                if (previousFrameTimestamp !== null) elapsed += timestamp - previousFrameTimestamp;
-                previousFrameTimestamp = timestamp;
-                if (elapsed >= durationMs) {
-                    if (activeRecorder.state === 'recording') activeRecorder.stop();
-                    return;
-                }
-
+            while (elapsed <= durationMs) {
                 const index = getIndexAtTime(elapsed);
                 const clip = images[index];
+
                 if (index !== lastReportedClip) {
                     lastReportedClip = index;
                     setExportStatus(`Rendering clip ${index + 1} of ${images.length}…`);
                 }
+
                 const localTimeMs = Math.max(0, elapsed - getStartAtIndex(index));
 
                 if (clip.type === 'video') {
@@ -1696,17 +1705,9 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
                     if (activeVideoId !== clip.id) {
                         videoCacheRef.current.forEach((item, id) => { if (id !== clip.id) item.pause(); });
                         const targetTime = Math.min((localTimeMs / 1000) * (clip.speed ?? 1), Math.max(0, video.duration - 0.05));
-                        if (Math.abs(video.currentTime - targetTime) > 0.08) {
-                            const seeked = new Promise<void>((resolve) => {
-                                const timeout = window.setTimeout(() => resolve(), 1500);
-                                video.addEventListener('seeked', () => { window.clearTimeout(timeout); resolve(); }, { once: true });
-                            });
-                            video.currentTime = targetTime;
-                            await seeked;
-                        }
+                        video.currentTime = targetTime;
                         video.playbackRate = clip.speed ?? 1;
-                        await video.play();
-                        await waitForVideoFrame(video, clip.file.name, 1500);
+                        await video.play().catch(() => { });
                         activeVideoId = clip.id;
                     }
                 } else {
@@ -1714,26 +1715,25 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
                         videoCacheRef.current.get(activeVideoId)?.pause();
                         activeVideoId = null;
                     }
-                    await waitForImageDecode(getImage(clip), clip.file.name);
                 }
 
                 const transitionProgress = clip.transition === 'cut' ? 1 : Math.min(1, localTimeMs / TRANSITION_MS);
                 const motionProgress = localTimeMs / Math.max(1, getClipDurationMs(clip));
+
+                // Draw exact match frame
                 drawSlide(exportContext, clip, exportCanvas.width, exportCanvas.height, transitionProgress, motionProgress);
                 drawFreeTierWatermark(exportContext, exportCanvas.width, exportCanvas.height);
-                setExportProgress(5 + Math.min(80, Math.floor((elapsed / durationMs) * 80)));
-                scheduleRender();
-            };
 
-            const scheduleRender = () => {
-                frameId = requestAnimationFrame((timestamp) => {
-                    void renderFrame(timestamp).catch((cause: unknown) => {
-                        renderingError = cause instanceof Error ? cause : new Error('Rendering failed.');
-                        if (activeRecorder.state === 'recording') activeRecorder.stop();
-                    });
-                });
-            };
-            scheduleRender();
+                setExportProgress(5 + Math.min(80, Math.floor((elapsed / durationMs) * 80)));
+
+                // Advance deterministic timer
+                elapsed += frameIntervalMs;
+
+                // Yield control briefly to prevent UI blocking
+                await new Promise((r) => setTimeout(r, 0));
+            }
+
+            if (activeRecorder.state === 'recording') activeRecorder.stop();
 
             let result = await Promise.all([recording, audioPlayback]).then(([recorded]) => recorded);
             if (!result.type.toLowerCase().startsWith('video/mp4')) {
@@ -1758,7 +1758,6 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
             setError(cause instanceof Error ? cause.message : 'Could not export reel.');
             setExportStatus('Export stopped.');
         } finally {
-            cancelAnimationFrame(frameId);
             if (recorder?.state === 'recording') recorder.stop();
             audioRef.current?.pause();
             exportVoiceoverRef.current?.pause();
@@ -2713,6 +2712,82 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
                                 Maybe Later
                             </button>
                         </div>
+                    </div>
+                )}
+            </section>
+            <section className={CARD_CLASS}>
+                <div className="flex items-center justify-between">
+                    <h2 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#14121F]/70">
+                        <Mic className="h-4 w-4 text-[#6A4CFF]" /> Voiceover
+                    </h2>
+                    {voiceover && (
+                        <button
+                            type="button"
+                            onClick={() => { URL.revokeObjectURL(voiceover.url); setVoiceover(null); }}
+                            className="text-xs font-semibold text-[#14121F]/50 hover:text-red-600"
+                        >
+                            Remove
+                        </button>
+                    )}
+                </div>
+
+                {/* AI Text Generator Option */}
+                <div className="space-y-2 pt-1">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-[#14121F]/50">Option A: AI Text-to-Speech</p>
+                    <textarea
+                        value={narrationText}
+                        onChange={(e) => setNarrationText(e.target.value)}
+                        maxLength={1500}
+                        placeholder={narrationLanguage === 'en'
+                            ? 'Write your script. It will be read exactly as written.'
+                            : 'Write your script in English. It will be translated and spoken in the selected language.'}
+                        rows={2}
+                        className="w-full resize-y rounded-xl border border-[#14121F]/15 bg-[#F7F6FB] px-3.5 py-2.5 text-xs text-[#14121F] shadow-xs placeholder:text-[#14121F]/40 focus:border-[#6A4CFF] focus:outline-none"
+                    />
+
+                    <div className="grid grid-cols-2 gap-2.5">
+                        <SelectField label="Language" value={narrationLanguage} onChange={(val) => setNarrationLanguage(val as any)}>
+                            <option value="en">English</option>
+                            <option value="hi">Hindi</option>
+                            <option value="bn">Bengali</option>
+                            <option value="ta">Tamil</option>
+                            <option value="te">Telugu</option>
+                        </SelectField>
+
+                        <SelectField label="Voice Gender" value={narrationVoiceGender} onChange={(val) => setNarrationVoiceGender(val as any)}>
+                            <option value="female">Female</option>
+                            <option value="male">Male</option>
+                        </SelectField>
+                    </div>
+
+                    <button
+                        type="button"
+                        onClick={() => void handleGenerateNarration()}
+                        disabled={isGeneratingVoice || !narrationText.trim()}
+                        className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#6A4CFF] px-3.5 py-2 text-xs font-semibold text-white shadow-xs transition hover:bg-[#5839e0] disabled:opacity-50"
+                    >
+                        {isGeneratingVoice ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                        {isGeneratingVoice ? 'Generating Voice...' : 'Generate AI Voiceover'}
+                    </button>
+                </div>
+
+                {/* Upload from Computer Option */}
+                <div className="space-y-2 border-t border-[#14121F]/10 pt-3">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-[#14121F]/50">Option B: Upload audio file</p>
+                    <input ref={voiceoverInputRef} type="file" accept="audio/*" onChange={setVoiceoverFile} className="hidden" />
+                    <button
+                        type="button"
+                        onClick={() => voiceoverInputRef.current?.click()}
+                        className="w-full rounded-xl border border-[#14121F]/15 bg-[#F7F6FB] px-3.5 py-2.5 text-left text-xs font-semibold text-[#14121F] shadow-xs transition hover:border-[#6A4CFF]"
+                    >
+                        {voiceover && !narrationText ? voiceover.file.name : 'Upload voiceover from computer'}
+                    </button>
+                </div>
+
+                {voiceover && (
+                    <div className="pt-2">
+                        <p className="mb-1 text-[10px] font-semibold text-[#14121F]/60">Voiceover Preview:</p>
+                        <audio ref={previewVoiceoverRef} src={voiceover.url} controls preload="auto" className="w-full accent-[#6A4CFF]" />
                     </div>
                 )}
             </section>
