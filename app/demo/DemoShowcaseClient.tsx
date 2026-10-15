@@ -41,7 +41,7 @@ const productDemos = [
         duration: '2:14',
         badge: 'Flagship Demo',
         bgGradient: 'from-[#14121F] via-[#2c2742] to-[#3b2d8f]',
-        videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
+        videoUrl: 'https://pub-fa1d3ce0ee934e5fbbf83449e9efe21c.r2.dev/Demo/saas-product-walkthrough.mp4',
     },
     {
         title: 'Editing by Transcript',
