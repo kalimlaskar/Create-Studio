@@ -1,11 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import Link from 'next/link';
-import Image from 'next/image';
-import type { CSSProperties } from 'react';
-import { Bricolage_Grotesque, Instrument_Sans } from 'next/font/google';
-import { Video, Pause, Play, Square, FolderOpen, Trash2, Images, MonitorUp, LoaderCircle, SlidersHorizontal, SwitchCamera, ArrowLeft, ArrowRight, X, Sparkles } from 'lucide-react';
+import { Video, Pause, Play, Square, FolderOpen, Trash2, LoaderCircle, SlidersHorizontal, SwitchCamera, ArrowLeft, X } from 'lucide-react';
 import { SidebarControls } from '@/components/studio/SidebarControls';
 import { VideoCanvas } from '@/components/studio/VideoCanvas';
 import { ExportModal } from '@/components/studio/ExportModal';
@@ -13,34 +9,16 @@ import { EditorShell } from '@/components/editor/EditorShell';
 import { useStudioSession } from '@/hooks/useStudioSession';
 import { deleteEditorDraft, DraftSummary, LoadedDraft, listEditorDrafts, loadEditorDraft } from '@/components/editor/drafts';
 import { PhotoReelStudio } from '@/components/studio/PhotoReelStudio';
+import { StudioHome } from '@/components/studio/StudioHome';
 import { changePasswordAction, checkUsernameAvailabilityAction, deleteAccountAction, signOutAction, updateProfileAction, updateProfileAvatarAction } from '@/app/auth/actions';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 import { useDocumentPip } from './useDocumentPip';
 import { FloatingStudioPip } from './FloatingStudioPip';
 import { ScreenShareControls } from '@/components/studio/Screensharecontrols';
 
-const display = Bricolage_Grotesque({ subsets: ['latin'], variable: '--font-display', display: 'swap' });
-const body = Instrument_Sans({ subsets: ['latin'], variable: '--font-body', display: 'swap' });
-
 const D = 'font-[family-name:var(--font-display)]';
 const focus =
     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6A4CFF]/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[#F7F6FB]';
-
-const css = `
-@keyframes rise{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
-.rise{opacity:0;animation:rise .8s cubic-bezier(.2,.7,.2,1) forwards;animation-delay:calc(var(--d,0)*90ms)}
-.grain{background-image:radial-gradient(rgba(20,18,31,.04) 1px,transparent 1px);background-size:24px 24px}
-@media (prefers-reduced-motion:reduce){.rise{animation:none;opacity:1}}
-`;
-
-function Wordmark() {
-    return (
-        <Link href="/" aria-label="Cliprame home" className={`group inline-flex shrink-0 items-center gap-2.5 rounded-full font-semibold tracking-tight text-[#14121F] ${focus}`}>
-            <Image src="/cliprame-icon.svg" alt="" width={36} height={36} className="h-9 w-9 transition-transform duration-200 group-hover:scale-105" />
-            <span className={`${D} text-lg font-bold`}>Cliprame</span>
-        </Link>
-    );
-}
 
 function getFallbackDisplayName(userEmail: string) {
     const accountName = userEmail.split(' · ')[0]?.split('@')[0] ?? '';
@@ -191,7 +169,7 @@ function ProfileMenu({ creatorName, username, avatarUrl, userEmail, profilePersi
     };
 
     return (
-        <details className="relative">
+        <details id="profile-menu" className="relative">
             <summary className={`flex max-w-[min(15rem,52vw)] cursor-pointer list-none items-center gap-2 rounded-full border border-[#14121F]/15 bg-white/80 px-3.5 py-2 text-xs font-semibold text-[#14121F] shadow-sm backdrop-blur transition hover:bg-white ${focus}`}>
                 <span aria-hidden="true" className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#6A4CFF]/20 bg-cover bg-center text-[10px] font-bold text-[#6A4CFF]" style={avatarUrl ? { backgroundImage: `url("${avatarUrl}")` } : undefined}>{!avatarUrl && (creatorName.trim().charAt(0).toUpperCase() || 'C')}</span>
                 <span className="truncate">{creatorName}</span>
@@ -342,6 +320,10 @@ export function CreatorStudioDashboard({
 
     const [creationMode, setCreationMode] = useState<'choose' | 'record' | 'photos'>('choose');
     const [view, setView] = useState<'record' | 'edit'>('record');
+    const [reelDraftId, setReelDraftId] = useState<string | null>(null);
+    // A tab recording handed over by the Cliprame Recorder extension.
+    const [importedDurationMs, setImportedDurationMs] = useState<number | null>(null);
+    const [importNotice, setImportNotice] = useState('');
     const [showSettings, setShowSettings] = useState(false);
     const [screenShareStream, setScreenShareStream] = useState<MediaStream | null>(null);
     const [screenShareSurface, setScreenShareSurface] = useState<string | null>(null);
@@ -627,6 +609,49 @@ export function CreatorStudioDashboard({
         }
     }, [settings.inputMode, settings.uploadedVideoUrl, videoRef]);
 
+    // Receives a recording from the Cliprame Recorder extension (/studio?import=extension&recording=<id>).
+    // The extension's bridge frame answers "import-ready" with the video file.
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        const recordingId = params.get('recording');
+        if (params.get('import') !== 'extension' || !recordingId) return;
+
+        let settled = false;
+        const finish = (notice: string) => {
+            settled = true;
+            window.clearInterval(askTimer);
+            window.clearTimeout(giveUpTimer);
+            window.history.replaceState(null, '', window.location.pathname);
+            setImportNotice(notice);
+        };
+        const onMessage = (event: MessageEvent) => {
+            const data = event.data as { source?: string; type?: string; id?: string; blob?: unknown; durationMs?: unknown } | null;
+            if (settled || !event.origin.startsWith('chrome-extension://') || data?.source !== 'cliprame-extension' || data.id !== recordingId) return;
+            if (data.type === 'recording' && data.blob instanceof Blob) {
+                finish('');
+                setImportedDurationMs(typeof data.durationMs === 'number' && data.durationMs > 0 ? data.durationMs : null);
+                updateSettings({ inputMode: 'upload', uploadedVideoUrl: URL.createObjectURL(data.blob) });
+                setView('record');
+                setCreationMode('record');
+            } else {
+                finish('That recording is no longer in the extension. Record again, or download it from the extension and upload it here.');
+            }
+        };
+        const askForRecording = () => window.postMessage({ source: 'cliprame-app', type: 'import-ready', id: recordingId }, window.location.origin);
+
+        window.addEventListener('message', onMessage);
+        askForRecording();
+        const askTimer = window.setInterval(askForRecording, 500);
+        const giveUpTimer = window.setTimeout(() => {
+            if (!settled) finish('Could not get the recording from the Cliprame Recorder extension. Check that it is installed and enabled, then choose "Edit in Cliprame" again.');
+        }, 8000);
+        return () => {
+            window.removeEventListener('message', onMessage);
+            window.clearInterval(askTimer);
+            window.clearTimeout(giveUpTimer);
+        };
+    }, [updateSettings]);
+
     const activeVideoUrl = restoredDraft?.project.sourceVideoUrl || recordedVideoUrl || settings.uploadedVideoUrl;
     const isEditorOpen = Boolean(activeVideoUrl && (view === 'edit' || (settings.inputMode === 'upload' && settings.uploadedVideoUrl)));
 
@@ -635,7 +660,9 @@ export function CreatorStudioDashboard({
         else if (settings.cameraArtEffect === 'photo-avatar') startAvatarAudioMeter();
     }, [isEditorOpen, settings.cameraArtEffect, startAvatarAudioMeter, stopAvatarAudioMeter]);
 
-    if (creationMode === 'photos') return <PhotoReelStudio onBack={() => setCreationMode('choose')} />;
+    if (creationMode === 'photos') return <PhotoReelStudio initialDraftId={reelDraftId} onBack={() => { setReelDraftId(null); setCreationMode('choose'); }} />;
+
+    const profileMenu = <ProfileMenu creatorName={creatorName} username={profileUsername} avatarUrl={profileAvatarUrl} userEmail={userEmail} profilePersistenceEnabled={profilePersistenceEnabled} onNameChange={updateCreatorName} onUsernameChange={(username) => { setProfileUsername(username); setProfileSaveState('Unsaved changes'); }} onSave={() => void saveCreatorProfile()} onAvatarChange={setProfileAvatarUrl} saveState={profileSaveState} />;
 
     if ((view === 'edit' || (settings.inputMode === 'upload' && Boolean(settings.uploadedVideoUrl))) && activeVideoUrl) {
         return (
@@ -646,7 +673,7 @@ export function CreatorStudioDashboard({
                 initialScript={settings.scriptText}
                 initialScriptLanguage={settings.scriptLanguage}
                 creatorName={creatorName}
-                sourceDurationMs={restoredDraft?.project.durationMs ?? recordedDurationMs ?? undefined}
+                sourceDurationMs={restoredDraft?.project.durationMs ?? recordedDurationMs ?? importedDurationMs ?? undefined}
                 initialCameraArtEffect={restoredDraft?.project.cameraArtEffect ?? (recordedVideoUrl || settings.cameraArtEffect === 'photo-avatar' || settings.cameraArtEffect === 'avatar' ? 'none' : settings.cameraArtEffect)}
                 initialProject={restoredDraft?.project}
                 onDraftSaved={() => { void refreshDrafts(); }}
@@ -655,7 +682,8 @@ export function CreatorStudioDashboard({
                     restoredDraft?.project.tracks.audio.forEach((track) => URL.revokeObjectURL(track.url));
                     setRestoredDraft(null);
                     resetRecording();
-                    updateSettings({ inputMode: 'camera', uploadedVideoUrl: undefined });
+                    updateSettings({ uploadedVideoUrl: undefined });
+                    setImportedDurationMs(null);
                     setView('record');
                     stopScreenShare();
                 }}
@@ -665,79 +693,25 @@ export function CreatorStudioDashboard({
 
     if (creationMode === 'choose') {
         return (
-            <main className={`${display.variable} ${body.variable} min-h-dvh overflow-x-clip bg-[#F7F6FB] font-[family-name:var(--font-body)] text-[#14121F] selection:bg-[#6A4CFF]/20`}>
-                <style dangerouslySetInnerHTML={{ __html: css }} />
-                <div className="grain pointer-events-none absolute inset-0 -z-10" />
-
-                <header className="sticky top-0 z-50 px-3 pt-3 sm:px-6 sm:pt-4">
-                    <div className="mx-auto flex h-14 max-w-5xl items-center justify-between gap-3 rounded-full border border-white/70 bg-white/70 pl-4 pr-2 shadow-[0_10px_30px_-10px_rgba(20,18,31,0.18)] backdrop-blur-xl sm:h-16 sm:pl-5">
-                        <Wordmark />
-                        <nav aria-label="Main navigation" className="hidden items-center gap-1 md:flex">
-                            <Link href="/" className={`rounded-full px-4 py-2 text-sm font-medium text-[#14121F]/65 transition-colors hover:bg-[#14121F]/[0.06] hover:text-[#14121F] ${focus}`}>Home</Link>
-                            <Link href="/pricing" className={`rounded-full px-4 py-2 text-sm font-medium text-[#14121F]/65 transition-colors hover:bg-[#14121F]/[0.06] hover:text-[#14121F] ${focus}`}>Pricing</Link>
-                            <span aria-current="page" className="rounded-full bg-[#14121F]/[0.08] px-4 py-2 text-sm font-semibold text-[#14121F]">Studio</span>
-                        </nav>
-                        <div className="flex shrink-0 items-center gap-2">
-                            {isPro ? (
-                                <span className="rounded-full bg-[#6A4CFF]/10 px-3 py-1 text-xs font-semibold text-[#6A4CFF]">
-                                    {userPlan}
-                                </span>
-                            ) : profilePersistenceEnabled && (
-                                <Link href="/pricing" className="rounded-full bg-[#6A4CFF] px-3.5 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-[#5839e0]">Upgrade</Link>
-                            )}
-                            <ProfileMenu creatorName={creatorName} username={profileUsername} avatarUrl={profileAvatarUrl} userEmail={userEmail} profilePersistenceEnabled={profilePersistenceEnabled} onNameChange={updateCreatorName} onUsernameChange={(username) => { setProfileUsername(username); setProfileSaveState('Unsaved changes'); }} onSave={() => void saveCreatorProfile()} onAvatarChange={setProfileAvatarUrl} saveState={profileSaveState} />
-                        </div>
-                    </div>
-                </header>
-
-                <section className="relative mx-auto max-w-7xl px-5 pb-20 pt-12 sm:px-8 sm:pt-16 lg:px-12">
-                    <div className="absolute -left-20 -top-10 -z-10 h-72 w-72 rounded-full bg-[#6A4CFF]/15 blur-3xl" />
-                    <div className="absolute -right-20 top-10 -z-10 h-72 w-72 rounded-full bg-[#FF3D81]/10 blur-3xl" />
-
-                    <div className="rise" style={{ '--d': 0 } as CSSProperties}>
-                        <span className="inline-flex items-center gap-1.5 rounded-full bg-[#6A4CFF]/10 px-3.5 py-1 text-xs font-semibold text-[#6A4CFF]">
-                            <Sparkles className="h-3.5 w-3.5" /> Cliprame workspace
-                        </span>
-                    </div>
-
-                    <div className="rise mt-4" style={{ '--d': 1 } as CSSProperties}>
-                        <h1 className={`${D} text-4xl font-extrabold tracking-[-0.03em] text-[#14121F] sm:text-5xl`}>
-                            What are we creating today?
-                        </h1>
-                        <p className="mt-3 max-w-xl text-base leading-7 text-[#14121F]/65">
-                            Record a video with your camera, or turn your photos into a music-backed reel.
-                        </p>
-                    </div>
-
-                    <div className="rise mt-10 grid gap-6 md:grid-cols-2" style={{ '--d': 2 } as CSSProperties}>
-                        <button type="button" onClick={() => { setView('record'); setCreationMode('record'); }} className="group relative rounded-[2.2rem] border border-[#14121F]/10 bg-white p-8 text-left shadow-[0_15px_40px_-15px_rgba(20,18,31,0.06)] transition-all duration-300 hover:-translate-y-1 hover:border-[#6A4CFF]/50 hover:shadow-[0_20px_50px_-15px_rgba(106,76,255,0.15)]">
-                            <div className="mb-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#6A4CFF]/10 text-[#6A4CFF] transition-transform duration-300 group-hover:scale-110">
-                                <Video className="h-7 w-7" />
-                            </div>
-                            <h2 className={`${D} text-2xl font-bold tracking-tight text-[#14121F]`}>Record a video</h2>
-                            <p className="mt-2.5 min-h-12 text-sm leading-6 text-[#14121F]/65">Use your camera, teleprompter, creative effects and the video editor.</p>
-                            <span className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-[#6A4CFF]">
-                                Open recording studio <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
-                            </span>
-                        </button>
-
-                        <button type="button" onClick={() => setCreationMode('photos')} className="group relative rounded-[2.2rem] border border-[#14121F]/10 bg-white p-8 text-left shadow-[0_15px_40px_-15px_rgba(20,18,31,0.06)] transition-all duration-300 hover:-translate-y-1 hover:border-[#FF3D81]/50 hover:shadow-[0_20px_50px_-15px_rgba(255,61,129,0.15)]">
-                            <div className="mb-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#FF3D81]/10 text-[#FF3D81] transition-transform duration-300 group-hover:scale-110">
-                                <Images className="h-7 w-7" />
-                            </div>
-                            <h2 className={`${D} text-2xl font-bold tracking-tight text-[#14121F]`}>Create a photo + video reel</h2>
-                            <p className="mt-2.5 min-h-12 text-sm leading-6 text-[#14121F]/65">Mix photos and video clips, add text and music, then export a finished reel.</p>
-                            <span className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-[#FF3D81]">
-                                Make a reel <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
-                            </span>
-                        </button>
-                    </div>
-
-                    <p className="rise mt-10 text-center text-xs text-[#14121F]/45" style={{ '--d': 3 } as CSSProperties}>
-                        Your media and drafts stay in this browser unless you export them.
-                    </p>
-                </section>
-            </main>
+            <StudioHome
+                creatorName={creatorName}
+                avatarUrl={profileAvatarUrl}
+                username={profileUsername}
+                userPlan={userPlan}
+                isPro={isPro}
+                showUpgrade={!isPro && profilePersistenceEnabled}
+                videoDrafts={savedDrafts}
+                isLoadingDraft={isLoadingDraft}
+                profileMenu={profileMenu}
+                notice={importNotice}
+                onDismissNotice={() => setImportNotice('')}
+                onRecord={() => { updateSettings({ inputMode: 'camera', uploadedVideoUrl: undefined }); setView('record'); setCreationMode('record'); }}
+                onUpload={(file) => { updateSettings({ inputMode: 'upload', uploadedVideoUrl: URL.createObjectURL(file) }); setView('record'); setCreationMode('record'); }}
+                onReel={(draftId) => { setReelDraftId(draftId ?? null); setCreationMode('photos'); }}
+                onOpenVideoDraft={(id) => void openDraft(id)}
+                onDeleteVideoDraft={(id) => void removeDraft(id)}
+                onEditProfile={() => document.getElementById('profile-menu')?.setAttribute('open', '')}
+            />
         );
     }
 
@@ -752,10 +726,10 @@ export function CreatorStudioDashboard({
                 <SidebarControls settings={settings} onUpdateSettings={updateSettings} onCameraArtEffectChange={setCameraArtEffect} cameraSwitchDisabled={countdown !== null || (isRecording && Boolean(screenShareStream))} />
             </div>
             <div className="relative flex min-h-0 min-w-0 flex-1 flex-col md:pt-14">
-                <button type="button" onClick={() => { setShowWelcome(false); setCreationMode('choose'); }} aria-label="Back to creation options" className="absolute left-3 top-3 z-30 flex h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-neutral-950/80 text-neutral-100 backdrop-blur-md md:hidden"><ArrowLeft className="h-5 w-5" /></button>
+                <button type="button" onClick={() => { setShowWelcome(false); setCreationMode('choose'); }} aria-label="Back to home" className="absolute left-3 top-3 z-30 flex h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-neutral-950/80 text-neutral-100 backdrop-blur-md md:hidden"><ArrowLeft className="h-5 w-5" /></button>
                 <div className="absolute right-3 top-3 z-40 flex items-start gap-2 md:right-4">
-                    <button type="button" onClick={() => { setShowWelcome(false); setCreationMode('choose'); }} className="hidden items-center rounded-lg border border-neutral-700 bg-neutral-900/95 px-3 py-2 text-xs font-semibold text-neutral-200 shadow-lg hover:bg-neutral-800 md:flex">Creation options</button>
-                    <ProfileMenu creatorName={creatorName} username={profileUsername} avatarUrl={profileAvatarUrl} userEmail={userEmail} profilePersistenceEnabled={profilePersistenceEnabled} onNameChange={updateCreatorName} onUsernameChange={(username) => { setProfileUsername(username); setProfileSaveState('Unsaved changes'); }} onSave={() => void saveCreatorProfile()} onAvatarChange={setProfileAvatarUrl} saveState={profileSaveState} />
+                    <button type="button" onClick={() => { setShowWelcome(false); setCreationMode('choose'); }} className="hidden items-center rounded-lg border border-neutral-700 bg-neutral-900/95 px-3 py-2 text-xs font-semibold text-neutral-200 shadow-lg hover:bg-neutral-800 md:flex">Home</button>
+                    {profileMenu}
                     <details className="relative">
                         <summary className="flex cursor-pointer list-none items-center gap-2 rounded-lg border border-neutral-700 bg-neutral-900/95 px-3 py-2 text-xs font-semibold text-neutral-200 shadow-lg hover:bg-neutral-800"><FolderOpen className="h-4 w-4" /> Projects ({savedDrafts.length})</summary>
                         <div className="absolute right-0 mt-2 max-h-[60dvh] w-[min(22rem,calc(100vw-1.5rem))] overflow-y-auto rounded-xl border border-neutral-700 bg-neutral-900 p-2 shadow-2xl">

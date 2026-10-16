@@ -7,7 +7,7 @@ import { createHighQualityRecorder, getRecordingDimensions, CAMERA_INSET_VIDEO_B
 
 const DEFAULT_SETTINGS: StudioSettings = {
     cameraFacing: 'user',
-    aspectRatio: '9:16',
+    aspectRatio: '16:9',
     brightness: 100,
     contrast: 100,
     filterPreset: 'none',
@@ -39,7 +39,7 @@ const DEFAULT_SETTINGS: StudioSettings = {
     screenShareShowCamera: true,
     backgroundMode: 'none',
     backgroundImageUrl: null,
-    inputMode: 'camera',
+    inputMode: 'upload',
     scriptLanguage: 'en',
     airZoomEnabled: false,
     airZoomScale: 3,
@@ -88,10 +88,12 @@ export function useStudioSession(enabled = true, screenShareStream: MediaStream 
     useEffect(() => { screenShareStreamRef.current = screenShareStream; }, [screenShareStream]);
 
     // Initialize Camera & Mic with AI Noise Suppression
+    // Upload mode only needs the camera and mic for a screen share's camera bubble and voice.
+    const cameraEnabled = enabled && (settings.inputMode === 'camera' || Boolean(screenShareStream));
     const cameraFacing = settings.cameraFacing;
     const initialCameraFacingRef = useRef(cameraFacing);
     useEffect(() => {
-        if (!enabled) return;
+        if (!cameraEnabled) return;
         let cancelled = false;
 
         async function setupCamera() {
@@ -129,11 +131,11 @@ export function useStudioSession(enabled = true, screenShareStream: MediaStream 
             mediaStreamRef.current = null;
             if (videoRef.current) videoRef.current.srcObject = null;
         };
-    }, [enabled]);
+    }, [cameraEnabled]);
 
     // Swap only the video track so the microphone track and any active recording keep going.
     useEffect(() => {
-        if (!enabled || initialCameraFacingRef.current === cameraFacing) return;
+        if (!cameraEnabled || initialCameraFacingRef.current === cameraFacing) return;
         initialCameraFacingRef.current = cameraFacing;
         const stream = mediaStreamRef.current;
         if (!stream) return;
@@ -158,7 +160,7 @@ export function useStudioSession(enabled = true, screenShareStream: MediaStream 
             if (!cancelled) setCameraError('Could not switch to that camera. This device may only have one camera.');
         });
         return () => { cancelled = true; };
-    }, [enabled, cameraFacing]);
+    }, [cameraEnabled, cameraFacing]);
 
     const updateSettings = useCallback((newSettings: Partial<StudioSettings>) => {
         setSettings((prev) => ({ ...prev, ...newSettings }));

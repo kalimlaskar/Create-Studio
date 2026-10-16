@@ -16,18 +16,28 @@ flowchart LR
         localData[IndexedDB<br/>video editor and photo reel drafts]
         authActions[Server actions<br/>sign in · sign up · profile · sign out]
         api[Server API routes<br/>transcribe · script · caption · dub · feedback]
+        billingApi[Billing API routes<br/>subscribe · verify · cancel · webhook · plan]
         sessionCheck[Session and claims checks]
+        planCheck[Plan and usage checks]
     end
 
     subgraph supabase[Supabase]
         auth[Supabase Auth]
         profiles[(profiles table<br/>row-level security)]
+        avatars[(profile-avatars<br/>storage bucket)]
+        billingData[(subscriptions and<br/>AI usage tables)]
     end
 
     subgraph providers[External services]
-        openai[OpenAI Whisper]
-        gemini[Google Gemini<br/>text and speech]
+        gemini[Google Gemini<br/>transcription · text · speech]
+        razorpay[Razorpay Subscriptions]
         feedback[Configured feedback webhook]
+    end
+
+    subgraph onDevice[In-browser models]
+        mediapipe[MediaPipe<br/>segmentation · hand tracking]
+        depth[Depth Anything<br/>via transformers.js]
+        ffmpeg[ffmpeg.wasm<br/>MP4 conversion]
     end
 
     creator --> pages
@@ -36,30 +46,40 @@ flowchart LR
     studio --> browserWork
     editor --> browserWork
     browserWork <--> localData
+    browserWork --> onDevice
     studio <--> localData
 
     pages --> authActions
     authActions --> auth
     authActions --> profiles
+    authActions --> avatars
     pages --> sessionCheck
     sessionCheck --> auth
     studio --> api
     editor --> api
     api --> sessionCheck
-    api --> openai
+    api --> planCheck
+    planCheck --> billingData
     api --> gemini
     api --> feedback
+    pages --> billingApi
+    billingApi --> sessionCheck
+    billingApi <--> razorpay
+    billingApi --> billingData
 ```
 
 ### Data and service boundaries
 
 - The Next.js app serves the public pages and the protected studio. Supabase sessions are checked on the server for studio access and AI routes. A separately configured temporary demo session can also unlock the studio.
-- Supabase Auth owns user identity. The `profiles` table stores display names and restricts reads and updates to the authenticated owner with row-level security.
-- Camera, microphone, and optional display capture happen in the browser. Video and photo-reel rendering/export use browser media and canvas APIs.
+- Supabase Auth owns user identity. The `profiles` table stores display names and unique usernames, and restricts reads and updates to the authenticated owner with row-level security. Profile pictures live in the `profile-avatars` storage bucket.
+- Camera, microphone, and optional display capture happen in the browser. Background segmentation, hand tracking (MediaPipe), depth estimation (Depth Anything via transformers.js), and MP4 conversion (ffmpeg.wasm) also run on the device. Depth maps are cached in IndexedDB.
+- Video and photo-reel rendering/export use browser media and canvas APIs.
 - Video-editor drafts (including source video and music blobs) and photo-reel drafts (including clip, music, and voiceover blobs) are stored in separate IndexedDB databases on the current browser/device. They are not account-backed or synchronized.
-- `/api/transcribe` forwards audio to OpenAI Whisper. `/api/generate-script`, `/api/generate-reel-caption`, and `/api/dub` call Google Gemini. Provider credentials remain server-side; these routes require an authenticated session (Supabase, or a demo session when demo auth is enabled and Supabase is not configured).
+- `/api/transcribe`, `/api/generate-script`, `/api/generate-reel-caption`, and `/api/dub` all call Google Gemini. Provider credentials remain server-side, and these routes require an authenticated Supabase session.
+- Usage limits are enforced before each AI call and refunded if the call fails. Transcription and voiceover use monthly minutes that depend on the user's plan (`lib/plans/server.ts`). Script and reel-caption generation use daily request credits (`lib/supabase/ai-quota.ts`).
 - `/api/feedback` forwards a rating and comment to the configured webhook. It does not attach video or account data.
-- The prototype has no configured billing or paid-plan entitlement flow. Recording and exports currently have a 60-second free limit and a watermark.
+- Billing uses Razorpay Subscriptions. The server creates the subscription, verifies the checkout signature, and records status from signed Razorpay webhooks, which are the source of truth for the plan. The `subscriptions` table is written only with the service-role key.
+- Plans (`components/pricing/planLimits.ts`): Free (1-minute exports with a watermark), Creator ($15/month: 5-minute exports, no watermark), and Studio ($35/month: 15-minute exports, no watermark). Each plan also sets monthly transcription and voiceover minutes.
 
 ## Creator flow
 
@@ -84,7 +104,7 @@ flowchart TD
     review --> edit[Open video editor]
     edit --> editWork[Adjust timeline, captions,<br/>audio, overlays and visual style]
     editWork --> transcriptionChoice{Generate word-timed captions?}
-    transcriptionChoice -->|Yes| transcribe[Send source audio to Whisper<br/>through the server API]
+    transcriptionChoice -->|Yes| transcribe[Send source audio to Gemini<br/>through the server API]
     transcriptionChoice -->|No| saveVideo{Save a local draft?}
     transcribe --> editWork
     saveVideo -->|Yes| videoDraft[Save video and project<br/>to browser IndexedDB]
@@ -109,6 +129,28 @@ flowchart TD
     exportReel --> moreReel{Create another reel?}
     moreReel -->|Yes| reel
     moreReel -->|No| choose
+```
+
+### Upgrading a plan
+
+```mermaid
+sequenceDiagram
+    participant B as Browser
+    participant S as Next.js API
+    participant R as Razorpay
+    participant D as Supabase
+    B->>S: POST /api/billing/subscribe (plan)
+    S->>R: Create subscription
+    S->>D: Upsert subscription (status created)
+    S-->>B: Subscription ID and key ID
+    B->>R: Razorpay Checkout
+    R-->>B: Payment ID and signature
+    B->>S: POST /api/billing/verify
+    S->>D: Mark authenticated if signature matches
+    R->>S: Signed subscription.* webhook
+    S->>D: Update status and period end
+    B->>S: GET /api/plan
+    S-->>B: Effective plan and monthly usage
 ```
 
 ### Optional AI steps

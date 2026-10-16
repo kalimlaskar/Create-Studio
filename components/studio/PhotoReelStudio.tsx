@@ -26,7 +26,7 @@ import { useReelPreview } from './useReelPreview';
 
 const PRO_MOTIONS = ['depth-orbit', 'depth-sway', 'depth-dolly'];
 
-export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
+export function PhotoReelStudio({ onBack, initialDraftId }: { onBack: () => void; initialDraftId?: string | null }) {
     /* ------------------------------ state ------------------------------ */
     const [images, setImages] = useState<ReelImage[]>([]);
     const [selectedImageId, setSelectedImageId] = useState<string | null>(null);
@@ -447,6 +447,15 @@ export function PhotoReelStudio({ onBack }: { onBack: () => void }) {
         element.onload = () => setLogoImage(element);
         element.src = logo.url;
     }, [logo]);
+
+    // Opens a draft picked on the studio home screen, once.
+    const openedInitialDraftRef = useRef(false);
+    useEffect(() => {
+        if (!initialDraftId || openedInitialDraftRef.current) return;
+        openedInitialDraftRef.current = true;
+        void openDraft(initialDraftId);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [initialDraftId]);
 
     useEffect(() => {
         let cancelled = false;

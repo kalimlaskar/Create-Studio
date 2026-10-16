@@ -1,0 +1,52 @@
+{
+  "manifest_version": 3,
+  "name": "Cliprame Recorder",
+  "short_name": "Cliprame",
+  "version": "0.1.0",
+  "description": "Record a browser tab with your camera and voice, and mask private data before it reaches the recording.",
+  "minimum_chrome_version": "116",
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "action": {
+    "default_title": "Cliprame Recorder",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png"
+    }
+  },
+  "commands": {
+    "toggle-recording": {
+      "suggested_key": { "default": "Alt+Shift+R", "mac": "Alt+Shift+R" },
+      "description": "Start or finish recording the current tab"
+    }
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "permissions": ["tabCapture", "offscreen", "storage", "activeTab", "scripting"],
+  "optional_host_permissions": ["https://*/*", "http://*/*"],
+  "content_scripts": [
+    {
+      "matches": ["https://www.cliprame.com/*", "https://cliprame.com/*", "http://localhost:3000/*"],
+      "js": ["cliprame-bridge.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["camera.html", "camera.js", "camera.css"],
+      "matches": ["https://*/*", "http://*/*"],
+      "use_dynamic_url": true
+    },
+    {
+      "resources": ["bridge.html", "bridge.js"],
+      "matches": ["https://www.cliprame.com/*", "https://cliprame.com/*", "http://localhost:3000/*"]
+    }
+  ]
+}

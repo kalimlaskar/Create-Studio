@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Cliprame Recorder</title>
+    <link rel="stylesheet" href="theme.css">
+    <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+    <header class="top">
+        <div class="brand">
+            <img src="icons/icon-32.png" alt="" width="22" height="22">
+            <span>Cliprame</span>
+        </div>
+        <button type="button" class="kbd" id="shortcut" title="Keyboard shortcut to start or finish"></button>
+    </header>
+
+    <!-- Recording in progress -->
+    <section id="live" class="live" hidden aria-live="polite">
+        <div class="live-card">
+            <div class="live-status"><span class="rec-dot" id="rec-dot"></span><span id="live-label">Recording</span></div>
+            <div class="live-timer" id="timer">00:00</div>
+            <p class="live-title" id="live-title"></p>
+            <div class="notice" id="mic-error" hidden></div>
+            <div class="notice" id="camera-error" hidden></div>
+
+            <div class="live-controls" id="live-controls">
+                <button type="button" class="round" id="discard" title="Discard recording" aria-label="Discard recording"><svg class="icon"><use href="icons.svg#trash"/></svg></button>
+                <button type="button" class="finish" id="stop"><svg class="icon"><use href="icons.svg#stop"/></svg> Finish</button>
+                <button type="button" class="round" id="pause" title="Pause" aria-label="Pause"><svg class="icon" id="pause-icon"><use href="icons.svg#pause"/></svg></button>
+            </div>
+            <div class="confirm" id="discard-confirm" hidden>
+                <p>Discard this recording? It can't be recovered.</p>
+                <div>
+                    <button type="button" class="btn-secondary" id="discard-cancel">Keep recording</button>
+                    <button type="button" class="danger" id="discard-yes">Discard</button>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Idle -->
+    <div id="idle">
+        <nav class="tabs" role="tablist" aria-label="Recorder">
+            <button type="button" role="tab" id="tab-record" aria-selected="true" aria-controls="panel-record"><svg class="icon-sm"><use href="icons.svg#video"/></svg> Record</button>
+            <button type="button" role="tab" id="tab-privacy" aria-selected="false" aria-controls="panel-privacy" tabindex="-1"><svg class="icon-sm"><use href="icons.svg#shield"/></svg> Privacy <span class="count" id="privacy-count" hidden></span></button>
+        </nav>
+
+        <!-- Record -->
+        <section id="panel-record" role="tabpanel" aria-labelledby="tab-record">
+            <div class="stage" aria-hidden="true">
+                <div class="stage-browser">
+                    <div class="stage-bar">
+                        <span class="dots"><i></i><i></i><i></i></span>
+                        <span class="stage-url"><img class="favicon" id="stage-favicon" alt="" hidden><svg class="icon-sm fallback-globe" id="stage-globe"><use href="icons.svg#globe"/></svg><span id="stage-host">This tab</span></span>
+                    </div>
+                    <div class="stage-body">
+                        <p class="stage-title" id="stage-title"></p>
+                        <div class="stage-lines"><i></i><i class="masked" id="stage-mask-1"></i><i></i><i class="short masked" id="stage-mask-2"></i></div>
+                    </div>
+                </div>
+                <div class="bubble" id="bubble">
+                    <video id="cam-preview" muted playsinline autoplay></video>
+                    <svg class="bubble-icon"><use href="icons.svg#camera"/></svg>
+                </div>
+                <span class="stage-badge" id="stage-badge" hidden><svg class="icon-sm"><use href="icons.svg#shield"/></svg> Masks on</span>
+            </div>
+
+            <div class="options">
+                <label class="option">
+                    <span class="option-icon"><svg class="icon"><use href="icons.svg#camera"/></svg></span>
+                    <span class="option-text">
+                        <span class="option-title">Camera bubble</span>
+                        <span class="option-sub" id="camera-sub">Drag it anywhere on the page</span>
+                    </span>
+                    <span class="switch"><input type="checkbox" id="camera" aria-label="Camera bubble"><span></span></span>
+                </label>
+                <label class="option">
+                    <span class="option-icon"><svg class="icon"><use href="icons.svg#mic"/></svg></span>
+                    <span class="option-text">
+                        <span class="option-title">Microphone</span>
+                        <span class="meter" id="meter" aria-hidden="true"></span>
+                        <span class="option-sub" id="mic-sub">Your voice, with noise reduction</span>
+                    </span>
+                    <span class="switch"><input type="checkbox" id="mic" aria-label="Microphone"><span></span></span>
+                </label>
+                <label class="option">
+                    <span class="option-icon"><svg class="icon"><use href="icons.svg#timer"/></svg></span>
+                    <span class="option-text">
+                        <span class="option-title">3-second countdown</span>
+                        <span class="option-sub">A moment to get ready</span>
+                    </span>
+                    <span class="switch"><input type="checkbox" id="countdown" aria-label="3-second countdown"><span></span></span>
+                </label>
+            </div>
+
+            <button type="button" class="callout" id="grant" hidden>
+                <span class="callout-icon"><svg class="icon"><use href="icons.svg#sparkles"/></svg></span>
+                <span class="callout-text"><b>Allow camera and microphone</b><small>Chrome asks once for the recorder</small></span>
+                <svg class="icon-sm chevron"><use href="icons.svg#chevron"/></svg>
+            </button>
+
+            <button type="button" class="privacy-row" id="privacy-row">
+                <svg class="icon"><use href="icons.svg#shield"/></svg>
+                <span id="privacy-summary">Privacy masks are off for this site</span>
+                <svg class="icon-sm chevron"><use href="icons.svg#chevron"/></svg>
+            </button>
+
+            <button type="button" class="btn-primary start" id="start"><span class="rec-glyph"></span><span id="start-label">Start recording</span></button>
+            <button type="button" class="start-anyway" id="start-anyway" hidden>Record without them this time</button>
+            <p class="error-text start-error" id="start-error" role="alert" hidden></p>
+        </section>
+
+        <!-- Privacy -->
+        <section id="panel-privacy" role="tabpanel" aria-labelledby="tab-privacy" hidden>
+            <div class="site">
+                <span class="favicon-box"><img class="favicon" id="site-favicon" alt="" hidden><svg class="icon" id="site-globe"><use href="icons.svg#globe"/></svg></span>
+                <div class="site-text">
+                    <div class="site-host" id="site"></div>
+                    <div class="site-sub" id="site-sub">Masks are off</div>
+                </div>
+                <span class="switch"><input type="checkbox" id="mask-on" aria-label="Privacy masks for this site"><span></span></span>
+            </div>
+
+            <div class="empty" id="mask-empty">
+                <div class="empty-art" aria-hidden="true">
+                    <span class="line"><i></i><i class="m"></i></span>
+                    <span class="line"><i class="m"></i><i></i><i class="m s"></i></span>
+                    <span class="line"><i></i><i class="m s"></i></span>
+                </div>
+                <h3>Hide private data before it's recorded</h3>
+                <p>Emails, keys, card numbers and anything you pick are covered on the page itself, so they never reach the video.</p>
+                <button type="button" class="btn-primary" id="mask-enable"><svg class="icon-sm"><use href="icons.svg#shield"/></svg> Turn on for this site</button>
+            </div>
+            <div class="empty" id="mask-unavailable" hidden>
+                <h3>Masks aren't available here</h3>
+                <p>Open a regular website (http or https) to set up privacy masks.</p>
+            </div>
+
+            <div id="mask-settings" hidden>
+                <button type="button" class="pick" id="pick">
+                    <span class="pick-icon"><svg class="icon"><use href="icons.svg#pointer"/></svg></span>
+                    <span class="pick-text"><b>Pick on the page</b><small>Click anything to hide it, click again to show it</small></span>
+                    <svg class="icon-sm chevron"><use href="icons.svg#chevron"/></svg>
+                </button>
+                <ul class="picked" id="picked"></ul>
+
+                <h4>Detect automatically</h4>
+                <div class="chips" id="patterns" role="group" aria-label="Detect automatically"></div>
+
+                <label class="option compact">
+                    <span class="option-icon"><svg class="icon"><use href="icons.svg#field"/></svg></span>
+                    <span class="option-text"><span class="option-title">Text typed in form fields</span></span>
+                    <span class="switch"><input type="checkbox" id="mask-inputs" aria-label="Mask text typed in form fields"><span></span></span>
+                </label>
+
+                <h4>Custom words</h4>
+                <div class="tags" id="tags">
+                    <input id="word-input" type="text" maxlength="80" placeholder="Add a name or word, press Enter" aria-label="Add a custom word to mask">
+                </div>
+
+                <h4>Mask style</h4>
+                <div class="styles" role="radiogroup" aria-label="Mask style">
+                    <label class="style-card">
+                        <input type="radio" name="style" value="block" checked>
+                        <span class="style-preview block"><i></i><i class="s"></i></span>
+                        <span class="style-name">Solid</span>
+                    </label>
+                    <label class="style-card">
+                        <input type="radio" name="style" value="blur">
+                        <span class="style-preview blur"><i></i><i class="s"></i></span>
+                        <span class="style-name">Blur</span>
+                    </label>
+                </div>
+                <p class="hint">Blur applies to picked elements and form fields. Matched text is always fully covered, because blurred short text can still be read. Masks show on the page now, so you can check them before recording.</p>
+            </div>
+        </section>
+    </div>
+
+    <script type="module" src="popup.js"></script>
+</body>
+</html>

@@ -7,7 +7,15 @@ import { cookies } from 'next/headers';
 
 export const metadata = { title: 'Your studio | Cliprame' };
 
-export default async function StudioPage() {
+type StudioPageProps = { searchParams: Promise<{ import?: string; recording?: string }> };
+
+export default async function StudioPage({ searchParams }: StudioPageProps) {
+    const params = await searchParams;
+    // Keep an extension import link through sign-in, so the recording still opens afterwards.
+    const importPath = params.import === 'extension' && params.recording && /^[\w-]{1,64}$/.test(params.recording)
+        ? `/studio?import=extension&recording=${params.recording}`
+        : null;
+    const loginUrl = importPath ? `/login?next=${encodeURIComponent(importPath)}` : '/login';
     const cookieStore = await cookies();
     const demoToken = cookieStore.get(DEMO_SESSION_COOKIE)?.value;
 
@@ -27,7 +35,7 @@ export default async function StudioPage() {
     if (!supabase) redirect('/login?setup=1');
 
     const { data, error } = await supabase.auth.getClaims();
-    if (error || !data?.claims?.sub) redirect('/login');
+    if (error || !data?.claims?.sub) redirect(loginUrl);
 
     const userId = data.claims.sub;
     const userEmail = typeof data.claims.email === 'string' ? data.claims.email : '';

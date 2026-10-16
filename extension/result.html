@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Your recording · Cliprame</title>
+    <link rel="stylesheet" href="theme.css">
+    <link rel="stylesheet" href="page.css">
+</head>
+<body>
+    <header class="topbar">
+        <div class="brand"><img src="icons/icon-32.png" alt="" width="26" height="26"> Cliprame Recorder</div>
+        <span class="chip saved" id="saved-chip"><svg class="icon-sm"><use href="icons.svg#check"/></svg> Saved in this browser</span>
+    </header>
+
+    <main class="layout" id="layout">
+        <section class="player-col">
+            <div class="player"><video id="video" controls playsinline preload="metadata"></video></div>
+            <div class="title-row">
+                <input id="title" class="title-input" maxlength="120" aria-label="Recording name" spellcheck="false">
+                <svg class="icon title-edit" aria-hidden="true"><use href="icons.svg#pencil"/></svg>
+            </div>
+            <div class="meta" id="meta"></div>
+        </section>
+
+        <aside class="side">
+            <div class="panel hero">
+                <span class="eyebrow"><svg class="icon-sm"><use href="icons.svg#sparkles"/></svg> Next step</span>
+                <h2>Polish it in Cliprame</h2>
+                <ul class="perks">
+                    <li><span><svg class="icon-sm"><use href="icons.svg#captions"/></svg></span>Captions in English, Hindi and Hinglish</li>
+                    <li><span><svg class="icon-sm"><use href="icons.svg#scissors"/></svg></span>Cut mistakes by editing the transcript</li>
+                    <li><span><svg class="icon-sm"><use href="icons.svg#film"/></svg></span>Export MP4 for any platform</li>
+                </ul>
+                <button type="button" class="btn-primary wide" id="edit">Edit in Cliprame <svg class="icon-sm"><use href="icons.svg#external"/></svg></button>
+                <div class="destination">
+                    <label for="target"><svg class="icon-sm"><use href="icons.svg#globe"/></svg> Open in</label>
+                    <select id="target">
+                        <option value="https://www.cliprame.com">cliprame.com</option>
+                        <option value="http://localhost:3000">localhost:3000 (development)</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="panel row-actions">
+                <a class="button btn-secondary" id="download" download><svg class="icon-sm"><use href="icons.svg#download"/></svg> Download</a>
+                <button type="button" class="btn-ghost delete" id="delete"><svg class="icon-sm"><use href="icons.svg#trash"/></svg> Delete</button>
+            </div>
+
+            <div class="panel recent" id="recent-panel" hidden>
+                <h3>Recent recordings</h3>
+                <ul id="recent"></ul>
+                <p class="fine">The recorder keeps your latest five recordings.</p>
+            </div>
+        </aside>
+    </main>
+
+    <main class="empty-page" id="missing" hidden>
+        <div class="empty-icon"><svg class="icon"><use href="icons.svg#video"/></svg></div>
+        <h1>Recording not found</h1>
+        <p>It may have been deleted or replaced by newer recordings. The recorder keeps your latest five.</p>
+        <ul id="missing-recent" class="recent-list"></ul>
+    </main>
+
+    <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+    <script type="module" src="result.js"></script>
+</body>
+</html>
