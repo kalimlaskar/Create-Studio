@@ -6,8 +6,9 @@ import { PreviewCanvas } from './PreviewCanvas';
 import { Timeline } from './Timeline';
 import { TranscriptPanel } from './TranscriptPanel';
 import { EditorSidebar } from './EditorSidebar';
-import { EditorTopBar, ExportStage } from './EditorTopBar';
-import { ExportStatusCard, TimelineSplitter, EditorLoading, EditorError } from './EditorOverlays';
+import { EditorTopBar, ExportStage, Segmented } from './EditorTopBar';
+import { TimelineSplitter, EditorLoading, EditorError } from './EditorOverlays';
+import { ExportDialog, type RenderResult } from '@/components/export/ExportDialog';
 import { buildColorGradeFilter } from './colorGrade';
 import { saveEditorDraft } from './drafts';
 import { EditorProject, TimeRange } from '@/types/editor';
@@ -42,11 +43,15 @@ interface EditorShellProps {
     onBack: () => void;
     initialProject?: EditorProject;
     onDraftSaved?: () => void;
+    /** Longest export the plan allows, in ms. Decided on the server. */
+    exportLimitMs?: number;
 }
+
+const formatLimit = (ms: number) => (ms >= 60_000 ? `${Math.round(ms / 60_000)} min` : `${Math.round(ms / 1000)} sec`);
 
 export function EditorShell({
     isPro = false, sourceVideoUrl, aspectRatio, initialScript, initialScriptLanguage, creatorName,
-    sourceDurationMs, initialCameraArtEffect, onBack, initialProject, onDraftSaved,
+    sourceDurationMs, initialCameraArtEffect, onBack, initialProject, onDraftSaved, exportLimitMs = FREE_VIDEO_LIMIT_MS,
 }: EditorShellProps) {
     const {
         project,
@@ -93,9 +98,9 @@ export function EditorShell({
     const [isExporting, setIsExporting] = useState(false);
     const [exportProgress, setExportProgress] = useState(0);
     const [exportStage, setExportStage] = useState<ExportStage>('idle');
-    const [exportError, setExportError] = useState<string | null>(null);
     const [exportResolution, setExportResolution] = useState<ExportResolution>('1080p');
     const [exportFormat, setExportFormat] = useState<ExportFormat>('mp4');
+    const [exportOpen, setExportOpen] = useState(false);
     const [isTranscribing, setIsTranscribing] = useState(false);
     const [transcriptionProgress, setTranscriptionProgress] = useState(0);
     const [transcriptionError, setTranscriptionError] = useState<string | null>(null);
@@ -134,9 +139,9 @@ export function EditorShell({
         storePerformanceMode(enabled);
     };
 
-    const dismissExportStatus = () => {
+    const closeExport = () => {
+        setExportOpen(false);
         setExportStage('idle');
-        setExportError(null);
         setExportProgress(0);
     };
 
@@ -186,19 +191,17 @@ export function EditorShell({
     };
 
     /* ------------------------------- export ----------------------------- */
-    const handleDownload = async () => {
+    /** Renders the edited video and returns the file. The export dialog downloads or uploads it. */
+    const renderExport = async ({ forCloud }: { forCloud: boolean }): Promise<RenderResult> => {
         const video = videoRef.current;
-        if (!video || !project || isExporting || isTranscribing) return;
-        if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
-            setExportError('The video is not ready yet. Wait for it to load, then export again.');
-            setExportStage('error');
-            return;
-        }
+        if (!video || !project || isExporting) throw new Error('The editor is busy. Try again in a moment.');
+        if (isTranscribing) throw new Error('Wait for captions to finish generating, then export.');
+        if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) throw new Error('The video is not ready yet. Wait for it to load, then export again.');
         if (typeof MediaRecorder === 'undefined' || !HTMLCanvasElement.prototype.captureStream) {
-            setExportError('This browser does not support canvas video export. Try the latest Chrome or Safari.');
-            setExportStage('error');
-            return;
+            throw new Error('This browser does not support canvas video export. Try the latest Chrome or Safari.');
         }
+        // Shared videos are always MP4 so they play on every device.
+        const format: ExportFormat = forCloud ? 'mp4' : exportFormat;
 
         const originalTime = video.currentTime;
         const wasPlaying = !video.paused;
@@ -206,10 +209,8 @@ export function EditorShell({
         const trimEndMs = project.videoEdit.trimEndMs;
         const keep = getKeepRanges(trimStartMs, trimEndMs, project.videoEdit.deletedRanges);
         const keptDurationMs = Math.max(1, keep.reduce((sum, k) => sum + k.endMs - k.startMs, 0));
-        if (keptDurationMs > FREE_VIDEO_LIMIT_MS) {
-            setExportError('The free plan supports exports up to 60 seconds. Trim or cut the clip in the timeline or upgrade when billing is configured.');
-            setExportStage('error');
-            return;
+        if (keptDurationMs > exportLimitMs) {
+            throw new Error(`Your plan allows exports up to ${formatLimit(exportLimitMs)}. Trim or cut the clip in the timeline, or upgrade for longer videos.`);
         }
         const outputDimensions = getExportDimensions(project.aspectRatio, exportResolution);
         const sourceCrop = getFrameCrop(video.videoWidth, video.videoHeight, project.aspectRatio);
@@ -222,7 +223,6 @@ export function EditorShell({
         exportCancelRef.current = false;
         setIsExporting(true);
         try {
-            setExportError(null);
             setExportProgress(0);
             setExportStage('preparing');
 
@@ -244,7 +244,7 @@ export function EditorShell({
                 ...canvasStream.getVideoTracks(),
                 ...(mixedAudioStream?.getAudioTracks() ?? []),
             ]);
-            recorder = createExportRecorder(stream, exportFormat, exportResolution);
+            recorder = createExportRecorder(stream, format, exportResolution);
 
             video.pause();
             if (Math.abs(video.currentTime * 1000 - trimStartMs) > 50) {
@@ -344,31 +344,22 @@ export function EditorShell({
 
             const recordedBlob = await recording;
             let outputBlob = recordedBlob;
-            let extension: ExportFormat = exportFormat;
+            let extension: ExportFormat = format;
             const capturedMp4 = activeRecorder.mimeType.toLowerCase().startsWith('video/mp4');
-            if (exportFormat === 'mp4' && !capturedMp4) {
+            if (format === 'mp4' && !capturedMp4) {
                 setExportStage('converting');
                 const { convertWebmToMp4 } = await import('./convertToMp4');
                 outputBlob = await convertWebmToMp4(recordedBlob, (progress) => setExportProgress(85 + Math.floor(progress * 0.14)));
                 extension = 'mp4';
             }
 
-            setExportStage('saving');
-            const url = URL.createObjectURL(outputBlob);
-            const anchor = document.createElement('a');
-            anchor.href = url;
-            anchor.download = `creator-studio-edited-${Date.now()}.${extension}`;
-            document.body.appendChild(anchor);
-            anchor.click();
-            anchor.remove();
-            window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
             setExportProgress(100);
             setExportStage('complete');
+            return { blob: outputBlob, extension };
         } catch (error) {
-            const message = error instanceof Error ? error.message : 'The video could not be exported.';
             console.error('Video export failed:', error);
-            setExportError(message);
             setExportStage('error');
+            throw error instanceof Error ? error : new Error('The video could not be exported.');
         } finally {
             cancelAnimationFrame(animationFrameId);
             transitionRenderer?.dispose();
@@ -503,8 +494,6 @@ export function EditorShell({
                     isExporting={isExporting}
                     exportStage={exportStage}
                     exportProgress={exportProgress}
-                    exportResolution={exportResolution}
-                    exportFormat={exportFormat}
                     isSourceMuted={isSourceMuted}
                     isSavingDraft={isSavingDraft}
                     draftSaved={draftSaved}
@@ -514,9 +503,7 @@ export function EditorShell({
                     onToggleMute={toggleSourceAudio}
                     onSaveDraft={handleSaveDraft}
                     onCameraArtEffectChange={updateCameraArtEffect}
-                    onExportResolutionChange={setExportResolution}
-                    onExportFormatChange={setExportFormat}
-                    onExport={handleDownload}
+                    onExport={() => setExportOpen(true)}
                 />
 
                 <video ref={videoRef} src={sourceVideoUrl} className="hidden" playsInline />
@@ -571,13 +558,24 @@ export function EditorShell({
                     <EditorLoading />
                 )}
 
-                <ExportStatusCard
-                    stage={exportStage}
-                    progress={exportProgress}
-                    error={exportError}
-                    isExporting={isExporting}
-                    onCancel={() => { exportCancelRef.current = true; }}
-                    onDismiss={dismissExportStatus}
+                <ExportDialog
+                    open={exportOpen}
+                    kind="video"
+                    defaultTitle={project?.title ?? 'Untitled video'}
+                    durationMs={project ? getKeepRanges(project.videoEdit.trimStartMs, project.videoEdit.trimEndMs, project.videoEdit.deletedRanges).reduce((sum, range) => sum + range.endMs - range.startMs, 0) : 0}
+                    facts={[project?.aspectRatio ?? aspectRatio, isPro ? 'No watermark' : 'Free plan']}
+                    notice={isPro ? `Your plan exports up to ${formatLimit(exportLimitMs)}.` : `Free plan: up to ${formatLimit(exportLimitMs)}, with a small Cliprame watermark.`}
+                    settings={
+                        <div className="grid gap-3 sm:grid-cols-2">
+                            <Segmented label="Quality" value={exportResolution} options={[{ value: '720p', label: '720p' }, { value: '1080p', label: '1080p HD' }]} onChange={setExportResolution} />
+                            <Segmented label="Download format" value={exportFormat} options={[{ value: 'mp4', label: 'MP4' }, { value: 'webm', label: 'WebM' }]} onChange={setExportFormat} />
+                        </div>
+                    }
+                    render={renderExport}
+                    renderProgress={exportProgress}
+                    renderLabel={exportStage === 'converting' ? 'Encoding MP4 for every device' : exportStage === 'preparing' ? 'Preparing your edits' : 'Applying your edits frame by frame'}
+                    onCancelRender={() => { exportCancelRef.current = true; }}
+                    onClose={closeExport}
                 />
             </div>
         </div>

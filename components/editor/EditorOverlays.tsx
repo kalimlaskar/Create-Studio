@@ -1,73 +1,7 @@
 'use client';
 
 import React from 'react';
-import { AlertTriangle, CheckCircle2, Loader2, X } from 'lucide-react';
-import type { ExportStage } from './EditorTopBar';
-
-/* ----------------------------- export status ---------------------------- */
-interface ExportStatusCardProps {
-    stage: ExportStage;
-    progress: number;
-    error: string | null;
-    isExporting: boolean;
-    onCancel: () => void;
-    onDismiss: () => void;
-}
-
-export function ExportStatusCard({ stage, progress, error, isExporting, onCancel, onDismiss }: ExportStatusCardProps) {
-    if (!isExporting && stage !== 'complete' && !error) return null;
-
-    const done = stage === 'complete' && !error;
-    const headline = error
-        ? 'Export failed'
-        : done
-            ? 'Export complete'
-            : stage === 'preparing' ? 'Preparing export…'
-                : stage === 'rendering' ? 'Rendering video'
-                    : stage === 'converting' ? 'Encoding MP4'
-                        : 'Saving file…';
-    const detail = error ?? (done ? 'Your video was downloaded.' : stage === 'rendering' ? 'Keep this tab open while it renders.' : stage === 'converting' ? 'Almost there. Converting for wide compatibility.' : 'This only takes a moment.');
-    const barColor = error ? 'bg-red-500' : done ? 'bg-emerald-500' : 'bg-[#6A4CFF]';
-
-    return (
-        <div
-            role="status"
-            aria-live="polite"
-            className="absolute bottom-5 left-1/2 z-50 w-[min(92%,26rem)] -translate-x-1/2 rounded-3xl border border-[#14121F]/10 bg-white/95 p-4 shadow-[0_20px_60px_-20px_rgba(20,18,31,0.4)] backdrop-blur-xl">
-            <div className="flex items-start gap-3">
-                <span className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ${error ? 'bg-red-50 text-red-600' : done ? 'bg-emerald-50 text-emerald-600' : 'bg-[#6A4CFF]/10 text-[#6A4CFF]'}`}>
-                    {error ? <AlertTriangle className="h-4 w-4" /> : done ? <CheckCircle2 className="h-4 w-4" /> : <Loader2 className="h-4 w-4 animate-spin" />}
-                </span>
-                <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-2">
-                        <p className="text-sm font-bold text-[#14121F]">{headline}</p>
-                        {!error && !done && (stage === 'rendering' || stage === 'converting') && (
-                            <span className="font-mono text-xs font-bold text-[#6A4CFF]">{progress}%</span>
-                        )}
-                    </div>
-                    <p className="mt-0.5 text-xs leading-snug text-[#14121F]/55">{detail}</p>
-                </div>
-                {(done || error) && (
-                    <button type="button" onClick={onDismiss} aria-label="Dismiss" className="rounded-lg p-1 text-[#14121F]/40 transition hover:bg-[#14121F]/5 hover:text-[#14121F]">
-                        <X className="h-4 w-4" />
-                    </button>
-                )}
-            </div>
-
-            <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[#14121F]/10" role="progressbar" aria-valuenow={progress} aria-valuemin={0} aria-valuemax={100} aria-label="Video export progress">
-                <div className={`h-full rounded-full transition-[width] duration-200 ${barColor}`} style={{ width: `${error ? 100 : progress}%` }} />
-            </div>
-
-            {isExporting && stage === 'rendering' && (
-                <div className="mt-3 flex justify-end">
-                    <button type="button" onClick={onCancel} className="rounded-full border border-[#14121F]/12 px-3 py-1 text-xs font-semibold text-[#14121F]/70 transition hover:bg-[#14121F] hover:text-white">
-                        Cancel export
-                    </button>
-                </div>
-            )}
-        </div>
-    );
-}
+import { AlertTriangle, Loader2 } from 'lucide-react';
 
 /* ------------------------- timeline resize handle ----------------------- */
 export function TimelineSplitter({ onMouseDown }: { onMouseDown: (event: React.MouseEvent) => void }) {

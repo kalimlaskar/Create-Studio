@@ -4,6 +4,7 @@ import type { CSSProperties } from 'react';
 import { Bricolage_Grotesque, Instrument_Sans } from 'next/font/google';
 import { ArrowRight, Sparkles, Mic2, Wand2, Sliders, Share2 } from 'lucide-react';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { getPlanSummary } from '@/lib/plans/server';
 
 const display = Bricolage_Grotesque({ subsets: ['latin'], variable: '--font-display', display: 'swap' });
 const body = Instrument_Sans({ subsets: ['latin'], variable: '--font-body', display: 'swap' });
@@ -82,9 +83,10 @@ export default async function FeaturesPage() {
                 isLoggedIn = true;
                 const userId = authData.claims.sub;
 
-                const [profileRes, subRes] = await Promise.all([
+                const [profileRes, plan] = await Promise.all([
                     supabase.from('profiles').select('display_name,username').eq('id', userId).maybeSingle(),
-                    supabase.from('subscriptions').select('status,current_period_end,plan_name').eq('user_id', userId).maybeSingle()
+                    // Plan comes only from the subscription record on the server.
+                    getPlanSummary(userId).catch(() => null),
                 ]);
 
                 if (profileRes.data?.display_name) {
@@ -93,8 +95,8 @@ export default async function FeaturesPage() {
                     displayName = String(authData.claims.email).split('@')[0];
                 }
 
-                if (subRes.data?.plan_name) {
-                    userPlan = subRes.data.plan_name;
+                if (plan?.isPaid) {
+                    userPlan = plan.name;
                 }
             }
         }

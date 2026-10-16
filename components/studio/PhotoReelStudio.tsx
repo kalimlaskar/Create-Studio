@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, ArrowRight, Download, Gauge, ImagePlus, Loader2, Maximize, Play, Trash2 } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Download, Gauge, ImagePlus, Loader2, Maximize, Play, Share2, Trash2 } from 'lucide-react';
 import { exitDocumentFullscreen, requestElementFullscreen, createDefaultTrackFile } from './photoReelExtras';
 import { isDepthMotion } from './depthEstimator';
 import { deletePhotoReelDraft, listPhotoReelDrafts, loadPhotoReelDraft, PhotoReelDraftSummary, savePhotoReelDraft } from './photoReelDrafts';
@@ -22,11 +22,17 @@ import {
 import { CaptionDragHandle, PreviewCanvas, RipplePlacer, UpgradeModal } from './ReelUi';
 import { useDepthMaps } from './useDepthMaps';
 import { useReelExport } from './useReelExport';
+import { ExportDialog } from '@/components/export/ExportDialog';
+import { FREE_VIDEO_LIMIT_MS } from '@/components/freeTier';
 import { useReelPreview } from './useReelPreview';
 
 const PRO_MOTIONS = ['depth-orbit', 'depth-sway', 'depth-dolly'];
 
-export function PhotoReelStudio({ onBack, initialDraftId }: { onBack: () => void; initialDraftId?: string | null }) {
+/** A readable default name for an exported reel, e.g. "Photo + video reel · 17 Oct, 3:05 pm". */
+const reelCloudTitle = (clipCount: number) =>
+    `${clipCount ? 'Photo + video reel' : 'Reel'} · ${new Date().toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}`;
+
+export function PhotoReelStudio({ onBack, initialDraftId, exportLimitMs = FREE_VIDEO_LIMIT_MS, isPro = false }: { onBack: () => void; initialDraftId?: string | null; exportLimitMs?: number; isPro?: boolean }) {
     /* ------------------------------ state ------------------------------ */
     const [images, setImages] = useState<ReelImage[]>([]);
     const [selectedImageId, setSelectedImageId] = useState<string | null>(null);
@@ -91,7 +97,8 @@ export function PhotoReelStudio({ onBack, initialDraftId }: { onBack: () => void
     renderContextRef.current = renderContext;
     const getRenderContext = useCallback(() => renderContextRef.current, []);
 
-    const exporter = useReelExport({ canvasRef: exportCanvasRef, getRenderContext, music, voiceover, ensureDepth, onError: setError });
+    const exporter = useReelExport({ canvasRef: exportCanvasRef, getRenderContext, music, voiceover, ensureDepth, limitMs: exportLimitMs, watermark: !isPro });
+    const [exportOpen, setExportOpen] = useState(false);
 
     /* ----------------------------- clip edits -------------------------- */
     const updateClip = useCallback((id: string, patch: Partial<ReelImage>) =>
@@ -571,7 +578,7 @@ export function PhotoReelStudio({ onBack, initialDraftId }: { onBack: () => void
                             <PreviewCanvas
                                 width={canvasW}
                                 height={canvasH}
-                                draw={(ctx) => renderFrame(ctx, renderContext, previewTimeMs, { watermark: true })}
+                                draw={(ctx) => renderFrame(ctx, renderContext, previewTimeMs, { watermark: !isPro })}
                             />
 
                             {!activeImage && (
@@ -719,13 +726,25 @@ export function PhotoReelStudio({ onBack, initialDraftId }: { onBack: () => void
 
                     <div className="flex w-full max-w-4xl flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#14121F]/10 bg-white p-4 shadow-xs">
                         <div className="text-xs font-semibold text-[#14121F]/70">{durationLabel} total</div>
-                        <button type="button" onClick={() => void exporter.run()} disabled={!images.length || exporter.isExporting} className="flex items-center gap-2 rounded-xl bg-[#6A4CFF] px-6 py-3 text-xs font-bold text-white shadow-md shadow-[#6A4CFF]/20 transition hover:bg-[#5839e0] disabled:opacity-50">
-                            {exporter.isExporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-                            {exporter.isExporting ? `Rendering (${exporter.progress}%)...` : 'Create & download reel'}
+                        <button type="button" onClick={() => setExportOpen(true)} disabled={!images.length || exporter.isExporting} className="flex items-center gap-2 rounded-xl bg-[linear-gradient(135deg,#6A4CFF,#7C5CFF)] px-6 py-3 text-xs font-bold text-white shadow-md shadow-[#6A4CFF]/20 transition hover:brightness-110 disabled:opacity-50">
+                            {exporter.isExporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Share2 className="h-4 w-4" />}
+                            {exporter.isExporting ? `Rendering (${exporter.progress}%)...` : 'Export & share reel'}
                         </button>
                     </div>
 
                     {exporter.isExporting && exporter.status && <p className="w-full max-w-4xl text-xs font-medium text-white/70">{exporter.status}</p>}
+                    <ExportDialog
+                        open={exportOpen}
+                        kind="reel"
+                        defaultTitle={reelCloudTitle(images.length)}
+                        durationMs={timeline.total}
+                        facts={[settings.aspectRatio, '1080p', isPro ? 'No watermark' : 'Free plan']}
+                        notice={isPro ? null : `Free plan: reels up to ${Math.round(exportLimitMs / 1000)} seconds, with a small Cliprame watermark.`}
+                        render={() => exporter.run()}
+                        renderProgress={exporter.progress}
+                        renderLabel={exporter.status ?? 'Preparing your photos, clips, and audio'}
+                        onClose={() => setExportOpen(false)}
+                    />
                     {notice && <p role="status" className="w-full max-w-4xl rounded-2xl border border-amber-200 bg-amber-50 p-3.5 text-xs font-medium text-amber-800 shadow-xs">{notice}</p>}
                     {error && <p role="alert" className="w-full max-w-4xl rounded-2xl border border-red-200 bg-red-50 p-3.5 text-xs font-medium text-red-600 shadow-xs">{error}</p>}
                 </div>

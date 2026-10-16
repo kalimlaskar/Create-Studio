@@ -4,7 +4,7 @@ import type { CSSProperties } from 'react';
 import { Bricolage_Grotesque, Instrument_Sans } from 'next/font/google';
 import { ArrowRight, Check, Eraser, EyeOff, Film, Hand, Images, Languages, Layers, Mic, Music, Pencil, Plus, Scissors, ScreenShare, Sparkles, Type } from 'lucide-react';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
-import { isEntitled } from '@/lib/billing/subscription';
+import { getPlanSummary } from '@/lib/plans/server';
 
 const display = Bricolage_Grotesque({ subsets: ['latin'], variable: '--font-display', display: 'swap' });
 const body = Instrument_Sans({ subsets: ['latin'], variable: '--font-body', display: 'swap' });
@@ -175,9 +175,10 @@ export default async function HomePage() {
         isLoggedIn = true;
         const userId = authData.claims.sub;
 
-        const [profileRes, subRes] = await Promise.all([
+        const [profileRes, plan] = await Promise.all([
           supabase.from('profiles').select('display_name,username').eq('id', userId).maybeSingle(),
-          supabase.from('subscriptions').select('status,current_period_end,plan_name').eq('user_id', userId).maybeSingle()
+          // Plan comes only from the subscription record on the server.
+          getPlanSummary(userId).catch(() => null),
         ]);
 
         if (profileRes.data?.display_name) {
@@ -186,8 +187,8 @@ export default async function HomePage() {
           displayName = String(authData.claims.email).split('@')[0];
         }
 
-        if (subRes.data?.plan_name) {
-          userPlan = subRes.data.plan_name;
+        if (plan?.isPaid) {
+          userPlan = plan.name;
         }
       }
     }
@@ -708,6 +709,8 @@ export default async function HomePage() {
               <Link href="/login" className="transition hover:text-[#14121F]">Log in</Link>
             ) : null}
             <Link href="/studio" className="transition hover:text-[#14121F]">Go to Studio</Link>
+            <Link href="/privacy" className="transition hover:text-[#14121F]">Privacy</Link>
+            <Link href="/terms" className="transition hover:text-[#14121F]">Terms</Link>
           </div>
         </div>
       </footer>

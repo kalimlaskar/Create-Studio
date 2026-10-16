@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation';
 import { CreatorStudioDashboard } from '@/components/studio/CreatorStudioDashboard';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { DEMO_SESSION_COOKIE, getDemoSessionUsername, isDemoAuthEnabled, verifyDemoSessionToken } from '@/lib/auth/demo';
-import { isEntitled } from '@/lib/billing/subscription';
+import { getPlanSummary } from '@/lib/plans/server';
 import { cookies } from 'next/headers';
 
 export const metadata = { title: 'Your studio | Cliprame' };
@@ -46,23 +46,8 @@ export default async function StudioPage({ searchParams }: StudioPageProps) {
         .eq('id', userId)
         .maybeSingle();
 
-    // 1. Check if the user plan is cached in the browser cookie (safe to read)
-    let userPlan = cookieStore.get('cliprame_user_plan')?.value;
-
-    // 2. If not cached, fetch it from Supabase
-    if (!userPlan) {
-        const { data: subData } = await supabase
-            .from('subscriptions')
-            .select('status,current_period_end,plan_name')
-            .eq('user_id', userId)
-            .maybeSingle();
-
-        userPlan = subData?.plan_name ?? 'Free';
-    }
-
-    // Case-insensitive check: anything other than "free" or empty makes them Pro/Studio
-    const normalizedPlan = (userPlan ?? 'Free').toLowerCase();
-    const isPro = normalizedPlan !== 'free' && normalizedPlan !== '';
+    // The plan comes only from the subscription record on the server, never from the browser.
+    const plan = await getPlanSummary(userId);
 
     const userMetadata = data.claims.user_metadata as Record<string, unknown> | undefined;
     const metadataDisplayName = typeof userMetadata?.display_name === 'string' ? userMetadata.display_name : '';
@@ -81,8 +66,9 @@ export default async function StudioPage({ searchParams }: StudioPageProps) {
             initialUsername={profile?.username ?? ''}
             initialAvatarUrl={initialAvatarUrl}
             profilePersistenceEnabled
-            isPro={isPro}
-            userPlan={userPlan}
+            isPro={plan.isPaid}
+            userPlan={plan.name}
+            planId={plan.plan}
         />
     );
 }

@@ -12,6 +12,7 @@ import { PhotoReelStudio } from '@/components/studio/PhotoReelStudio';
 import { StudioHome } from '@/components/studio/StudioHome';
 import { changePasswordAction, checkUsernameAvailabilityAction, deleteAccountAction, signOutAction, updateProfileAction, updateProfileAvatarAction } from '@/app/auth/actions';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
+import { PLAN_LIMITS, type PlanId } from '@/components/pricing/planLimits';
 import { useDocumentPip } from './useDocumentPip';
 import { FloatingStudioPip } from './FloatingStudioPip';
 import { ScreenShareControls } from '@/components/studio/Screensharecontrols';
@@ -282,7 +283,8 @@ export function CreatorStudioDashboard({
     initialAvatarUrl = '',
     profilePersistenceEnabled = false,
     isPro = false,
-    userPlan: initialUserPlan = 'Free'
+    userPlan = 'Free',
+    planId = 'free',
 }: {
     userEmail: string;
     initialDisplayName?: string;
@@ -291,32 +293,11 @@ export function CreatorStudioDashboard({
     profilePersistenceEnabled?: boolean;
     isPro?: boolean;
     userPlan?: string;
+    /** Decided on the server from the subscription record. */
+    planId?: PlanId;
 }) {
-    const [userPlan, setUserPlan] = useState(initialUserPlan);
-
-    useEffect(() => {
-        let isMounted = true;
-        const fetchPlanFromDB = async () => {
-            const supabase = createSupabaseBrowserClient();
-            if (!supabase) return;
-
-            const { data: { user } } = await supabase.auth.getUser();
-            if (!user) return;
-
-            const { data: sub } = await supabase
-                .from('subscriptions')
-                .select('plan_name')
-                .eq('user_id', user.id)
-                .maybeSingle();
-
-            if (isMounted && sub?.plan_name) {
-                setUserPlan(sub.plan_name);
-            }
-        };
-
-        void fetchPlanFromDB();
-        return () => { isMounted = false; };
-    }, []);
+    // Longest export this plan allows. The server checks it again on upload.
+    const exportLimitMs = PLAN_LIMITS[planId].exportSeconds * 1000;
 
     const [creationMode, setCreationMode] = useState<'choose' | 'record' | 'photos'>('choose');
     const [view, setView] = useState<'record' | 'edit'>('record');
@@ -660,13 +641,14 @@ export function CreatorStudioDashboard({
         else if (settings.cameraArtEffect === 'photo-avatar') startAvatarAudioMeter();
     }, [isEditorOpen, settings.cameraArtEffect, startAvatarAudioMeter, stopAvatarAudioMeter]);
 
-    if (creationMode === 'photos') return <PhotoReelStudio initialDraftId={reelDraftId} onBack={() => { setReelDraftId(null); setCreationMode('choose'); }} />;
+    if (creationMode === 'photos') return <PhotoReelStudio exportLimitMs={exportLimitMs} isPro={isPro} initialDraftId={reelDraftId} onBack={() => { setReelDraftId(null); setCreationMode('choose'); }} />;
 
     const profileMenu = <ProfileMenu creatorName={creatorName} username={profileUsername} avatarUrl={profileAvatarUrl} userEmail={userEmail} profilePersistenceEnabled={profilePersistenceEnabled} onNameChange={updateCreatorName} onUsernameChange={(username) => { setProfileUsername(username); setProfileSaveState('Unsaved changes'); }} onSave={() => void saveCreatorProfile()} onAvatarChange={setProfileAvatarUrl} saveState={profileSaveState} />;
 
     if ((view === 'edit' || (settings.inputMode === 'upload' && Boolean(settings.uploadedVideoUrl))) && activeVideoUrl) {
         return (
             <EditorShell
+                exportLimitMs={exportLimitMs}
                 isPro={isPro}
                 sourceVideoUrl={activeVideoUrl}
                 aspectRatio={restoredDraft?.project.aspectRatio ?? settings.aspectRatio}

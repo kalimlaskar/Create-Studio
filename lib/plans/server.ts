@@ -2,6 +2,8 @@ import 'server-only';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { PLAN_LIMITS, PlanId } from '@/components/pricing/planLimits';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { planFromSubscription } from './entitlement';
+import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 
 export type AiKind = 'transcription' | 'voiceover';
 
@@ -40,28 +42,28 @@ export async function getRequestUserId(): Promise<string | null> {
 
 /* -------------------------------- plan -------------------------------- */
 
-/** Maps the Razorpay plan stored on the subscription to one of our plans. */
-function planFromRazorpayId(razorpayPlanId: string | null): PlanId {
-    if (razorpayPlanId && razorpayPlanId === STUDIO_PLAN_ID) return 'studio';
-    if (razorpayPlanId && razorpayPlanId === CREATOR_PLAN_ID) return 'creator';
-    // A paying customer on an unrecognized plan gets Creator, not a downgrade. Check your plan ID env vars.
-    console.warn('[plans] Unknown razorpay_plan_id on an active subscription:', razorpayPlanId);
-    return 'creator';
-}
-
-/** The plan a user is entitled to right now. No subscription, or one that has ended, means Free. */
+/**
+ * The plan a user is entitled to right now, read only from the subscriptions table.
+ * This is the one place the app decides what someone has paid for; never trust a
+ * value sent by the browser. No subscription, or one that has ended, means Free.
+ */
 export async function getEffectivePlan(userId: string): Promise<PlanId> {
-    const { data } = await admin()
+    // Prefer the service role; without it, the user's own session can read their row (RLS allows it).
+    const client = createSupabaseAdminClient() ?? await createSupabaseServerClient();
+    if (!client) return 'free';
+    const { data, error } = await client
         .from('subscriptions')
         .select('razorpay_plan_id, status, current_period_end')
         .eq('user_id', userId)
         .maybeSingle();
-    if (!data) return 'free';
+    if (error) console.error('[plans] Could not read subscription:', error.message);
+    return planFromSubscription(data ?? null, { creator: CREATOR_PLAN_ID, studio: STUDIO_PLAN_ID });
+}
 
-    const stillPaidFor = data.current_period_end ? new Date(data.current_period_end) > new Date() : false;
-    // A cancelled subscription keeps its plan until the period it already paid for ends.
-    const hasAccess = data.status === 'active' || (data.status === 'cancelled' && stillPaidFor);
-    return hasAccess ? planFromRazorpayId(data.razorpay_plan_id) : 'free';
+/** Plan details for showing in the UI and enforcing limits. */
+export async function getPlanSummary(userId: string) {
+    const plan = await getEffectivePlan(userId);
+    return { plan, name: PLAN_LIMITS[plan].name, isPaid: plan !== 'free', limits: PLAN_LIMITS[plan] };
 }
 
 /* ------------------------------- usage ------------------------------- */
@@ -121,9 +123,4 @@ export function limitReachedResponse(result: Extract<UsageResult, { ok: false }>
         { error: `You've used your ${result.limitMinutes} minutes of ${what} for this month.${upgrade}`, upgradeUrl: '/pricing' },
         { status: 429 },
     );
-}
-/** Returns true if the user is on an active Creator or Studio plan. */
-export async function isUserPro(userId: string): Promise<boolean> {
-    const plan = await getEffectivePlan(userId);
-    return plan === 'creator' || plan === 'studio';
 }

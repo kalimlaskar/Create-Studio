@@ -1,8 +1,7 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Bookmark, Check, ChevronDown, Crown, Download, Loader2, Sparkles, Volume2, VolumeX } from 'lucide-react';
-import type { ExportFormat, ExportResolution } from '@/components/recordingQuality';
+import React from 'react';
+import { ArrowLeft, Bookmark, Check, ChevronDown, Loader2, Share2, Sparkles, Volume2, VolumeX } from 'lucide-react';
 import type { CameraArtEffect } from '@/types/studio';
 
 export type ExportStage = 'idle' | 'preparing' | 'rendering' | 'converting' | 'saving' | 'complete' | 'error';
@@ -15,8 +14,6 @@ interface EditorTopBarProps {
     isExporting: boolean;
     exportStage: ExportStage;
     exportProgress: number;
-    exportResolution: ExportResolution;
-    exportFormat: ExportFormat;
     isSourceMuted: boolean;
     isSavingDraft: boolean;
     draftSaved: boolean;
@@ -26,8 +23,6 @@ interface EditorTopBarProps {
     onToggleMute: () => void;
     onSaveDraft: () => void;
     onCameraArtEffectChange: (effect: CameraArtEffect) => void;
-    onExportResolutionChange: (value: ExportResolution) => void;
-    onExportFormatChange: (value: ExportFormat) => void;
     onExport: () => void;
 }
 
@@ -41,7 +36,7 @@ const FILTERS: Array<{ value: CameraArtEffect; label: string }> = [
     { value: 'anime', label: 'Anime' },
 ];
 
-function Segmented<T extends string>({ label, value, options, onChange }: {
+export function Segmented<T extends string>({ label, value, options, onChange }: {
     label: string;
     value: T;
     options: ReadonlyArray<{ value: T; label: string }>;
@@ -95,29 +90,10 @@ function FilterSelect({ id, value, disabled, onChange, className = '' }: {
 }
 
 export function EditorTopBar({
-    title, aspectRatio, hasProject, isPro, isExporting, exportStage, exportProgress, exportResolution, exportFormat,
+    title, aspectRatio, hasProject, isExporting, exportStage, exportProgress,
     isSourceMuted, isSavingDraft, draftSaved, cameraArtEffect,
-    onTitleChange, onBack, onToggleMute, onSaveDraft, onCameraArtEffectChange, onExportResolutionChange, onExportFormatChange, onExport,
+    onTitleChange, onBack, onToggleMute, onSaveDraft, onCameraArtEffectChange, onExport,
 }: EditorTopBarProps) {
-    const [menuOpen, setMenuOpen] = useState(false);
-    const menuRef = useRef<HTMLDivElement>(null);
-
-    useEffect(() => {
-        if (!menuOpen) return;
-        const onPointerDown = (event: MouseEvent) => {
-            if (menuRef.current && !menuRef.current.contains(event.target as Node)) setMenuOpen(false);
-        };
-        const onKeyDown = (event: KeyboardEvent) => { if (event.key === 'Escape') setMenuOpen(false); };
-        document.addEventListener('mousedown', onPointerDown);
-        document.addEventListener('keydown', onKeyDown);
-        return () => {
-            document.removeEventListener('mousedown', onPointerDown);
-            document.removeEventListener('keydown', onKeyDown);
-        };
-    }, [menuOpen]);
-
-    useEffect(() => { if (isExporting) setMenuOpen(false); }, [isExporting]);
-
     const exportLabel = exportStage === 'converting' ? 'Encoding' : exportStage === 'saving' ? 'Saving' : 'Rendering';
 
     return (
@@ -144,7 +120,7 @@ export function EditorTopBar({
 
             {/* Right: tools + export */}
             <div className="flex shrink-0 items-center gap-2">
-                <FilterSelect id="editor-art-effect" value={cameraArtEffect} disabled={isExporting || !hasProject} onChange={onCameraArtEffectChange} className="hidden w-32 sm:block" />
+                <FilterSelect id="editor-art-effect" value={cameraArtEffect} disabled={isExporting || !hasProject} onChange={onCameraArtEffectChange} className="w-24 sm:w-32" />
 
                 <button
                     type="button"
@@ -168,71 +144,23 @@ export function EditorTopBar({
                     <span className="hidden lg:inline">{isSavingDraft ? 'Saving…' : draftSaved ? 'Saved' : 'Save draft'}</span>
                 </button>
 
-                {/* Export popover */}
-                <div ref={menuRef} className="relative">
-                    <button
-                        type="button"
-                        onClick={() => setMenuOpen((open) => !open)}
-                        disabled={isExporting || !hasProject}
-                        aria-haspopup="dialog"
-                        aria-expanded={menuOpen}
-                        className="flex h-9 items-center gap-1.5 rounded-xl bg-[#6A4CFF] px-3.5 text-xs font-bold text-white shadow-md shadow-[#6A4CFF]/25 transition hover:bg-[#5839e0] disabled:cursor-not-allowed disabled:opacity-60">
-                        {isExporting ? (
-                            <>
-                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                <span>{exportLabel}{exportStage === 'rendering' || exportStage === 'converting' ? ` ${exportProgress}%` : '…'}</span>
-                            </>
-                        ) : (
-                            <>
-                                <Download className="h-3.5 w-3.5" />
-                                <span>Export</span>
-                                <ChevronDown className={`h-3.5 w-3.5 opacity-70 transition-transform ${menuOpen ? 'rotate-180' : ''}`} />
-                            </>
-                        )}
-                    </button>
-
-                    {menuOpen && (
-                        <div role="dialog" aria-label="Export settings" className="absolute right-0 top-[calc(100%+0.5rem)] z-50 w-72 space-y-4 rounded-3xl border border-[#14121F]/10 bg-white p-4 shadow-[0_20px_60px_-20px_rgba(20,18,31,0.35)]">
-                            <div className="flex items-center justify-between">
-                                <h2 className="font-[family-name:var(--font-display)] text-sm font-bold">Export video</h2>
-                                <span className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${isPro ? 'bg-[#6A4CFF]/10 text-[#6A4CFF]' : 'bg-[#14121F]/6 text-[#14121F]/60'}`}>
-                                    {isPro && <Crown className="h-3 w-3" />}{isPro ? 'Pro' : 'Free'}
-                                </span>
-                            </div>
-
-                            <Segmented
-                                label="Resolution"
-                                value={exportResolution}
-                                options={[{ value: '720p', label: '720p' }, { value: '1080p', label: '1080p' }]}
-                                onChange={onExportResolutionChange}
-                            />
-                            <Segmented
-                                label="Format"
-                                value={exportFormat}
-                                options={[{ value: 'mp4', label: 'MP4' }, { value: 'webm', label: 'WebM' }]}
-                                onChange={onExportFormatChange}
-                            />
-
-                            <div className="sm:hidden">
-                                <p className="mb-1.5 text-[11px] font-bold uppercase tracking-wider text-[#14121F]/50">Filter</p>
-                                <FilterSelect id="editor-art-effect-mobile" value={cameraArtEffect} disabled={isExporting || !hasProject} onChange={onCameraArtEffectChange} />
-                            </div>
-
-                            <p className="rounded-2xl bg-[#F7F6FB] px-3 py-2 text-[11px] leading-relaxed text-[#14121F]/60">
-                                {isPro
-                                    ? `${exportFormat === 'mp4' ? 'MP4 plays almost everywhere.' : 'WebM exports fastest.'} No watermark.`
-                                    : 'Free plan: exports up to 60 seconds with a small watermark.'}
-                            </p>
-
-                            <button
-                                type="button"
-                                onClick={() => { setMenuOpen(false); onExport(); }}
-                                className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#6A4CFF] px-4 py-2.5 text-xs font-bold text-white shadow-md shadow-[#6A4CFF]/25 transition hover:bg-[#5839e0]">
-                                <Download className="h-4 w-4" /> Export {exportResolution} {exportFormat.toUpperCase()}
-                            </button>
-                        </div>
+                <button
+                    type="button"
+                    onClick={onExport}
+                    disabled={isExporting || !hasProject}
+                    className="flex h-9 items-center gap-1.5 rounded-xl bg-[linear-gradient(135deg,#6A4CFF,#7C5CFF)] px-3.5 text-xs font-bold text-white shadow-md shadow-[#6A4CFF]/25 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60">
+                    {isExporting ? (
+                        <>
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            <span>{exportLabel}{exportStage === 'rendering' || exportStage === 'converting' ? ` ${exportProgress}%` : '…'}</span>
+                        </>
+                    ) : (
+                        <>
+                            <Share2 className="h-3.5 w-3.5" />
+                            <span>Export &amp; share</span>
+                        </>
                     )}
-                </div>
+                </button>
             </div>
         </header>
     );

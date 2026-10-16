@@ -4,7 +4,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { Bricolage_Grotesque, Instrument_Sans } from 'next/font/google';
-import { ArrowRight, Check, Compass, FolderOpen, Home, Images, LoaderCircle, MonitorUp, Plus, Sparkles, Tag, Trash2, Upload, UserRound, Video, X, Zap } from 'lucide-react';
+import { ArrowRight, Check, Compass, Film, FolderOpen, Home, Images, LoaderCircle, MonitorUp, Plus, Sparkles, Tag, Trash2, Upload, UserRound, Video, X, Zap } from 'lucide-react';
 import type { DraftSummary } from '@/components/editor/drafts';
 import { deletePhotoReelDraft, listPhotoReelDrafts, PhotoReelDraftSummary } from './photoReelDrafts';
 
@@ -196,6 +196,7 @@ export function StudioHome({
                 <nav aria-label="Studio" className="mt-6 space-y-1">
                     <span aria-current="page" className="flex items-center gap-3 rounded-xl bg-[#14121F]/[0.06] px-3 py-2.5 text-sm font-semibold"><Home className="h-4 w-4" /> Home</span>
                     <a href="#projects" className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-[#14121F]/70 transition hover:bg-[#14121F]/[0.04] hover:text-[#14121F] ${focus}`}><FolderOpen className="h-4 w-4" /> Projects</a>
+                    <Link href="/studio/videos" className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-[#14121F]/70 transition hover:bg-[#14121F]/[0.04] hover:text-[#14121F] ${focus}`}><Film className="h-4 w-4" /> Videos &amp; analytics</Link>
                     <Link href="/features" className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-[#14121F]/70 transition hover:bg-[#14121F]/[0.04] hover:text-[#14121F] ${focus}`}><Compass className="h-4 w-4" /> Features</Link>
                     <Link href="/pricing" className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-[#14121F]/70 transition hover:bg-[#14121F]/[0.04] hover:text-[#14121F] ${focus}`}><Tag className="h-4 w-4" /> Pricing</Link>
                     {guideHidden && (

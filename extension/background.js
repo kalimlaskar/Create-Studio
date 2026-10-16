@@ -37,64 +37,92 @@ const toOffscreen = (message) => chrome.runtime.sendMessage({ ...message, target
 
 /* --------------------------- camera bubble -------------------------- */
 
-// Runs inside the recorded page. The bubble is part of the page, so tab capture records it.
-function addCameraBubble(bubbleId) {
-    if (document.getElementById(bubbleId)) return;
+// Runs inside the recorded page. Shows where the camera will appear: the
+// recorder draws the live camera exactly over this marker (see lib/compositor.js),
+// so the marker itself never shows in the video. Drag to move, double-click to resize.
+function addCameraMarker(markerId, layout) {
+    document.getElementById(markerId)?.remove();
     const host = document.createElement('div');
-    host.id = bubbleId;
-    host.title = 'Drag to move · double-click to resize';
-    host.style.cssText = 'position:fixed;left:24px;bottom:24px;width:180px;height:180px;z-index:2147483647;border-radius:50%;padding:4px;background:linear-gradient(135deg,#6A4CFF,#8B5CF6 55%,#FF3D81);box-shadow:0 18px 40px -12px rgba(20,18,31,.55),0 0 0 1px rgba(255,255,255,.25);cursor:grab;touch-action:none;transition:width .25s cubic-bezier(.3,.7,.4,1.2),height .25s cubic-bezier(.3,.7,.4,1.2);';
-    const frame = document.createElement('iframe');
-    frame.src = chrome.runtime.getURL('camera.html');
-    frame.allow = 'camera';
-    frame.title = 'Cliprame camera';
-    frame.style.cssText = 'width:100%;height:100%;border:0;border-radius:50%;pointer-events:none;background:#14121F;';
-    host.appendChild(frame);
+    host.id = markerId;
+    host.title = 'Your camera appears here · drag to move · double-click to resize';
+    host.style.cssText = 'position:fixed;z-index:2147483647;border-radius:50%;padding:4px;box-sizing:border-box;background:linear-gradient(135deg,#6A4CFF,#8B5CF6 55%,#FF3D81);cursor:grab;touch-action:none;user-select:none;';
+    const inner = document.createElement('div');
+    inner.style.cssText = 'width:100%;height:100%;border-radius:50%;background:#14121F;display:grid;place-items:center;align-content:center;gap:6px;color:rgba(255,255,255,.8);font:600 12px/1.2 ui-sans-serif,-apple-system,BlinkMacSystemFont,sans-serif;text-align:center;pointer-events:none;';
+    inner.innerHTML = '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="10" r="8"/><circle cx="12" cy="10" r="3"/><path d="M7 22h10"/><path d="M12 22v-4"/></svg><span>Your camera</span>';
+    host.appendChild(inner);
 
-    // Drag the whole bubble. The iframe ignores pointer events so the host receives them.
-    let start = null;
+    const sizes = [0.18, 0.24, 0.32];
+    let current = { ...layout };
+    const place = () => {
+        const diameter = Math.max(60, current.size * window.innerHeight);
+        const radius = diameter / 2;
+        const cx = Math.min(Math.max(radius, current.x * window.innerWidth), window.innerWidth - radius);
+        const cy = Math.min(Math.max(radius, current.y * window.innerHeight), window.innerHeight - radius);
+        Object.assign(host.style, { width: `${diameter}px`, height: `${diameter}px`, left: `${cx - radius}px`, top: `${cy - radius}px` });
+    };
+    const report = () => chrome.runtime.sendMessage({ target: 'background', type: 'camera-layout', layout: current }).catch(() => {});
+
+    let drag = null;
     host.addEventListener('pointerdown', (event) => {
         const rect = host.getBoundingClientRect();
-        start = { x: event.clientX - rect.left, y: event.clientY - rect.top };
+        drag = { dx: event.clientX - (rect.left + rect.width / 2), dy: event.clientY - (rect.top + rect.height / 2) };
         host.setPointerCapture(event.pointerId);
         host.style.cursor = 'grabbing';
     });
     host.addEventListener('pointermove', (event) => {
-        if (!start) return;
-        const left = Math.min(Math.max(0, event.clientX - start.x), window.innerWidth - host.offsetWidth);
-        const top = Math.min(Math.max(0, event.clientY - start.y), window.innerHeight - host.offsetHeight);
-        host.style.left = `${left}px`;
-        host.style.top = `${top}px`;
-        host.style.bottom = 'auto';
+        if (!drag) return;
+        current = { ...current, x: (event.clientX - drag.dx) / window.innerWidth, y: (event.clientY - drag.dy) / window.innerHeight };
+        place();
+        report();
     });
-    host.addEventListener('pointerup', () => { start = null; host.style.cursor = 'grab'; });
-    // Double-click cycles small, medium and large.
-    const sizes = [140, 180, 240];
+    host.addEventListener('pointerup', () => { drag = null; host.style.cursor = 'grab'; report(); });
     host.addEventListener('dblclick', () => {
-        const next = sizes[(sizes.indexOf(host.offsetWidth) + 1) % sizes.length] ?? 180;
-        host.style.width = `${next}px`;
-        host.style.height = `${next}px`;
+        const index = sizes.findIndex((size) => Math.abs(size - current.size) < 0.01);
+        current = { ...current, size: sizes[(index + 1) % sizes.length] };
+        place();
+        report();
     });
+    window.addEventListener('resize', place);
+    place();
     document.documentElement.appendChild(host);
+    report();
 }
 
-function removeCameraBubble(bubbleId) {
-    document.getElementById(bubbleId)?.remove();
+function removeCameraMarker(markerId) {
+    document.getElementById(markerId)?.remove();
+}
+
+const DEFAULT_LAYOUT = { x: 0.1, y: 0.8, size: 0.24 };
+
+async function getCameraLayout() {
+    const { cameraLayout } = await chrome.storage.session.get('cameraLayout');
+    return cameraLayout ?? DEFAULT_LAYOUT;
 }
 
 async function showBubble(tabId) {
     try {
-        await chrome.scripting.executeScript({ target: { tabId }, func: addCameraBubble, args: [BUBBLE_ID] });
+        await chrome.scripting.executeScript({ target: { tabId }, func: addCameraMarker, args: [BUBBLE_ID, await getCameraLayout()] });
     } catch (error) {
-        // No access to this page (for example chrome:// pages, or a site without permission after navigating).
-        console.warn('[cliprame] Could not show the camera bubble:', error.message);
+        // No access to this page (for example chrome:// pages). The camera is still recorded at the saved position.
+        console.warn('[cliprame] Could not show the camera marker:', error.message);
     }
 }
 
 async function hideBubble(tabId) {
     try {
-        await chrome.scripting.executeScript({ target: { tabId }, func: removeCameraBubble, args: [BUBBLE_ID] });
+        await chrome.scripting.executeScript({ target: { tabId }, func: removeCameraMarker, args: [BUBBLE_ID] });
     } catch { /* the tab may be gone */ }
+}
+
+/** The marker moved or was resized: remember it and move the camera in the recording. */
+async function setCameraLayout(layout) {
+    const clean = {
+        x: Math.min(1, Math.max(0, Number(layout?.x) || DEFAULT_LAYOUT.x)),
+        y: Math.min(1, Math.max(0, Number(layout?.y) || DEFAULT_LAYOUT.y)),
+        size: Math.min(0.5, Math.max(0.08, Number(layout?.size) || DEFAULT_LAYOUT.size)),
+    };
+    await chrome.storage.session.set({ cameraLayout: clean });
+    if (await getRecording()) await toOffscreen({ type: 'camera-layout', layout: clean });
 }
 
 /* ----------------------------- countdown ---------------------------- */
@@ -189,14 +217,13 @@ async function beginCapture({ tabId, mic, camera }) {
     await ensureOffscreen();
     if (camera) await showBubble(tabId);
 
-    const result = await toOffscreen({ type: 'start', streamId, mic, title: tab.title || 'Tab recording' });
+    const result = await toOffscreen({ type: 'start', streamId, mic, camera, layout: await getCameraLayout(), title: tab.title || 'Tab recording' });
     if (!result?.ok) {
         if (camera) await hideBubble(tabId);
         throw new Error(result?.error || 'Could not start recording.');
     }
-    const { pendingCameraError } = await chrome.storage.session.get('pendingCameraError');
-    await chrome.storage.session.remove('pendingCameraError');
-    const cameraError = pendingCameraError?.tabId === tabId ? pendingCameraError.reason : null;
+    const cameraError = result.cameraError ?? null;
+    if (cameraError) await hideBubble(tabId);
     await setRecording({ tabId, camera: camera && !cameraError, mic, startedAt: Date.now(), pausedAt: null, pausedMs: 0, micError: result.micError ?? null, cameraError });
     await setBadge('recording');
 }
@@ -206,19 +233,6 @@ async function stopRecording() {
     if (!recording) return;
     await toOffscreen({ type: 'stop' });
     // The offscreen document replies later with "recording-saved".
-}
-
-/** The bubble's camera couldn't start: remove the bubble and tell the popup why. */
-async function cameraFailed(tabId, reason) {
-    if (!tabId) return;
-    await hideBubble(tabId);
-    const recording = await getRecording();
-    if (recording?.tabId === tabId) {
-        await setRecording({ ...recording, camera: false, cameraError: reason });
-    } else {
-        // The bubble is added just before the recording state is saved; keep the reason for it.
-        await chrome.storage.session.set({ pendingCameraError: { tabId, reason } });
-    }
 }
 
 async function discardRecording() {
@@ -281,7 +295,7 @@ const handlers = {
     'sync-masks': () => syncMaskScripts(),
     'inject-mask': (message) => injectMask(message.tabId),
     'recording-saved': (message) => finishRecording(message.id),
-    'camera-failed': (message, sender) => cameraFailed(sender.tab?.id, message.reason),
+    'camera-layout': (message) => setCameraLayout(message.layout),
     'recording-failed': async (message) => {
         await finishRecording(null);
         console.error('[cliprame] Recording failed:', message.error);

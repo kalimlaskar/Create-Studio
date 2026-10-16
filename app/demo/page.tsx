@@ -1,4 +1,5 @@
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { getPlanSummary } from '@/lib/plans/server';
 import DemoShowcaseClient from './DemoShowcaseClient';
 
 export const metadata = { title: 'Product Demos & Showcase | Cliprame' };
@@ -16,9 +17,10 @@ export default async function DemoPage() {
                 isLoggedIn = true;
                 const userId = authData.claims.sub;
 
-                const [profileRes, subRes] = await Promise.all([
+                const [profileRes, plan] = await Promise.all([
                     supabase.from('profiles').select('display_name,username').eq('id', userId).maybeSingle(),
-                    supabase.from('subscriptions').select('status,current_period_end,plan_name').eq('user_id', userId).maybeSingle()
+                    // Plan comes only from the subscription record on the server.
+                    getPlanSummary(userId).catch(() => null),
                 ]);
 
                 if (profileRes.data?.display_name) {
@@ -27,8 +29,8 @@ export default async function DemoPage() {
                     displayName = String(authData.claims.email).split('@')[0];
                 }
 
-                if (subRes.data?.plan_name) {
-                    userPlan = subRes.data.plan_name;
+                if (plan?.isPaid) {
+                    userPlan = plan.name;
                 }
             }
         }

@@ -6,6 +6,8 @@ import { redirect } from 'next/navigation';
 import { createServerClient } from '@supabase/ssr';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createDemoSessionToken, DEMO_SESSION_COOKIE, DEMO_SESSION_MAX_AGE, isDemoAuthEnabled, verifyDemoCredentials } from '@/lib/auth/demo';
+import { razorpayApi } from '@/lib/billing/razorpay';
+import { deleteObject, isR2Configured } from '@/lib/storage/r2';
 
 export interface AuthFormState {
     error?: string;
@@ -229,6 +231,29 @@ export async function deleteAccountAction(): Promise<{ error?: string }> {
     if (!supabaseAdmin) {
         return { error: 'Server configuration error: Service role key required for account deletion.' };
     }
+
+    // Stop billing first, so a deleted account is never charged again.
+    const { data: subscription } = await supabaseAdmin.from('subscriptions')
+        .select('razorpay_subscription_id,status').eq('user_id', user.id).maybeSingle();
+    if (subscription?.razorpay_subscription_id && !['cancelled', 'completed', 'expired'].includes(subscription.status)) {
+        try {
+            await razorpayApi(`subscriptions/${subscription.razorpay_subscription_id}/cancel`, { cancel_at_cycle_end: 0 });
+        } catch (error) {
+            console.error('Could not cancel subscription during account deletion:', error);
+            return { error: 'Could not cancel your subscription, so the account wasn’t deleted. Please try again or contact support.' };
+        }
+    }
+
+    // Delete hosted video files and the profile photo; database rows go with the user below.
+    const { data: videos } = await supabaseAdmin.from('videos').select('storage_key,poster_key').eq('owner_id', user.id);
+    if (videos?.length && isR2Configured()) {
+        for (const video of videos) {
+            await deleteObject(video.storage_key).catch((error) => console.error('Could not delete video file:', error));
+            if (video.poster_key) await deleteObject(video.poster_key).catch((error) => console.error('Could not delete poster:', error));
+        }
+    }
+    const { data: profile } = await supabaseAdmin.from('profiles').select('avatar_path').eq('id', user.id).maybeSingle();
+    if (profile?.avatar_path) await supabaseAdmin.storage.from('profile-avatars').remove([profile.avatar_path]);
 
     const { error: deleteError } = await supabaseAdmin.auth.admin.deleteUser(user.id);
     if (deleteError) return { error: 'Could not delete your account. Please try again.' };

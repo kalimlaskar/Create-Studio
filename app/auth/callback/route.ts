@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
         },
     });
 
-    const { data: authData, error } = await supabase.auth.exchangeCodeForSession(code);
+    const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (error) {
         if (process.env.NODE_ENV === 'development') {
             console.error('Supabase confirmation exchange failed:', { status: error.status, code: error.code, message: error.message });
@@ -39,24 +39,8 @@ export async function GET(request: NextRequest) {
         return NextResponse.redirect(login);
     }
 
-    // Fetch the user's plan name right upon login and set the cookie
-    const userId = authData?.user?.id;
-    if (userId) {
-        const { data: sub } = await supabase
-            .from('subscriptions')
-            .select('plan_name')
-            .eq('user_id', userId)
-            .maybeSingle();
-
-        const userPlan = sub?.plan_name ?? 'Free';
-
-        response.cookies.set('cliprame_user_plan', userPlan, {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            path: '/',
-            maxAge: 60 * 60 * 24 * 7, // 1 week
-        });
-    }
+    // Older versions stored the plan in a cookie. Plans now come only from the server; clear it.
+    response.cookies.delete('cliprame_user_plan');
 
     return response;
 }

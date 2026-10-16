@@ -40,11 +40,6 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": ["camera.html", "camera.js", "camera.css"],
-      "matches": ["https://*/*", "http://*/*"],
-      "use_dynamic_url": true
-    },
-    {
       "resources": ["bridge.html", "bridge.js"],
       "matches": ["https://www.cliprame.com/*", "https://cliprame.com/*", "http://localhost:3000/*"]
     }

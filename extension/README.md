@@ -21,12 +21,13 @@ After editing any file, click the reload icon on the extension card. Content scr
 4. While recording, the popup shows a timer with **Pause/Resume**, **Finish** and **Discard** (with a confirm step). The shortcut also finishes the recording.
 5. When you finish, the review page opens. You can rename the recording, see its length, size and resolution, open it in Cliprame, download it (WebM), delete it, or switch between your recent recordings.
 
-The camera bubble can be dragged anywhere, and double-clicking it cycles through three sizes.
+The camera marker can be dragged anywhere, and double-clicking it cycles through three sizes. Your live face shows in the popup preview.
 
 How it works:
 - `background.js` gets a tab-capture stream ID and keeps the recording state in `chrome.storage.session`, because the service worker can be stopped at any time.
 - `offscreen.html` / `offscreen.js` records the tab with `MediaRecorder` (up to 1080p, 30 fps). It mixes tab audio with the microphone and plays tab audio back so you still hear it.
-- The camera bubble (`camera.html`) is added to the recorded page itself, so tab capture records it. It can be dragged. The bubble comes back after the page navigates if you allowed site access when starting.
+- The camera is recorded by the recorder itself and drawn onto each frame (`lib/compositor.js`, using insertable streams). It runs at the camera's frame rate, so the bubble stays smooth even on a still page. It works on every site, including sites whose Permissions-Policy blocks cameras in embedded frames.
+- On the page you see a marker where the camera will appear. Drag it to move it, and double-click to resize it. The recorder draws the live camera exactly over the marker, so the marker never shows in the video. The marker comes back after the page navigates if you allowed site access when starting.
 - Recordings are kept in the extension's IndexedDB (`lib/recordings.js`), up to the latest five.
 
 ## Privacy masks
@@ -71,8 +72,8 @@ The allowed Cliprame addresses are listed in three places that must stay in sync
 
 ## Troubleshooting
 
-**The camera bubble is missing, or the popup says "Camera bubble removed".**
-The bubble is an extension page embedded in the recorded site. Chrome checks camera permission for the extension (`chrome-extension://…`), not for the site, and an embedded frame can't show Chrome's permission prompt. Allow it once from the popup with **Allow camera and microphone**, which opens the setup page. If it was blocked before, reset it from the camera icon in that page's address bar, or under `chrome://settings/content/camera`.
+**The popup says "Camera bubble removed".**
+The recorder couldn't open your camera. The message says why: access not set up, the camera is in use by another app, or Chrome is blocked in your computer's privacy settings. Camera permission belongs to the extension (`chrome-extension://…`), not the site you record. Allow it once from the popup with **Allow camera and microphone**. If it was blocked before, reset it under `chrome://settings/content/camera`.
 
 The popup won't start with the camera or mic switched on until access is set up. **Record without them this time** records with whatever is already allowed.
 

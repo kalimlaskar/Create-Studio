@@ -92,7 +92,7 @@ export function AuthForm({ mode, next = '/studio', setup = false, demoMode = fal
                     {signupPending ? 'Creating account…' : 'Create free account'}
                     {!signupPending && <ArrowRight className="ml-auto h-4 w-4" />}
                 </button>
-                <p className="text-center text-xs leading-relaxed text-white/45">By continuing, you agree to use only content and media you have permission to use.</p>
+                <p className="text-center text-xs leading-relaxed text-white/45">By creating an account, you agree to the <Link href="/terms" className="underline underline-offset-2 hover:text-white/70">terms of service</Link> and <Link href="/privacy" className="underline underline-offset-2 hover:text-white/70">privacy policy</Link>, and to use only content you have permission to use.</p>
             </form> : demoMode || loginMethod === 'password' ? <form action={passwordAction} className={panel}>
                 <input type="hidden" name="next" value={next} />
                 <label className={labelCls}>{demoMode ? 'Tester username' : 'Email'}<input name="email" type={demoMode ? 'text' : 'email'} autoComplete={demoMode ? 'username' : 'email'} required maxLength={254} placeholder={demoMode ? demoUsername || 'Tester username' : 'you@company.com'} className={inputCls} /></label>

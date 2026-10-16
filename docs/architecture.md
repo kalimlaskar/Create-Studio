@@ -131,6 +131,34 @@ flowchart TD
     moreReel -->|No| choose
 ```
 
+### Sharing a hosted video
+
+```mermaid
+sequenceDiagram
+    participant C as Creator browser
+    participant S as Next.js API
+    participant R as Cloudflare R2
+    participant D as Supabase
+    participant V as Viewer browser
+    C->>C: Convert WebM to MP4, read duration, grab poster
+    C->>S: POST /api/videos
+    S->>D: Insert video (uploading)
+    S-->>C: Presigned PUT URLs
+    C->>R: Upload video and poster
+    C->>S: POST /api/videos/:id/complete
+    S->>R: HEAD check
+    S->>D: Mark ready, create default share link
+    V->>S: GET /v/:slug
+    S->>D: Look up link and video (service role)
+    S-->>V: Share page with presigned playback URL
+    V->>R: Stream the video
+    V->>S: POST /api/track (seconds played, events)
+    S->>D: Upsert view session, insert events
+    C->>S: Open /studio/videos/:id
+    S->>D: Read sessions and events (row-level security)
+    S-->>C: Retention, chapters, viewers
+```
+
 ### Upgrading a plan
 
 ```mermaid

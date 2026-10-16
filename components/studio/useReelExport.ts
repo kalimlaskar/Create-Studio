@@ -1,8 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useState, type RefObject } from 'react';
+import { useCallback, useState, type RefObject } from 'react';
 import { getExportDimensions, RECORDING_FRAME_RATE } from '@/components/recordingQuality';
-import { FREE_VIDEO_LIMIT_MS } from '@/components/freeTier';
 import type { AspectRatioType } from '@/types/studio';
 import { isDepthMotion } from './depthEstimator';
 import type { LoadedFile } from './reelDraftData';
@@ -20,7 +19,10 @@ interface Options {
     music: LoadedFile | null;
     voiceover: LoadedFile | null;
     ensureDepth: (clip: ReelImage) => Promise<void>;
-    onError: (message: string) => void;
+    /** Longest reel the plan allows, in ms. */
+    limitMs: number;
+    /** Free plans get the Cliprame watermark. */
+    watermark: boolean;
 }
 
 /** MP4 first (no lossy WebM -> MP4 re-encode, no timing drift), WebM as fallback. */
@@ -35,30 +37,22 @@ const pickMimeType = () => {
     return candidates.find((type) => MediaRecorder.isTypeSupported(type)) ?? 'video/webm';
 };
 
-export function useReelExport({ canvasRef, getRenderContext, music, voiceover, ensureDepth, onError }: Options) {
+export function useReelExport({ canvasRef, getRenderContext, music, voiceover, ensureDepth, limitMs, watermark }: Options) {
     const [isExporting, setIsExporting] = useState(false);
     const [progress, setProgress] = useState(0);
     const [status, setStatus] = useState<string | null>(null);
-    const [completedUrl, setCompletedUrl] = useState<string | null>(null);
-
-    useEffect(() => () => {
-        if (completedUrl) URL.revokeObjectURL(completedUrl);
-    }, [completedUrl]);
-
-    const run = useCallback(async () => {
+    /** Renders the reel and returns the MP4. The export dialog downloads or uploads it. */
+    const run = useCallback(async (): Promise<{ blob: Blob; extension: string }> => {
         const rc = getRenderContext();
         const { clips, timeline, settings, assets } = rc;
-        if (!clips.length || isExporting) return;
-        if (timeline.total > FREE_VIDEO_LIMIT_MS) {
-            onError('This free-plan reel can be up to 60 seconds.');
-            return;
-        }
+        if (!clips.length) throw new Error('Add at least one photo or clip first.');
+        if (isExporting) throw new Error('A reel is already rendering.');
+        if (timeline.total > limitMs) throw new Error(`Your plan allows reels up to ${Math.round(limitMs / 1000)} seconds. Remove a clip or shorten the timing, or upgrade for longer reels.`);
         const canvas = canvasRef.current;
-        if (!canvas) return;
+        if (!canvas) throw new Error('The reel preview isn’t ready yet. Try again in a moment.');
 
         setIsExporting(true);
         setProgress(0);
-        setCompletedUrl(null);
         setStatus('Preparing your photos, clips, and audio…');
 
         let stream: MediaStream | null = null;
@@ -100,7 +94,7 @@ export function useReelExport({ canvasRef, getRenderContext, music, voiceover, e
             }
 
             /* 3. First frame before the stream starts, so the recording never begins blank */
-            renderFrame(ctx, rc, 0, { watermark: true });
+            renderFrame(ctx, rc, 0, { watermark });
             stream = canvas.captureStream(RECORDING_FRAME_RATE);
             const tracks = [...stream.getVideoTracks()];
 
@@ -187,13 +181,13 @@ export function useReelExport({ canvasRef, getRenderContext, music, voiceover, e
                     if (Math.abs(video.currentTime - expected) > 0.35) video.currentTime = expected;
                 }
 
-                renderFrame(ctx, rc, Math.min(elapsed, total - 1), { watermark: true });
+                renderFrame(ctx, rc, Math.min(elapsed, total - 1), { watermark });
                 setProgress(5 + Math.min(80, Math.floor((elapsed / total) * 80)));
                 await nextFrame();
             }
 
             // Hold the final frame so the encoder doesn't cut off the tail.
-            renderFrame(ctx, rc, Math.max(0, total - 1), { watermark: true });
+            renderFrame(ctx, rc, Math.max(0, total - 1), { watermark });
             await sleep(300);
             assets.pauseAllVideos();
             if (activeRecorder.state === 'recording') {
@@ -211,20 +205,13 @@ export function useReelExport({ canvasRef, getRenderContext, music, voiceover, e
                 result = await convertWebmToMp4(result, (value: number) => setProgress(85 + Math.round(value * 0.15)));
             }
 
-            const url = URL.createObjectURL(result);
-            setCompletedUrl(url);
-            setStatus('Reel is ready! Your download should start automatically.');
-            const anchor = document.createElement('a');
-            anchor.href = url;
-            anchor.download = 'product-reel.mp4';
-            document.body.appendChild(anchor);
-            anchor.click();
-            anchor.remove();
+            setStatus('Reel is ready.');
             setProgress(100);
+            return { blob: result, extension: 'mp4' };
         } catch (cause) {
             if (recorder?.state === 'recording') recorder.stop();
-            onError(cause instanceof Error ? cause.message : 'Could not export reel.');
             setStatus('Export stopped.');
+            throw cause instanceof Error ? cause : new Error('Could not export the reel.');
         } finally {
             if (recorder?.state === 'recording') recorder.stop();
             audioElements.forEach((element) => element.pause());
@@ -234,7 +221,7 @@ export function useReelExport({ canvasRef, getRenderContext, music, voiceover, e
             await audioContext?.close().catch(() => undefined);
             setIsExporting(false);
         }
-    }, [canvasRef, getRenderContext, music, voiceover, ensureDepth, isExporting, onError]);
+    }, [canvasRef, getRenderContext, music, voiceover, ensureDepth, isExporting, limitMs, watermark]);
 
-    return { isExporting, progress, status, completedUrl, run };
+    return { isExporting, progress, status, run };
 }

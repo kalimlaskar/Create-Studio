@@ -112,7 +112,11 @@ export function AuthShell({ mode, anchorId, skipLabel, title, children }: AuthSh
                         <p className="flex items-center gap-1.5">
                             <ShieldCheck className="h-3.5 w-3.5" /> {t.secure} · Drafts stay in your browser
                         </p>
-                        <Link href="/pricing" className="transition hover:text-[#14121F]">Pricing</Link>
+                        <span className="flex items-center gap-4">
+                            <Link href="/pricing" className="transition hover:text-[#14121F]">Pricing</Link>
+                            <Link href="/privacy" className="transition hover:text-[#14121F]">Privacy</Link>
+                            <Link href="/terms" className="transition hover:text-[#14121F]">Terms</Link>
+                        </span>
                     </footer>
                 </div>
 
