@@ -20,6 +20,8 @@ export interface VideoRow {
     chapters: Chapter[] | null;
     cta_label: string | null;
     cta_url: string | null;
+    embed_enabled: boolean;
+    embed_domains: string[] | null;
     created_at: string;
 }
 
@@ -35,7 +37,7 @@ export interface ShareLinkRow {
     created_at: string;
 }
 
-export const VIDEO_COLUMNS = 'id,owner_id,title,status,storage_key,poster_key,content_type,size_bytes,duration_ms,chapters,cta_label,cta_url,created_at';
+export const VIDEO_COLUMNS = 'id,owner_id,title,status,storage_key,poster_key,content_type,size_bytes,duration_ms,chapters,cta_label,cta_url,embed_enabled,embed_domains,created_at';
 export const LINK_COLUMNS = 'id,video_id,slug,recipient_name,recipient_email,recipient_company,is_default,revoked_at,created_at';
 
 /** The signed-in creator and a Supabase client that acts as them (row-level security applies). */
@@ -74,6 +76,8 @@ export function toVideoRecord(row: VideoRow): VideoRecord {
         chapters: Array.isArray(row.chapters) ? row.chapters : [],
         ctaLabel: row.cta_label,
         ctaUrl: row.cta_url,
+        embedEnabled: row.embed_enabled ?? true,
+        embedDomains: row.embed_domains ?? [],
         createdAt: row.created_at,
     };
 }
@@ -126,7 +130,7 @@ export async function listVideos(supabase: SupabaseClient): Promise<VideoListIte
 export async function loadAnalytics(supabase: SupabaseClient, video: Pick<VideoRow, 'id' | 'duration_ms' | 'chapters'>) {
     const [sessions, links, events] = await Promise.all([
         supabase.from('view_sessions')
-            .select('id,share_link_id,viewer_key,started_at,last_seen_at,watched_ms,max_position_ms,seconds_watched,completed,cta_clicked,device,country')
+            .select('id,share_link_id,viewer_key,started_at,last_seen_at,watched_ms,max_position_ms,seconds_watched,completed,cta_clicked,device,country,source,referrer_host')
             .eq('video_id', video.id).order('started_at', { ascending: false }).limit(5000),
         supabase.from('share_links').select('id,recipient_name,recipient_email,recipient_company').eq('video_id', video.id),
         supabase.from('view_events').select('session_id,type,position_ms,detail,created_at')

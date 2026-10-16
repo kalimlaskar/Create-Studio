@@ -1,6 +1,7 @@
 import { deleteObject } from '@/lib/storage/r2';
 import { getStudioUser, toVideoRecord, VIDEO_COLUMNS, type VideoRow } from '@/lib/videos/server';
-import { normalizeChapters, normalizeCtaUrl } from '@/lib/videos/types';
+import { normalizeChapters, normalizeCtaUrl, normalizeEmbedDomains } from '@/lib/videos/types';
+import { getPlanSummary } from '@/lib/plans/server';
 
 const fail = (error: string, status: number) => Response.json({ error }, { status });
 
@@ -14,7 +15,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (!row) return fail('Video not found.', 404);
     const video = row as VideoRow;
 
-    const body = await request.json().catch(() => null) as { title?: unknown; chapters?: unknown; ctaLabel?: unknown; ctaUrl?: unknown } | null;
+    const body = await request.json().catch(() => null) as { title?: unknown; chapters?: unknown; ctaLabel?: unknown; ctaUrl?: unknown; embedEnabled?: unknown; embedDomains?: unknown } | null;
     const update: Record<string, unknown> = { updated_at: new Date().toISOString() };
 
     if (body?.title !== undefined) {
@@ -33,6 +34,20 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         if (label && !url) return fail('Enter a full link for the button, starting with https://', 400);
         update.cta_label = label && url ? label : null;
         update.cta_url = label && url ? url : null;
+    }
+
+    if (body?.embedEnabled !== undefined) {
+        if (typeof body.embedEnabled !== 'boolean') return fail('Say whether embedding is on or off.', 400);
+        update.embed_enabled = body.embedEnabled;
+    }
+    if (body?.embedDomains !== undefined) {
+        const domains = normalizeEmbedDomains(body.embedDomains);
+        if (!domains) return fail('Enter website addresses like acme.com or *.acme.com, up to 20.', 400);
+        // Limiting embeds to your own websites is a paid feature.
+        if (domains.length && !(await getPlanSummary(user.id)).isPaid) {
+            return Response.json({ error: 'Limiting embeds to your websites is available on Creator and Studio plans.', upgradeUrl: '/pricing' }, { status: 403 });
+        }
+        update.embed_domains = domains;
     }
 
     const { data, error } = await user.supabase.from('videos').update(update).eq('id', id).select(VIDEO_COLUMNS).single();

@@ -15,6 +15,8 @@ interface TrackBody {
     viewerKey?: unknown;
     sessionId?: unknown;
     device?: unknown;
+    source?: unknown;
+    referrerHost?: unknown;
     positionMs?: unknown;
     completed?: unknown;
     /** [second, timesPlayed] pairs since the last report. */
@@ -92,6 +94,8 @@ export async function POST(request: Request) {
             device,
             country,
             ip_hash: hashed,
+            source: body.source === 'embed' ? 'embed' : 'share',
+            referrer_host: body.source === 'embed' && typeof body.referrerHost === 'string' && /^[a-z0-9.-]{1,253}$/i.test(body.referrerHost) ? body.referrerHost.toLowerCase() : null,
         }).select(columns).single();
         if (error || !data) {
             console.error('Could not start view session:', error);

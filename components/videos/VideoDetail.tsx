@@ -2,7 +2,7 @@
 
 import { useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Check, ChevronDown, Copy, ExternalLink, Link2, ListVideo, Mail, MousePointerClick, Plus, RefreshCw, Repeat, Trash2, UserPlus } from 'lucide-react';
+import { ArrowLeft, Check, ChevronDown, Code2, Copy, ExternalLink, Link2, ListVideo, Lock, Mail, MousePointerClick, Plus, RefreshCw, Repeat, Trash2, UserPlus } from 'lucide-react';
 import { videoApi } from '@/lib/videos/upload';
 import { formatClock, formatPercent, parseClock, type Chapter, type ShareLink, type VideoAnalytics, type VideoRecord, type ViewerSummary } from '@/lib/videos/types';
 import { RetentionChart } from './RetentionChart';
@@ -14,7 +14,7 @@ const D = 'font-[family-name:var(--font-display)]';
 const card = 'rounded-3xl border border-[#14121F]/8 bg-white';
 const inputClass = 'w-full rounded-xl border border-[#14121F]/12 bg-[#F7F6FB] px-3 py-2 text-sm outline-none transition focus:border-[#6A4CFF] focus:bg-white focus:ring-4 focus:ring-[#6A4CFF]/10';
 
-type Tab = 'share' | 'chapters' | 'cta';
+type Tab = 'share' | 'embed' | 'chapters' | 'cta';
 
 interface Props {
     initialVideo: VideoRecord;
@@ -22,6 +22,8 @@ interface Props {
     posterUrl: string | null;
     initialLinks: ShareLink[];
     initialAnalytics: VideoAnalytics;
+    /** On a paid plan (decided on the server). */
+    isPaid: boolean;
 }
 
 function timeAgo(iso: string) {
@@ -39,7 +41,7 @@ const shareUrl = (slug: string) => `${window.location.origin}/v/${slug}`;
 /** The page origin, read only in the browser so server and client render the same first. */
 const useOrigin = () => useSyncExternalStore(() => () => {}, () => window.location.origin, () => '');
 
-export function VideoDetail({ initialVideo, playbackUrl, posterUrl, initialLinks, initialAnalytics }: Props) {
+export function VideoDetail({ initialVideo, playbackUrl, posterUrl, initialLinks, initialAnalytics, isPaid }: Props) {
     const playerRef = useRef<HTMLVideoElement>(null);
     const [video, setVideo] = useState(initialVideo);
     const [links, setLinks] = useState(initialLinks);
@@ -54,7 +56,7 @@ export function VideoDetail({ initialVideo, playbackUrl, posterUrl, initialLinks
     const defaultLink = links.find((link) => link.isDefault) ?? null;
     const flash = (key: string) => { setCopied(key); setTimeout(() => setCopied((value) => (value === key ? null : value)), 1800); };
 
-    const save = async (change: Partial<{ title: string; chapters: Chapter[]; ctaLabel: string; ctaUrl: string }>) => {
+    const save = async (change: Partial<{ title: string; chapters: Chapter[]; ctaLabel: string; ctaUrl: string; embedEnabled: boolean; embedDomains: string[] }>) => {
         setNotice('');
         try {
             const { video: updated } = await videoApi<{ video: VideoRecord }>(`/api/videos/${video.id}`, { method: 'PATCH', body: JSON.stringify(change) });
@@ -153,8 +155,8 @@ export function VideoDetail({ initialVideo, playbackUrl, posterUrl, initialLinks
                 </section>
 
                 <section className={`${card} p-1.5`}>
-                    <div role="tablist" aria-label="Video settings" className="grid grid-cols-3 gap-1 rounded-[1.1rem] bg-[#F7F6FB] p-1">
-                        {([['share', 'Share'], ['chapters', 'Chapters'], ['cta', 'Button']] as const).map(([id, label]) => (
+                    <div role="tablist" aria-label="Video settings" className="grid grid-cols-4 gap-1 rounded-[1.1rem] bg-[#F7F6FB] p-1">
+                        {([['share', 'Share'], ['embed', 'Embed'], ['chapters', 'Chapters'], ['cta', 'Button']] as const).map(([id, label]) => (
                             <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => setTab(id)} className={`rounded-xl px-3 py-2 text-sm font-semibold transition ${tab === id ? 'bg-white shadow-sm' : 'text-[#14121F]/55 hover:text-[#14121F]'} ${focus}`}>{label}</button>
                         ))}
                     </div>
@@ -173,6 +175,9 @@ export function VideoDetail({ initialVideo, playbackUrl, posterUrl, initialLinks
                         )}
                         {tab === 'chapters' && (
                             <ChaptersEditor chapters={video.chapters} durationMs={video.durationMs} currentMs={currentMs} onSave={(chapters) => save({ chapters })} onSeek={seek} />
+                        )}
+                        {tab === 'embed' && (
+                            <EmbedPanel video={video} defaultLink={defaultLink} isPaid={isPaid} onSave={save} />
                         )}
                         {tab === 'cta' && (
                             <CtaEditor key={`${video.ctaLabel}-${video.ctaUrl}`} label={video.ctaLabel ?? ''} url={video.ctaUrl ?? ''} onSave={(ctaLabel, ctaUrl) => save({ ctaLabel, ctaUrl })} />
@@ -446,6 +451,121 @@ function ChaptersEditor({ chapters, durationMs, currentMs, onSave, onSeek }: { c
     );
 }
 
+/* -------------------------------- Embed ------------------------------ */
+
+const escapeAttribute = (text: string) => text.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+
+function EmbedPanel({ video, defaultLink, isPaid, onSave }: { video: VideoRecord; defaultLink: ShareLink | null; isPaid: boolean; onSave: (change: { embedEnabled?: boolean; embedDomains?: string[] }) => Promise<boolean> }) {
+    const origin = useOrigin();
+    const [mode, setMode] = useState<'inline' | 'popup'>('inline');
+    const [label, setLabel] = useState('Watch the video');
+    const [copied, setCopied] = useState<'script' | 'iframe' | null>(null);
+    const [domains, setDomains] = useState(video.embedDomains.join('\n'));
+    const [savingDomains, setSavingDomains] = useState(false);
+    const [domainsSaved, setDomainsSaved] = useState(false);
+
+    if (!defaultLink || defaultLink.revokedAt) {
+        return <p className="rounded-2xl bg-[#F7F6FB] px-4 py-6 text-center text-sm text-[#14121F]/60">Turn the “Anyone with the link” share link back on to embed this video.</p>;
+    }
+
+    const slug = defaultLink.slug;
+    const scriptCode = `<div class="cliprame-embed" data-video="${slug}"${mode === 'popup' ? ` data-mode="popup" data-label="${escapeAttribute(label.trim() || 'Watch the video')}"` : ''}></div>\n<script src="${origin}/embed.js" async></script>`;
+    const iframeCode = `<iframe src="${origin}/embed/${slug}" title="${escapeAttribute(video.title)}" style="width:100%;aspect-ratio:16/9;border:0;border-radius:12px" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe>`;
+
+    const copy = async (kind: 'script' | 'iframe') => {
+        await navigator.clipboard.writeText(kind === 'script' ? scriptCode : iframeCode);
+        setCopied(kind);
+        track('embed_code_copied', { mode: kind === 'iframe' ? 'iframe' : mode });
+        setTimeout(() => setCopied(null), 1800);
+    };
+
+    const saveDomains = async () => {
+        setSavingDomains(true);
+        const list = domains.split(/[\n,]/).map((item) => item.trim()).filter(Boolean);
+        setDomainsSaved(await onSave({ embedDomains: list }));
+        setSavingDomains(false);
+    };
+
+    return (
+        <div className="space-y-4">
+            <div className="flex items-start justify-between gap-3">
+                <div>
+                    <p className="text-sm font-semibold">Allow embedding on other websites</p>
+                    <p className="mt-0.5 text-xs leading-5 text-[#14121F]/55">Put the video on your site, landing page or help centre. Views there show up in analytics.</p>
+                </div>
+                <button
+                    type="button"
+                    role="switch"
+                    aria-checked={video.embedEnabled}
+                    aria-label="Allow embedding"
+                    onClick={() => void onSave({ embedEnabled: !video.embedEnabled })}
+                    className={`relative mt-0.5 h-6 w-11 shrink-0 rounded-full transition ${video.embedEnabled ? 'bg-[#6A4CFF]' : 'bg-[#14121F]/20'} ${focus}`}>
+                    <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all ${video.embedEnabled ? 'left-[1.375rem]' : 'left-0.5'}`} />
+                </button>
+            </div>
+
+            {video.embedEnabled && (
+                <>
+                    <div role="radiogroup" aria-label="Embed style" className="grid grid-cols-2 gap-1 rounded-xl bg-[#F7F6FB] p-1">
+                        {([['inline', 'Inline', 'The video sits in your page'], ['popup', 'Popup', 'A button opens the video']] as const).map(([id, name, hint]) => (
+                            <button key={id} type="button" role="radio" aria-checked={mode === id} onClick={() => setMode(id)} className={`rounded-lg px-3 py-2 text-left transition ${mode === id ? 'bg-white shadow-sm' : 'text-[#14121F]/55 hover:text-[#14121F]'} ${focus}`}>
+                                <span className="block text-sm font-semibold">{name}</span>
+                                <span className="block text-[11px] text-[#14121F]/50">{hint}</span>
+                            </button>
+                        ))}
+                    </div>
+
+                    {mode === 'popup' && (
+                        <label className="block">
+                            <span className="text-xs font-semibold text-[#14121F]/60">Button text</span>
+                            <input value={label} onChange={(event) => setLabel(event.target.value)} maxLength={40} className={`${inputClass} mt-1`} />
+                        </label>
+                    )}
+
+                    <div className="overflow-hidden rounded-2xl border border-[#14121F]/10 bg-[#F7F6FB]">
+                        {mode === 'inline' ? (
+                            origin && <iframe src={`${origin}/embed/${slug}`} title="Embed preview" className="block aspect-video w-full border-0" allow="autoplay; fullscreen; picture-in-picture" />
+                        ) : (
+                            <div className="flex items-center justify-center px-4 py-6">
+                                <span className="inline-flex items-center gap-2.5 rounded-full bg-[#6A4CFF] py-3 pl-3.5 pr-5 text-[15px] font-semibold text-white shadow-[0_12px_28px_-12px_rgba(106,76,255,0.9)]">
+                                    <span className="flex h-7 w-7 items-center justify-center rounded-full bg-white/20">▶</span>{label.trim() || 'Watch the video'}
+                                </span>
+                            </div>
+                        )}
+                        <p className="border-t border-[#14121F]/8 px-3 py-1.5 text-[11px] text-[#14121F]/45">Preview</p>
+                    </div>
+
+                    <div>
+                        <pre className="max-h-32 overflow-auto whitespace-pre-wrap break-all rounded-2xl bg-[#14121F] px-4 py-3 font-mono text-[11px] leading-5 text-white/85">{origin ? scriptCode : ''}</pre>
+                        <button type="button" onClick={() => void copy('script')} className={`mt-2 inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-[#6A4CFF] px-3 py-2.5 text-sm font-bold text-white transition hover:bg-[#5839e0] ${focus}`}>
+                            {copied === 'script' ? <><Check className="h-4 w-4" /> Copied</> : <><Code2 className="h-4 w-4" /> Copy embed code</>}
+                        </button>
+                        <button type="button" onClick={() => void copy('iframe')} className={`mt-1.5 w-full rounded-lg px-2 py-1.5 text-xs font-semibold text-[#14121F]/55 hover:text-[#6A4CFF] ${focus}`}>
+                            {copied === 'iframe' ? 'Copied the iframe code' : 'Can’t use scripts (Notion, some site builders)? Copy the iframe code'}
+                        </button>
+                    </div>
+
+                    <div className="rounded-2xl border border-[#14121F]/8 p-3.5">
+                        <p className="flex items-center gap-1.5 text-sm font-semibold">{!isPaid && <Lock className="h-3.5 w-3.5 text-[#14121F]/45" />}Only on my websites</p>
+                        <p className="mt-0.5 text-xs leading-5 text-[#14121F]/55">Stop others from copying your embed code onto their sites. One website per line, e.g. acme.com or *.acme.com. Leave empty to allow anywhere.</p>
+                        {isPaid ? (
+                            <>
+                                <textarea value={domains} onChange={(event) => { setDomains(event.target.value); setDomainsSaved(false); }} rows={3} placeholder={'acme.com\n*.acme.com'} className={`${inputClass} mt-2 font-mono`} />
+                                <button type="button" onClick={() => void saveDomains()} disabled={savingDomains} className={`mt-2 inline-flex items-center gap-1.5 rounded-xl bg-[#14121F] px-3 py-2 text-xs font-semibold text-white hover:bg-[#2c2742] disabled:opacity-50 ${focus}`}>
+                                    {savingDomains ? 'Saving…' : domainsSaved ? <><Check className="h-3.5 w-3.5" /> Saved</> : 'Save websites'}
+                                </button>
+                            </>
+                        ) : (
+                            <a href="/pricing" className="mt-2 inline-block text-xs font-semibold text-[#6A4CFF] hover:underline">Available on Creator and Studio plans</a>
+                        )}
+                    </div>
+                    {!isPaid && <p className="text-[11px] leading-5 text-[#14121F]/45">Free plan embeds show a small “Powered by Cliprame” badge. Upgrade to remove it.</p>}
+                </>
+            )}
+        </div>
+    );
+}
+
 /* -------------------------------- CTA -------------------------------- */
 
 function CtaEditor({ label, url, onSave }: { label: string; url: string; onSave: (label: string, url: string) => Promise<boolean> }) {
@@ -544,6 +664,32 @@ function AnalyticsSection({ analytics, durationMs, hasChapters, refreshing, onRe
                 </div>
             </div>
 
+            {analytics.sources.length > 0 && (
+                <div className={`${card} p-5`}>
+                    <h3 className="font-semibold">Where views came from</h3>
+                    <p className="mt-0.5 text-xs text-[#14121F]/55">Plays on the share link and on each website the video is embedded on.</p>
+                    <ul className="mt-4 space-y-3">
+                        {analytics.sources.map((source) => {
+                            const share = analytics.plays ? source.plays / analytics.plays : 0;
+                            return (
+                                <li key={`${source.kind}-${source.label}`}>
+                                    <div className="flex items-baseline justify-between gap-3 text-sm">
+                                        <span className="flex min-w-0 items-center gap-2 truncate font-medium">
+                                            {source.kind === 'embed' ? <Code2 className="h-3.5 w-3.5 shrink-0 text-[#14121F]/45" /> : <Link2 className="h-3.5 w-3.5 shrink-0 text-[#14121F]/45" />}
+                                            {source.label}
+                                        </span>
+                                        <span className="shrink-0 text-sm font-semibold tabular-nums">{source.plays.toLocaleString('en-IN')}</span>
+                                    </div>
+                                    <div className="mt-1.5 h-2.5 overflow-hidden rounded-r-[4px] bg-[#14121F]/[0.05]">
+                                        <div className="h-full rounded-r-[4px]" style={{ width: `${Math.round(share * 100)}%`, background: '#6A4CFF' }} />
+                                    </div>
+                                </li>
+                            );
+                        })}
+                    </ul>
+                </div>
+            )}
+
             <div className={`${card} p-5`}>
                 <h3 className="font-semibold">Viewers</h3>
                 <p className="mt-0.5 text-xs text-[#14121F]/55">People with personal links are named. Everyone else is grouped by browser.</p>
@@ -574,7 +720,7 @@ function ViewerRow({ viewer }: { viewer: ViewerSummary }) {
                     <span className="block truncate text-sm font-semibold">{viewer.name}{viewer.company && <span className="font-normal text-[#14121F]/55"> · {viewer.company}</span>}</span>
                     <span className="block truncate text-xs text-[#14121F]/55">
                         {viewer.sessions ? `Watched ${timeAgo(viewer.lastSeenAt)}` : `Opened ${timeAgo(viewer.lastSeenAt)}, didn’t play`}
-                        {viewer.sessions > 1 ? ` · ${viewer.sessions} plays` : ''}{viewer.device ? ` · ${viewer.device}` : ''}{viewer.country ? ` · ${viewer.country}` : ''}
+                        {viewer.sessions > 1 ? ` · ${viewer.sessions} plays` : ''}{viewer.embedHosts.length ? ` · on ${viewer.embedHosts.join(', ')}` : ''}{viewer.device ? ` · ${viewer.device}` : ''}{viewer.country ? ` · ${viewer.country}` : ''}
                     </span>
                 </span>
                 <span className="hidden items-center gap-1.5 sm:flex">

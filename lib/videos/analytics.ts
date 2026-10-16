@@ -15,6 +15,9 @@ export interface SessionInput {
     cta_clicked: boolean;
     device: string | null;
     country: string | null;
+    /** Missing on sessions recorded before embeds existed. */
+    source?: 'share' | 'embed' | null;
+    referrer_host?: string | null;
 }
 
 export interface LinkInput {
@@ -147,11 +150,22 @@ export function computeAnalytics(durationMs: number, chapters: Chapter[], sessio
             ctaClicked: group.some((session) => session.cta_clicked),
             device: latest.device,
             country: latest.country,
+            embedHosts: [...new Set(group.filter((session) => session.source === 'embed' && session.referrer_host).map((session) => session.referrer_host as string))],
             chaptersWatched,
             chaptersSkipped,
             timeline,
         };
     }).sort((a, b) => b.lastSeenAt.localeCompare(a.lastSeenAt));
+
+    // Where plays happened: the share page, or each website the video is embedded on.
+    const sourceCounts = new Map<string, { label: string; kind: 'share' | 'embed'; plays: number }>();
+    for (const session of plays) {
+        const kind = session.source === 'embed' ? 'embed' : 'share';
+        const label = kind === 'embed' ? session.referrer_host || 'Embedded (unknown site)' : 'Share link';
+        const entry = sourceCounts.get(`${kind}:${label}`) ?? { label, kind, plays: 0 };
+        entry.plays += 1;
+        sourceCounts.set(`${kind}:${label}`, entry);
+    }
 
     return {
         opens: sessions.length,
@@ -163,6 +177,7 @@ export function computeAnalytics(durationMs: number, chapters: Chapter[], sessio
         totalWatchMs: sessions.reduce((sum, session) => sum + session.watched_ms, 0),
         retention,
         chapters: chapterStats,
+        sources: [...sourceCounts.values()].sort((a, b) => b.plays - a.plays),
         viewers: viewers.slice(0, 200),
     };
 }

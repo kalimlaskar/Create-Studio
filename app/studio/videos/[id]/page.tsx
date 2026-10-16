@@ -3,6 +3,7 @@ import { notFound, redirect } from 'next/navigation';
 import { VideosShell } from '@/components/videos/VideosShell';
 import { VideoDetail } from '@/components/videos/VideoDetail';
 import { isR2Configured } from '@/lib/storage/r2';
+import { getPlanSummary } from '@/lib/plans/server';
 import { getStudioUser, LINK_COLUMNS, loadAnalytics, playbackUrl, posterUrl, toShareLink, toVideoRecord, VIDEO_COLUMNS, type ShareLinkRow, type VideoRow } from '@/lib/videos/server';
 
 export const metadata = { title: 'Video | Cliprame' };
@@ -30,9 +31,10 @@ export default async function VideoPage({ params }: { params: Promise<{ id: stri
         );
     }
 
-    const [{ data: links }, analytics] = await Promise.all([
+    const [{ data: links }, analytics, plan] = await Promise.all([
         user.supabase.from('share_links').select(LINK_COLUMNS).eq('video_id', id).order('created_at'),
         loadAnalytics(user.supabase, video),
+        getPlanSummary(user.id),
     ]);
 
     return (
@@ -43,6 +45,7 @@ export default async function VideoPage({ params }: { params: Promise<{ id: stri
                 posterUrl={posterUrl(video, 6 * 3600)}
                 initialLinks={((links ?? []) as ShareLinkRow[]).map(toShareLink)}
                 initialAnalytics={analytics}
+                isPaid={plan.isPaid}
             />
         </VideosShell>
     );

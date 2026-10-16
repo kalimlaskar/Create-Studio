@@ -53,3 +53,21 @@ describe('analytics', () => {
         expect(result.chapters[1].reached).toBe(0.5);
     });
 });
+
+describe('embed websites', () => {
+    it('cleans website lists', async () => {
+        const { normalizeEmbedDomains } = await import('@/lib/videos/types');
+        expect(normalizeEmbedDomains(['https://Acme.com/pricing', '*.acme.com', 'acme.com', ''])).toEqual(['acme.com', '*.acme.com']);
+        expect(normalizeEmbedDomains(['not a domain!'])).toBeNull();
+    });
+
+    it('matches allowed websites', async () => {
+        const { hostAllowed } = await import('@/lib/videos/types');
+        expect(hostAllowed('acme.com', ['acme.com'])).toBe(true);
+        expect(hostAllowed('www.acme.com', ['acme.com'])).toBe(true);
+        expect(hostAllowed('docs.acme.com', ['*.acme.com'])).toBe(true);
+        expect(hostAllowed('acme.com', ['*.acme.com'])).toBe(true);
+        expect(hostAllowed('evil-acme.com', ['*.acme.com'])).toBe(false);
+        expect(hostAllowed('acme.com.evil.io', ['acme.com'])).toBe(false);
+    });
+});

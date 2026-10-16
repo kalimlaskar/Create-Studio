@@ -11,6 +11,27 @@ const nextConfig: NextConfig = {
           { key: "Content-Type", value: "application/javascript; charset=utf-8" },
         ],
       },
+      {
+        // Loaded by customers' websites. Short cache so updates reach them quickly.
+        source: "/embed.js",
+        headers: [
+          { key: "Cache-Control", value: "public, max-age=3600, stale-while-revalidate=86400" },
+          { key: "Access-Control-Allow-Origin", value: "*" },
+        ],
+      },
+      {
+        // Only the embed player may be shown inside other websites.
+        source: "/embed/:path*",
+        headers: [{ key: "Content-Security-Policy", value: "frame-ancestors *" }],
+      },
+      {
+        // Everything else (login, studio, share pages) can't be framed by other sites, which blocks clickjacking.
+        source: "/:path((?!embed/).*)",
+        headers: [
+          { key: "X-Frame-Options", value: "SAMEORIGIN" },
+          { key: "Content-Security-Policy", value: "frame-ancestors 'self'" },
+        ],
+      },
     ];
   },
 };

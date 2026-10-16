@@ -9,7 +9,8 @@ export type ProductEvent =
     | 'video_shared'
     | 'personal_link_created'
     | 'chapters_saved'
-    | 'video_uploaded';
+    | 'video_uploaded'
+    | 'embed_code_copied';
 
 export function track(event: ProductEvent, properties?: Record<string, string | number | boolean>) {
     if (!process.env.NEXT_PUBLIC_POSTHOG_KEY || !posthog.__loaded) return;

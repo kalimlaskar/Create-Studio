@@ -15,6 +15,9 @@ export interface VideoRecord {
     chapters: Chapter[];
     ctaLabel: string | null;
     ctaUrl: string | null;
+    embedEnabled: boolean;
+    /** Websites allowed to embed the video (paid plans). Empty means anywhere. */
+    embedDomains: string[];
     createdAt: string;
 }
 
@@ -59,6 +62,8 @@ export interface ViewerSummary {
     ctaClicked: boolean;
     device: string | null;
     country: string | null;
+    /** Websites this viewer watched the embedded video on. */
+    embedHosts: string[];
     /** Chapters this viewer played most of, in video order. */
     chaptersWatched: string[];
     chaptersSkipped: string[];
@@ -89,6 +94,8 @@ export interface VideoAnalytics {
     /** Share of plays still watching at each point: [positionMs, share]. */
     retention: Array<[number, number]>;
     chapters: ChapterStats[];
+    /** Plays by where they happened: the share page or a website the video is embedded on. */
+    sources: Array<{ label: string; kind: 'share' | 'embed'; plays: number }>;
     viewers: ViewerSummary[];
 }
 
@@ -143,3 +150,24 @@ export function parseClock(text: string): number | null {
 }
 
 export const formatPercent = (share: number) => `${Math.round(share * 100)}%`;
+
+/** Cleans a list of websites for embed restrictions: bare host names, lower case, no duplicates. */
+export function normalizeEmbedDomains(input: unknown): string[] | null {
+    if (!Array.isArray(input) || input.length > 20) return null;
+    const hosts = new Set<string>();
+    for (const item of input) {
+        if (typeof item !== 'string') return null;
+        let host = item.trim().toLowerCase();
+        if (!host) continue;
+        host = host.replace(/^https?:\/\//, '').replace(/\/.*$/, '').replace(/:\d+$/, '');
+        if (!/^(\*\.)?[a-z0-9-]+(\.[a-z0-9-]+)*$/.test(host) || host.length > 253) return null;
+        hosts.add(host);
+    }
+    return [...hosts];
+}
+
+/** True when a host is allowed by a list like ["acme.com", "*.acme.com"]. */
+export function hostAllowed(host: string, allowed: string[]) {
+    const clean = host.toLowerCase();
+    return allowed.some((rule) => (rule.startsWith('*.') ? clean === rule.slice(2) || clean.endsWith(rule.slice(1)) : clean === rule || clean === `www.${rule}`));
+}

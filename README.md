@@ -54,6 +54,7 @@ Only the Supabase URL and publishable key belong in `NEXT_PUBLIC_` variables. Al
    - `20261017000000_video_sharing.sql`: hosted videos, share links and viewer analytics
    - `20261017000100_billing_and_usage.sql`: payments, webhook event log, monthly AI minutes, and the shared "is paying" rule
    - `20261017000200_view_tracking_limits.sql`: abuse limits for viewer analytics
+   - `20261017000300_video_embeds.sql`: embedding settings and where views came from
 5. Restart `npm run dev`, then create an account at **Sign up**.
 
 Profile reads and updates are restricted to the owner by row-level security. Subscription rows can be read by their owner and are written only on the server with the service-role key.
@@ -144,6 +145,22 @@ Creators upload videos at `/studio/videos` and share them through `/v/<link>` pa
 - **Share links:** each video has an "anyone with the link" URL. Creators can also make a **personal link** per recipient (name, email, company), so views are attributed to that person. "For email" copies a thumbnail with a play button (`/v/<link>/thumbnail`) and a link, ready to paste into Gmail or Outlook. Links can be turned off at any time.
 - **Chapters and button:** chapters are set per video and shown on the share page for jumping. An optional button (for example "Book a demo") links to any https URL.
 - **Analytics:** the share page reports which seconds were played, and how often, plus play, pause, seek, chapter and button events, to `/api/track`. The video page shows plays, unique viewers, average watched, completion, button clicks, an audience retention chart with chapter markers, per-chapter reach and rewatch rates, and a per-viewer list. That list shows what each person focused on or skipped and their activity timeline. The creator's own views are not counted.
+
+### Embedding on other websites
+
+Each video can be embedded on any website, like Vidyard or Wistia. Use **Embed** on the video's page to get the code:
+
+```html
+<div class="cliprame-embed" data-video="LINK_CODE"></div>
+<script src="https://www.cliprame.com/embed.js" async></script>
+```
+
+- **Modes:** `data-mode="popup"` (with `data-label="Watch the demo"`) shows a button that opens the video in a lightbox; inline is the default. The player resizes itself to the video's shape.
+- **Platforms that block scripts** (Notion, some site builders) can use the iframe version, which is also on the Embed tab.
+- **Analytics:** embedded views appear in analytics with the website they came from ("Where views came from").
+- **Settings:** owners can switch embedding off per video. Paid plans can limit embeds to their own websites (`acme.com`, `*.acme.com`), checked against the embedding page's referrer. Free-plan embeds show a "Powered by Cliprame" badge.
+- **Security:** only `/embed/*` may be framed by other sites (`next.config.ts`); every other page sends `X-Frame-Options: SAMEORIGIN` and `frame-ancestors 'self'`.
+- **Database:** needs `supabase/migrations/20261017000300_video_embeds.sql`.
 
 ### Setup
 
