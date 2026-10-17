@@ -1,4 +1,5 @@
 import 'server-only';
+import { unstable_rethrow } from 'next/navigation';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { getPlanSummary } from '@/lib/plans/server';
 
@@ -27,6 +28,8 @@ export async function getMarketingSession(): Promise<MarketingSession> {
         session.displayName = profile.data?.display_name || (data.claims.email ? String(data.claims.email).split('@')[0] : 'User');
         if (plan?.isPaid) session.userPlan = plan.name;
     } catch (error) {
+        // Let Next's own signals through, such as the one that marks this page as rendered per request.
+        unstable_rethrow(error);
         console.error('Could not resolve the session for a marketing page:', error);
     }
     return session;
