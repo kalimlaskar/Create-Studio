@@ -16,7 +16,7 @@ const FOOTER = [
     { title: 'Company', links: [['Privacy', '/privacy'], ['Terms', '/terms'], ['Data processing', '/dpa'], ['Log in', '/login']] },
 ];
 
-export function MarketingShell({ current, session, children }: { current: NavKey; session: MarketingSession; children: ReactNode }) {
+export function MarketingShell({ current, session, children }: { current?: NavKey; session: MarketingSession; children: ReactNode }) {
     return (
         <main className={`${fontVariables} mk-paper relative min-h-dvh overflow-x-clip font-[family-name:var(--font-body)] text-[#15120F] antialiased selection:bg-[#5B3DF5]/20`}>
             <SiteHeader current={current} session={session} />

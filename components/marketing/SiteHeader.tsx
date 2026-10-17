@@ -25,7 +25,7 @@ export function Wordmark() {
     );
 }
 
-export function SiteHeader({ current, session }: { current: NavKey; session: MarketingSession }) {
+export function SiteHeader({ current, session }: { current?: NavKey; session: MarketingSession }) {
     const [scrolled, setScrolled] = useState(false);
     const [open, setOpen] = useState(false);
 
