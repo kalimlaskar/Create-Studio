@@ -1,9 +1,14 @@
 // Shared by the server, the studio pages and the public share page.
+import type { Interaction } from './interactions';
 
 export interface Chapter {
     title: string;
     startMs: number;
 }
+
+/** Who can play a shared or embedded video: anyone with the link, or only after a check. */
+export type AccessMode = 'public' | 'pin' | 'password' | 'email';
+export const ACCESS_MODES: AccessMode[] = ['public', 'pin', 'password', 'email'];
 
 export interface VideoRecord {
     id: string;
@@ -18,6 +23,11 @@ export interface VideoRecord {
     embedEnabled: boolean;
     /** Websites allowed to embed the video (paid plans). Empty means anywhere. */
     embedDomains: string[];
+    accessMode: AccessMode;
+    /** For email codes: addresses or "@company.com" domains allowed in. Empty means any address. */
+    accessEmails: string[];
+    /** In-video forms, buttons and booking embeds (full settings; owners only). */
+    interactions: Interaction[];
     createdAt: string;
 }
 
@@ -82,6 +92,31 @@ export interface ChapterStats {
     rewatched: number;
 }
 
+/** One slice of the video: the share of plays (0–1) that did each thing there. */
+export interface HeatmapBucket {
+    startMs: number;
+    endMs: number;
+    /** Played some part of the slice more than once. */
+    rewatched: number;
+    /** Played nothing in the slice but carried on watching after it. */
+    skipped: number;
+    /** Stopped watching for good in this slice, without finishing the video. */
+    droppedOff: number;
+}
+
+/** One form submission from a viewer. */
+export interface LeadRecord {
+    id: string;
+    formId: string;
+    formTitle: string | null;
+    fields: Record<string, string>;
+    hidden: Record<string, string>;
+    email: string | null;
+    forwardStatus: 'ok' | 'failed' | 'skipped' | null;
+    forwardError: string | null;
+    createdAt: string;
+}
+
 export interface VideoAnalytics {
     opens: number;
     plays: number;
@@ -93,10 +128,14 @@ export interface VideoAnalytics {
     totalWatchMs: number;
     /** Share of plays still watching at each point: [positionMs, share]. */
     retention: Array<[number, number]>;
+    /** Re-watch, skip and drop-off rates across the video. */
+    heatmap: HeatmapBucket[];
     chapters: ChapterStats[];
     /** Plays by where they happened: the share page or a website the video is embedded on. */
     sources: Array<{ label: string; kind: 'share' | 'embed'; plays: number }>;
     viewers: ViewerSummary[];
+    /** Form submissions, newest first. */
+    leads: LeadRecord[];
 }
 
 export const MAX_UPLOAD_BYTES = 2 * 1024 ** 3;
@@ -170,4 +209,46 @@ export function normalizeEmbedDomains(input: unknown): string[] | null {
 export function hostAllowed(host: string, allowed: string[]) {
     const clean = host.toLowerCase();
     return allowed.some((rule) => (rule.startsWith('*.') ? clean === rule.slice(2) || clean.endsWith(rule.slice(1)) : clean === rule || clean === `www.${rule}`));
+}
+
+/* ------------------------------ Viewer access ---------------------------- */
+
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+export const normalizeEmail = (input: unknown) => {
+    const email = typeof input === 'string' ? input.trim().toLowerCase() : '';
+    return email.length <= 254 && EMAIL.test(email) ? email : null;
+};
+
+/** Why a PIN or password can't be used, or null when it's fine. */
+export function accessSecretProblem(mode: 'pin' | 'password', secret: unknown): string | null {
+    if (typeof secret !== 'string') return mode === 'pin' ? 'Enter a PIN.' : 'Enter a password.';
+    if (mode === 'pin') return /^\d{6,8}$/.test(secret) ? null : 'A PIN is 6 to 8 digits.';
+    return secret.length >= 8 && secret.length <= 128 ? null : 'Use a password of 8 to 128 characters.';
+}
+
+/** Cleans the list of people allowed to unlock with an email code: addresses or "@company.com" domains. */
+export function normalizeAccessEmails(input: unknown): string[] | null {
+    if (!Array.isArray(input) || input.length > 100) return null;
+    const rules = new Set<string>();
+    for (const item of input) {
+        if (typeof item !== 'string') return null;
+        const rule = item.trim().toLowerCase();
+        if (!rule) continue;
+        if (rule.startsWith('@')) {
+            if (!/^@[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(rule) || rule.length > 254) return null;
+            rules.add(rule);
+        } else {
+            const email = normalizeEmail(rule);
+            if (!email) return null;
+            rules.add(email);
+        }
+    }
+    return [...rules];
+}
+
+/** True when an address matches a rule list like ["ana@acme.com", "@acme.com"]. An empty list allows anyone. */
+export function emailAllowed(email: string, rules: string[]) {
+    if (!rules.length) return true;
+    const clean = email.toLowerCase();
+    return rules.some((rule) => (rule.startsWith('@') ? clean.endsWith(rule) : clean === rule));
 }

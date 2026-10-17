@@ -2,10 +2,14 @@
 
 import { useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Check, ChevronDown, Code2, Copy, ExternalLink, Link2, ListVideo, Lock, Mail, MousePointerClick, Plus, RefreshCw, Repeat, Trash2, UserPlus } from 'lucide-react';
+import { ArrowLeft, Check, ChevronDown, Code2, Copy, ExternalLink, KeyRound, Link2, ListVideo, Lock, Mail, MousePointerClick, Plus, RefreshCw, Repeat, Trash2, UserPlus } from 'lucide-react';
 import { videoApi } from '@/lib/videos/upload';
-import { formatClock, formatPercent, parseClock, type Chapter, type ShareLink, type VideoAnalytics, type VideoRecord, type ViewerSummary } from '@/lib/videos/types';
+import { formatClock, formatPercent, parseClock, type AccessMode, type Chapter, type ShareLink, type VideoAnalytics, type VideoRecord, type ViewerSummary } from '@/lib/videos/types';
 import { RetentionChart } from './RetentionChart';
+import { InteractionsPanel } from './InteractionsPanel';
+import { LeadsTable } from './LeadsTable';
+import type { Interaction } from '@/lib/videos/interactions';
+import { DropOffHeatmap } from './DropOffHeatmap';
 import { copyEmailSnippet } from '@/lib/videos/shareClipboard';
 import { track } from '@/lib/analytics';
 
@@ -14,7 +18,7 @@ const D = 'font-[family-name:var(--font-display)]';
 const card = 'rounded-3xl border border-[#14121F]/8 bg-white';
 const inputClass = 'w-full rounded-xl border border-[#14121F]/12 bg-[#F7F6FB] px-3 py-2 text-sm outline-none transition focus:border-[#6A4CFF] focus:bg-white focus:ring-4 focus:ring-[#6A4CFF]/10';
 
-type Tab = 'share' | 'embed' | 'chapters' | 'cta';
+type Tab = 'share' | 'access' | 'embed' | 'chapters' | 'engage';
 
 interface Props {
     initialVideo: VideoRecord;
@@ -24,6 +28,8 @@ interface Props {
     initialAnalytics: VideoAnalytics;
     /** On a paid plan (decided on the server). */
     isPaid: boolean;
+    /** The server can send email codes (Resend is configured). */
+    emailCodesAvailable: boolean;
 }
 
 function timeAgo(iso: string) {
@@ -41,7 +47,7 @@ const shareUrl = (slug: string) => `${window.location.origin}/v/${slug}`;
 /** The page origin, read only in the browser so server and client render the same first. */
 const useOrigin = () => useSyncExternalStore(() => () => {}, () => window.location.origin, () => '');
 
-export function VideoDetail({ initialVideo, playbackUrl, posterUrl, initialLinks, initialAnalytics, isPaid }: Props) {
+export function VideoDetail({ initialVideo, playbackUrl, posterUrl, initialLinks, initialAnalytics, isPaid, emailCodesAvailable }: Props) {
     const playerRef = useRef<HTMLVideoElement>(null);
     const [video, setVideo] = useState(initialVideo);
     const [links, setLinks] = useState(initialLinks);
@@ -56,7 +62,7 @@ export function VideoDetail({ initialVideo, playbackUrl, posterUrl, initialLinks
     const defaultLink = links.find((link) => link.isDefault) ?? null;
     const flash = (key: string) => { setCopied(key); setTimeout(() => setCopied((value) => (value === key ? null : value)), 1800); };
 
-    const save = async (change: Partial<{ title: string; chapters: Chapter[]; ctaLabel: string; ctaUrl: string; embedEnabled: boolean; embedDomains: string[] }>) => {
+    const save = async (change: Partial<{ title: string; chapters: Chapter[]; ctaLabel: string; ctaUrl: string; embedEnabled: boolean; embedDomains: string[]; accessMode: AccessMode; accessSecret: string; accessEmails: string[]; interactions: Interaction[] }>) => {
         setNotice('');
         try {
             const { video: updated } = await videoApi<{ video: VideoRecord }>(`/api/videos/${video.id}`, { method: 'PATCH', body: JSON.stringify(change) });
@@ -155,9 +161,9 @@ export function VideoDetail({ initialVideo, playbackUrl, posterUrl, initialLinks
                 </section>
 
                 <section className={`${card} p-1.5`}>
-                    <div role="tablist" aria-label="Video settings" className="grid grid-cols-4 gap-1 rounded-[1.1rem] bg-[#F7F6FB] p-1">
-                        {([['share', 'Share'], ['embed', 'Embed'], ['chapters', 'Chapters'], ['cta', 'Button']] as const).map(([id, label]) => (
-                            <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => setTab(id)} className={`rounded-xl px-3 py-2 text-sm font-semibold transition ${tab === id ? 'bg-white shadow-sm' : 'text-[#14121F]/55 hover:text-[#14121F]'} ${focus}`}>{label}</button>
+                    <div role="tablist" aria-label="Video settings" className="grid grid-cols-5 gap-1 rounded-[1.1rem] bg-[#F7F6FB] p-1">
+                        {([['share', 'Share'], ['access', 'Access'], ['embed', 'Embed'], ['chapters', 'Chapters'], ['engage', 'Engage']] as const).map(([id, label]) => (
+                            <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => setTab(id)} className={`inline-flex items-center justify-center gap-1 truncate rounded-xl px-1.5 py-2 text-sm font-semibold transition ${tab === id ? 'bg-white shadow-sm' : 'text-[#14121F]/55 hover:text-[#14121F]'} ${focus}`}>{id === 'access' && video.accessMode !== 'public' && <Lock aria-label="Protected" className="h-3 w-3 shrink-0 text-[#6A4CFF]" />}{label}</button>
                         ))}
                     </div>
                     <div role="tabpanel" className="p-4">
@@ -176,18 +182,122 @@ export function VideoDetail({ initialVideo, playbackUrl, posterUrl, initialLinks
                         {tab === 'chapters' && (
                             <ChaptersEditor chapters={video.chapters} durationMs={video.durationMs} currentMs={currentMs} onSave={(chapters) => save({ chapters })} onSeek={seek} />
                         )}
+                        {tab === 'access' && (
+                            <AccessPanel key={`${video.accessMode}-${video.accessEmails.join(',')}`} video={video} emailCodesAvailable={emailCodesAvailable} onSave={save} />
+                        )}
                         {tab === 'embed' && (
                             <EmbedPanel video={video} defaultLink={defaultLink} isPaid={isPaid} onSave={save} />
                         )}
-                        {tab === 'cta' && (
-                            <CtaEditor key={`${video.ctaLabel}-${video.ctaUrl}`} label={video.ctaLabel ?? ''} url={video.ctaUrl ?? ''} onSave={(ctaLabel, ctaUrl) => save({ ctaLabel, ctaUrl })} />
+                        {tab === 'engage' && (
+                            <div className="space-y-6">
+                                <InteractionsPanel interactions={video.interactions} durationMs={video.durationMs} currentMs={currentMs} onSave={(interactions) => save({ interactions })} />
+                                <div className="border-t border-[#14121F]/[0.07] pt-5">
+                                    <p className="mb-2 text-sm font-semibold">Button under the video</p>
+                                    <CtaEditor key={`${video.ctaLabel}-${video.ctaUrl}`} label={video.ctaLabel ?? ''} url={video.ctaUrl ?? ''} onSave={(ctaLabel, ctaUrl) => save({ ctaLabel, ctaUrl })} />
+                                </div>
+                            </div>
                         )}
                     </div>
                 </section>
             </div>
 
-            <AnalyticsSection analytics={analytics} durationMs={video.durationMs} hasChapters={video.chapters.length > 0} refreshing={refreshing} onRefresh={() => void refresh()} onAddChapters={() => setTab('chapters')} />
+            <AnalyticsSection analytics={analytics} videoTitle={video.title} durationMs={video.durationMs} hasChapters={video.chapters.length > 0} refreshing={refreshing} onRefresh={() => void refresh()} onAddChapters={() => setTab('chapters')} onSeek={(ms) => { seek(ms); playerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }); }} />
         </div>
+    );
+}
+
+/* ------------------------------- Access ------------------------------ */
+
+const ACCESS_OPTIONS: Array<{ id: AccessMode; name: string; hint: string; icon: typeof Lock }> = [
+    { id: 'public', name: 'Anyone with the link', hint: 'No check. The video plays straight away.', icon: Link2 },
+    { id: 'pin', name: 'PIN', hint: 'Viewers type a 6–8 digit PIN you share with them.', icon: KeyRound },
+    { id: 'password', name: 'Password', hint: 'Viewers type a password you share with them.', icon: Lock },
+    { id: 'email', name: 'Email code', hint: 'Viewers confirm their email with a one-time code. You see who watched.', icon: Mail },
+];
+
+function AccessPanel({ video, emailCodesAvailable, onSave }: { video: VideoRecord; emailCodesAvailable: boolean; onSave: (change: { accessMode: AccessMode; accessSecret?: string; accessEmails?: string[] }) => Promise<boolean> }) {
+    const [mode, setMode] = useState<AccessMode>(video.accessMode);
+    const [secret, setSecret] = useState('');
+    const [emails, setEmails] = useState(video.accessEmails.join('\n'));
+    const [saving, setSaving] = useState(false);
+    const [saved, setSaved] = useState(false);
+
+    const keepsSecret = mode === video.accessMode && (mode === 'pin' || mode === 'password');
+    const emailList = emails.split(/[\n,]/).map((item) => item.trim()).filter(Boolean);
+    const changed = mode !== video.accessMode || secret !== '' || (mode === 'email' && emailList.join(',') !== video.accessEmails.join(','));
+
+    const submit = async (event: React.FormEvent) => {
+        event.preventDefault();
+        setSaving(true);
+        setSaved(false);
+        const ok = await onSave({
+            accessMode: mode,
+            ...(mode === 'pin' || mode === 'password' ? { accessSecret: secret } : {}),
+            ...(mode === 'email' ? { accessEmails: emailList } : {}),
+        });
+        setSaving(false);
+        if (ok) { setSecret(''); setSaved(true); track('video_access_changed', { mode }); }
+    };
+
+    return (
+        <form onSubmit={submit} className="space-y-4">
+            <div>
+                <p className="text-sm font-semibold">Who can watch</p>
+                <p className="mt-0.5 text-xs leading-5 text-[#14121F]/55">Applies to every share link and embed of this video. You can always watch your own links while signed in.</p>
+            </div>
+
+            <div role="radiogroup" aria-label="Who can watch" className="space-y-1.5">
+                {ACCESS_OPTIONS.map(({ id, name, hint, icon: Icon }) => {
+                    const unavailable = id === 'email' && !emailCodesAvailable && video.accessMode !== 'email';
+                    return (
+                        <button
+                            key={id}
+                            type="button"
+                            role="radio"
+                            aria-checked={mode === id}
+                            disabled={unavailable}
+                            onClick={() => { setMode(id); setSecret(''); setSaved(false); }}
+                            className={`flex w-full items-start gap-3 rounded-2xl border px-3.5 py-3 text-left transition disabled:cursor-not-allowed disabled:opacity-50 ${mode === id ? 'border-[#6A4CFF] bg-[#6A4CFF]/[0.06]' : 'border-[#14121F]/10 enabled:hover:border-[#14121F]/25'} ${focus}`}>
+                            <Icon className={`mt-0.5 h-4 w-4 shrink-0 ${mode === id ? 'text-[#6A4CFF]' : 'text-[#14121F]/45'}`} />
+                            <span className="min-w-0">
+                                <span className="block text-sm font-semibold">{name}</span>
+                                <span className="block text-xs leading-5 text-[#14121F]/55">{unavailable ? 'Needs an email service on the server (RESEND_API_KEY and ACCESS_EMAIL_FROM).' : hint}</span>
+                            </span>
+                        </button>
+                    );
+                })}
+            </div>
+
+            {(mode === 'pin' || mode === 'password') && (
+                <label className="block">
+                    <span className="text-xs font-semibold text-[#14121F]/60">{keepsSecret ? `New ${mode === 'pin' ? 'PIN' : 'password'} (leave empty to keep the current one)` : mode === 'pin' ? 'PIN' : 'Password'}</span>
+                    <input
+                        value={secret}
+                        onChange={(event) => setSecret(mode === 'pin' ? event.target.value.replace(/\D/g, '').slice(0, 8) : event.target.value)}
+                        type={mode === 'pin' ? 'text' : 'password'}
+                        inputMode={mode === 'pin' ? 'numeric' : undefined}
+                        autoComplete="new-password"
+                        placeholder={mode === 'pin' ? '6–8 digits' : 'At least 8 characters'}
+                        className={`${inputClass} mt-1 ${mode === 'pin' ? 'tracking-[0.3em]' : ''}`}
+                    />
+                    <span className="mt-1 block text-[11px] text-[#14121F]/45">Send it to viewers separately from the link. It’s stored encrypted, so it can’t be shown again.</span>
+                </label>
+            )}
+
+            {mode === 'email' && (
+                <label className="block">
+                    <span className="text-xs font-semibold text-[#14121F]/60">Only these people (optional)</span>
+                    <textarea value={emails} onChange={(event) => setEmails(event.target.value)} rows={3} placeholder={'ana@acme.com\n@acme.com'} className={`${inputClass} mt-1 resize-y`} />
+                    <span className="mt-1 block text-[11px] leading-4 text-[#14121F]/45">One per line. Use @acme.com to allow a whole company. Leave empty to allow any verified email. Personal links sent to an address only open for that address.</span>
+                </label>
+            )}
+
+            <div className="flex items-center gap-3">
+                <button type="submit" disabled={saving || !changed} className={`rounded-xl bg-[#14121F] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#2c2742] disabled:opacity-40 ${focus}`}>{saving ? 'Saving…' : 'Save'}</button>
+                {saved && <span role="status" className="inline-flex items-center gap-1 text-xs font-medium text-[#14121F]/60"><Check className="h-3.5 w-3.5" /> Saved</span>}
+            </div>
+            {video.accessMode !== 'public' && <p className="text-[11px] leading-4 text-[#14121F]/45">Saving a change signs out everyone who already unlocked the video.</p>}
+        </form>
     );
 }
 
@@ -597,9 +707,9 @@ function CtaEditor({ label, url, onSave }: { label: string; url: string; onSave:
 
 /* ------------------------------ Analytics ---------------------------- */
 
-const EVENT_LABEL: Record<string, string> = { play: 'Played', pause: 'Paused', seek: 'Jumped to', ended: 'Finished the video', chapter: 'Opened chapter', cta: 'Clicked' };
+const EVENT_LABEL: Record<string, string> = { play: 'Played', pause: 'Paused', seek: 'Jumped to', ended: 'Finished the video', chapter: 'Opened chapter', cta: 'Clicked', form: 'Filled in', booking: 'Booked a call' };
 
-function AnalyticsSection({ analytics, durationMs, hasChapters, refreshing, onRefresh, onAddChapters }: { analytics: VideoAnalytics; durationMs: number; hasChapters: boolean; refreshing: boolean; onRefresh: () => void; onAddChapters: () => void }) {
+function AnalyticsSection({ analytics, videoTitle, durationMs, hasChapters, refreshing, onRefresh, onAddChapters, onSeek }: { analytics: VideoAnalytics; videoTitle: string; durationMs: number; hasChapters: boolean; refreshing: boolean; onRefresh: () => void; onAddChapters: () => void; onSeek: (ms: number) => void }) {
     const tiles = [
         { label: 'Plays', value: analytics.plays.toLocaleString('en-IN'), hint: `${analytics.opens.toLocaleString('en-IN')} page opens` },
         { label: 'Unique viewers', value: analytics.uniqueViewers.toLocaleString('en-IN'), hint: 'Different browsers' },
@@ -663,6 +773,22 @@ function AnalyticsSection({ analytics, durationMs, hasChapters, refreshing, onRe
                     )}
                 </div>
             </div>
+
+            <div className={`${card} p-5`}>
+                <h3 className="font-semibold">Re-watches, skips and drop-offs</h3>
+                <p className="mt-0.5 text-xs text-[#14121F]/55">Where viewers went back over a part, jumped past it, or stopped watching. Click a moment to play it.</p>
+                <div className="mt-4">
+                    {analytics.plays ? <DropOffHeatmap buckets={analytics.heatmap ?? []} plays={analytics.plays} durationMs={durationMs} chapters={analytics.chapters} onSeek={onSeek} /> : <EmptyChart text="The heatmap appears after the first play." />}
+                </div>
+            </div>
+
+            {analytics.leads.length > 0 && (
+                <div className={`${card} p-5`}>
+                    <h3 className="font-semibold">Leads</h3>
+                    <p className="mt-0.5 text-xs text-[#14121F]/55">Everyone who filled in a form on this video, with the hidden values sent alongside.</p>
+                    <div className="mt-4"><LeadsTable leads={analytics.leads} videoTitle={videoTitle} /></div>
+                </div>
+            )}
 
             {analytics.sources.length > 0 && (
                 <div className={`${card} p-5`}>

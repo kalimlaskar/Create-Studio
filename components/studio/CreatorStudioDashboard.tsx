@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import type { SidebarAccount } from '@/components/videos/StudioSidebar';
 import { Video, Pause, Play, Square, FolderOpen, Trash2, LoaderCircle, SlidersHorizontal, SwitchCamera, ArrowLeft, X } from 'lucide-react';
 import { SidebarControls } from '@/components/studio/SidebarControls';
 import { VideoCanvas } from '@/components/studio/VideoCanvas';
@@ -285,7 +286,9 @@ export function CreatorStudioDashboard({
     isPro = false,
     userPlan = 'Free',
     planId = 'free',
+    sidebar,
 }: {
+    sidebar?: { account: SidebarAccount | null; collapsed: boolean };
     userEmail: string;
     initialDisplayName?: string;
     initialUsername?: string;
@@ -693,6 +696,7 @@ export function CreatorStudioDashboard({
                 onOpenVideoDraft={(id) => void openDraft(id)}
                 onDeleteVideoDraft={(id) => void removeDraft(id)}
                 onEditProfile={() => document.getElementById('profile-menu')?.setAttribute('open', '')}
+                sidebar={sidebar}
             />
         );
     }

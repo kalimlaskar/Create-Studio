@@ -14,14 +14,14 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Cliprame · Browser Video Studio & Reels Creator",
-  description: "Record camera videos with a built-in teleprompter, add word-by-word animated captions, and edit social-ready reels right in your browser.",
+  title: "Cliprame · Personal video for sales, with viewer tracking",
+  description: "Record a personal video in one take, send one link, and know who watched: how far they got, what they rewatched, and whether they clicked to book. Alerts in Slack and HubSpot.",
   icons: { icon: "/cliprame-icon.svg", apple: "/apple-touch-icon.png" },
   appleWebApp: { capable: true, title: "Cliprame", statusBarStyle: "black-translucent" },
 
   openGraph: {
-    title: "Cliprame · Browser Video Studio & Reels Creator",
-    description: "Record camera videos with a built-in teleprompter, add word-by-word animated captions, and edit social-ready reels right in your browser.",
+    title: "Cliprame · Personal video for sales, with viewer tracking",
+    description: "Record a personal video in one take, send one link, and know who watched: how far they got, what they rewatched, and whether they clicked to book. Alerts in Slack and HubSpot.",
     url: "https://www.cliprame.com",
     siteName: "Cliprame",
     images: [
@@ -38,8 +38,8 @@ export const metadata: Metadata = {
 
   twitter: {
     card: "summary_large_image",
-    title: "Cliprame · Browser Video Studio & Reels Creator",
-    description: "Record camera videos with a built-in teleprompter, add word-by-word animated captions, and edit social-ready reels right in your browser.",
+    title: "Cliprame · Personal video for sales, with viewer tracking",
+    description: "Record a personal video in one take, send one link, and know who watched: how far they got, what they rewatched, and whether they clicked to book. Alerts in Slack and HubSpot.",
     images: ["/cliprame-og-image.png"],
   },
 };

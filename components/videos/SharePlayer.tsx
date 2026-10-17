@@ -4,6 +4,8 @@ import { useRef, useState } from 'react';
 import { MousePointerClick, Play } from 'lucide-react';
 import { formatClock, type Chapter } from '@/lib/videos/types';
 import { useViewTracking } from '@/lib/videos/useViewTracking';
+import type { PublicInteraction } from '@/lib/videos/interactions';
+import { InteractionLayer } from './InteractionLayer';
 
 const focus = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6A4CFF]/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[#F7F6FB]';
 
@@ -16,14 +18,20 @@ interface Props {
     durationMs: number;
     ctaLabel: string | null;
     ctaUrl: string | null;
+    /** Unlock token for protected videos, sent with analytics. */
+    accessToken?: string | null;
+    /** In-video forms, buttons and booking embeds (not the gate form). */
+    interactions?: PublicInteraction[];
+    /** The personal link's email, to pre-fill forms. */
+    recipientEmail?: string | null;
 }
 
-export function SharePlayer({ slug, title, playbackUrl, posterUrl, chapters, durationMs, ctaLabel, ctaUrl }: Props) {
+export function SharePlayer({ slug, title, playbackUrl, posterUrl, chapters, durationMs, ctaLabel, ctaUrl, accessToken = null, interactions = [], recipientEmail = null }: Props) {
     const videoRef = useRef<HTMLVideoElement>(null);
     const lastSecond = useRef<number | null>(null);
     const [currentMs, setCurrentMs] = useState(0);
     const [started, setStarted] = useState(false);
-    const tracking = useViewTracking(slug, { source: 'share' });
+    const tracking = useViewTracking(slug, { source: 'share', accessToken });
 
     const currentChapter = [...chapters].reverse().find((chapter) => currentMs >= chapter.startMs);
 
@@ -64,6 +72,15 @@ export function SharePlayer({ slug, title, playbackUrl, posterUrl, chapters, dur
                                 lastSecond.current = second;
                             }
                         }}
+                    />
+                    <InteractionLayer
+                        videoRef={videoRef}
+                        interactions={interactions}
+                        slug={slug}
+                        source="share"
+                        accessToken={accessToken}
+                        prefillEmail={recipientEmail}
+                        onEvent={(type, detail) => tracking.event({ type, positionMs: (videoRef.current?.currentTime ?? 0) * 1000, detail })}
                     />
                     {!started && (
                         <button type="button" onClick={() => void videoRef.current?.play()} aria-label={`Play ${title}`} className={`group absolute inset-0 grid place-items-center bg-[linear-gradient(to_top,rgba(11,10,16,0.55),transparent_45%)] ${focus}`}>

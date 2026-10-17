@@ -10,7 +10,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ slu
     const share = await findShare(slug);
     if (!share) return new Response('Not found', { status: 404 });
     const { video } = share;
-    const poster = posterUrl(video, 600);
+    // A protected video's frame could give its content away in a link preview.
+    const poster = video.access_mode === 'public' ? posterUrl(video, 600) : null;
 
     return new ImageResponse(
         (

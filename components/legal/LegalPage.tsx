@@ -47,6 +47,7 @@ export const SUBPROCESSORS = [
     { name: 'Supabase', purpose: 'Accounts, sign-in and the database (profiles, videos, links, analytics, billing records)', location: 'Region chosen for the project' },
     { name: 'Cloudflare R2', purpose: 'Storage of uploaded videos and poster images', location: 'Automatic placement (Asia Pacific for this bucket)' },
     { name: 'Google (Gemini API)', purpose: 'AI transcription, script writing, captions, translation and voiceover, only when you use those features', location: 'Google data centres' },
+    { name: 'Resend', purpose: 'Sending one-time codes to viewers who unlock a protected video by email (when enabled)', location: 'United States' },
     { name: 'Razorpay', purpose: 'Subscription payments; card and bank details are handled by Razorpay, not us', location: 'India' },
     { name: 'Vercel', purpose: 'Hosting the website and API', location: 'Global edge network' },
     { name: 'Sentry', purpose: 'Error reports from the app, without IP addresses or cookies (when enabled)', location: 'United States or EU' },

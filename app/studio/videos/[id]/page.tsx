@@ -3,6 +3,7 @@ import { notFound, redirect } from 'next/navigation';
 import { VideosShell } from '@/components/videos/VideosShell';
 import { VideoDetail } from '@/components/videos/VideoDetail';
 import { isR2Configured } from '@/lib/storage/r2';
+import { isEmailConfigured } from '@/lib/videos/access';
 import { getPlanSummary } from '@/lib/plans/server';
 import { getStudioUser, LINK_COLUMNS, loadAnalytics, playbackUrl, posterUrl, toShareLink, toVideoRecord, VIDEO_COLUMNS, type ShareLinkRow, type VideoRow } from '@/lib/videos/server';
 
@@ -46,6 +47,7 @@ export default async function VideoPage({ params }: { params: Promise<{ id: stri
                 initialLinks={((links ?? []) as ShareLinkRow[]).map(toShareLink)}
                 initialAnalytics={analytics}
                 isPaid={plan.isPaid}
+                emailCodesAvailable={isEmailConfigured()}
             />
         </VideosShell>
     );

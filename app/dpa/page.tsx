@@ -14,8 +14,8 @@ export default function DpaPage() {
 
             <h2>2. Data covered</h2>
             <ul>
-                <li><strong>People:</strong> the Customer’s users, people appearing in videos, recipients of personal links, and viewers of share pages.</li>
-                <li><strong>Data:</strong> videos and their audio, transcripts, recipient name, email and company, and viewing analytics (random browser identifier, playback and interaction events, device type, country and a hashed network address).</li>
+                <li><strong>People:</strong> the Customer’s users, people appearing in videos, recipients of personal links, viewers of share pages and embedded videos, and people who submit the Customer’s forms.</li>
+                <li><strong>Data:</strong> videos and their audio, transcripts, recipient name, email and company, viewing analytics (random browser identifier, playback and interaction events, device type, country, embedding website and a hashed network address), email addresses confirmed to unlock protected videos, and form submissions (the answers the Customer asks for and the hidden values it sets up, such as campaign tags and referring page).</li>
                 <li><strong>Purpose and duration:</strong> hosting, sharing and measuring videos for as long as the Customer keeps them in the service.</li>
             </ul>
 
@@ -42,7 +42,7 @@ export default function DpaPage() {
             <p>Where personal data is transferred out of the EU, UK or India in a way that requires safeguards, the parties rely on the applicable standard contractual clauses or other lawful mechanisms.</p>
 
             <h2>6. The Customer’s responsibilities</h2>
-            <p>The Customer is responsible for having a lawful basis to record people and to send and measure personal links, for giving recipients any required notice, and for the accuracy of recipient details it enters. See the <Link href="/privacy">privacy policy</Link> for what viewers are told.</p>
+            <p>The Customer is responsible for having a lawful basis to record people, to send and measure personal links and to collect form answers, for giving recipients any required notice (including clear consent text on its forms), and for the accuracy of recipient details it enters. When the Customer connects Slack, HubSpot, a webhook or its own form backend, data sent there is sent on the Customer’s instruction; those services are the Customer’s recipients, not our subprocessors. See the <Link href="/privacy">privacy policy</Link> for what viewers are told.</p>
         </LegalPage>
     );
 }

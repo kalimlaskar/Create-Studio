@@ -1,5 +1,5 @@
 import { isR2Configured, r2Url } from '@/lib/storage/r2';
-import { describeDbError, getStudioUser, isMissingTable, listVideos, MISSING_TABLES_MESSAGE, posterObjectKey, toVideoRecord, VIDEO_COLUMNS, videoObjectKey, type VideoRow } from '@/lib/videos/server';
+import { describeDbError, getStudioUser, isMissingColumn, isMissingTable, listVideos, MISSING_COLUMNS_MESSAGE, MISSING_TABLES_MESSAGE, posterObjectKey, toVideoRecord, VIDEO_COLUMNS, videoObjectKey, type VideoRow } from '@/lib/videos/server';
 import { MAX_UPLOAD_BYTES, SHARE_CONTENT_TYPES } from '@/lib/videos/types';
 import { getPlanSummary } from '@/lib/plans/server';
 import { maxUploadBytes } from '@/components/pricing/planLimits';
@@ -15,7 +15,7 @@ export async function GET() {
         return Response.json({ videos: await listVideos(user.supabase) }, { headers: { 'Cache-Control': 'no-store' } });
     } catch (error) {
         console.error('Could not list videos:', describeDbError(error));
-        return fail(isMissingTable(error) ? MISSING_TABLES_MESSAGE : 'Could not load your videos.', 500);
+        return fail(isMissingTable(error) ? MISSING_TABLES_MESSAGE : isMissingColumn(error) ? MISSING_COLUMNS_MESSAGE : 'Could not load your videos.', 500);
     }
 }
 
@@ -63,7 +63,7 @@ export async function POST(request: Request) {
     }).select(VIDEO_COLUMNS).single();
     if (error || !data) {
         console.error('Could not create video:', describeDbError(error));
-        return fail(isMissingTable(error) ? MISSING_TABLES_MESSAGE : 'Could not start the upload.', 500);
+        return fail(isMissingTable(error) ? MISSING_TABLES_MESSAGE : isMissingColumn(error) ? MISSING_COLUMNS_MESSAGE : 'Could not start the upload.', 500);
     }
 
     return Response.json({

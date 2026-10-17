@@ -4,8 +4,10 @@ import Image from 'next/image';
 import { notFound } from 'next/navigation';
 import { Bricolage_Grotesque, Instrument_Sans } from 'next/font/google';
 import { SharePlayer } from '@/components/videos/SharePlayer';
+import { GatedSharePlayer } from '@/components/videos/VideoGate';
 import { findShare, ownerDisplayName } from '@/lib/videos/public';
-import { playbackUrl, posterUrl } from '@/lib/videos/server';
+import { getStudioUser, playbackUrl, posterUrl } from '@/lib/videos/server';
+import { resolveGate } from '@/lib/videos/gating';
 import { formatClock } from '@/lib/videos/types';
 
 const display = Bricolage_Grotesque({ subsets: ['latin'], variable: '--font-display', display: 'swap' });
@@ -33,7 +35,19 @@ export default async function SharePage({ params }: Props) {
     const share = await findShare(slug);
     if (!share) notFound();
     const { video, link } = share;
-    const owner = await ownerDisplayName(video.owner_id);
+    const [owner, viewer] = await Promise.all([ownerDisplayName(video.owner_id), getStudioUser().catch(() => null)]);
+    // Protected videos: no video address in the page until the viewer unlocks it.
+    const access = await resolveGate(video, viewer?.id ?? null);
+    const player = {
+        slug,
+        title: video.title,
+        chapters: Array.isArray(video.chapters) ? video.chapters : [],
+        durationMs: video.duration_ms,
+        ctaLabel: video.cta_label,
+        ctaUrl: video.cta_url,
+        interactions: access.interactions,
+        recipientEmail: link.recipient_email,
+    };
     const firstName = link.recipient_name?.trim().split(/\s+/)[0];
 
     return (
@@ -50,16 +64,11 @@ export default async function SharePage({ params }: Props) {
                 {firstName && <p className="text-sm font-semibold text-[#6A4CFF]">Hi {firstName}, this video is for you</p>}
                 <h1 className="mt-1 font-[family-name:var(--font-display)] text-3xl font-bold tracking-tight sm:text-4xl">{video.title}</h1>
                 <div className="mt-6">
-                    <SharePlayer
-                        slug={slug}
-                        title={video.title}
-                        playbackUrl={playbackUrl(video)}
-                        posterUrl={posterUrl(video, 6 * 3600)}
-                        chapters={Array.isArray(video.chapters) ? video.chapters : []}
-                        durationMs={video.duration_ms}
-                        ctaLabel={video.cta_label}
-                        ctaUrl={video.cta_url}
-                    />
+                    {access.open ? (
+                        <SharePlayer {...player} playbackUrl={playbackUrl(video)} posterUrl={posterUrl(video, 6 * 3600)} accessToken={access.token} />
+                    ) : (
+                        <GatedSharePlayer {...player} mode={access.mode} gate={access.gate} recipientEmail={link.recipient_email} />
+                    )}
                 </div>
                 <p className="mt-10 max-w-2xl text-xs leading-5 text-[#14121F]/45">
                     {owner ?? 'The sender'} can see how this video is watched, such as which parts were played and whether the button was clicked. You don’t need an account. To opt out, turn on Global Privacy Control or “Do Not Track” in your browser.

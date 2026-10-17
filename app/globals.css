@@ -9,3 +9,60 @@ body {
   background: var(--background);
   color: var(--foreground);
 }
+/* Integrations page: the live notification feed and connect dialog. */
+@keyframes feed-in {
+    0% { opacity: 0; transform: translateY(14px) scale(0.97); }
+    100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes float-soft {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-6px); }
+}
+@keyframes ping-soft {
+    0% { transform: scale(1); opacity: 0.6; }
+    80%, 100% { transform: scale(2.4); opacity: 0; }
+}
+@keyframes pop-in {
+    0% { opacity: 0; transform: scale(0.6); }
+    60% { opacity: 1; transform: scale(1.08); }
+    100% { transform: scale(1); }
+}
+@keyframes dialog-in {
+    0% { opacity: 0; transform: translateY(16px) scale(0.98); }
+    100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+.animate-feed-in { animation: feed-in 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.animate-float-soft { animation: float-soft 6s ease-in-out infinite; }
+.animate-ping-soft { animation: ping-soft 1.8s cubic-bezier(0, 0, 0.2, 1) infinite; }
+.animate-pop-in { animation: pop-in 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.animate-dialog-in { animation: dialog-in 0.28s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+@media (prefers-reduced-motion: reduce) {
+    .animate-feed-in, .animate-float-soft, .animate-ping-soft, .animate-pop-in, .animate-dialog-in { animation: none; }
+}
+
+/* ------------------------------------------------------------------ */
+/* Marketing site (home, demo, features, pricing, login, signup).      */
+/* ------------------------------------------------------------------ */
+/* Warm paper with a barely-there grain, to take the digital edge off. */
+.mk-paper {
+    background-color: #F6F4EF;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .045 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+@keyframes mk-rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+.mk-rise { opacity: 0; animation: mk-rise 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) forwards; animation-delay: calc(var(--d, 0) * 80ms); }
+
+/* Scrolling teleprompter and hand-drawn circles in the product scenes. */
+@keyframes prompter { to { transform: translateY(-50%); } }
+.prompter { animation: prompter 16s linear infinite; }
+.prompter-mask {
+    -webkit-mask-image: linear-gradient(transparent, #000 28%, #000 72%, transparent);
+    mask-image: linear-gradient(transparent, #000 28%, #000 72%, transparent);
+}
+@keyframes draw { 0% { stroke-dashoffset: 1; } 35%, 85% { stroke-dashoffset: 0; } 100% { stroke-dashoffset: 1; } }
+.draw { stroke-dasharray: 1; stroke-dashoffset: 1; animation: draw 6s ease-in-out infinite; animation-delay: calc(var(--i, 0) * 0.5s); }
+
+@media (prefers-reduced-motion: reduce) {
+    .mk-rise { animation: none; opacity: 1; }
+    .prompter { animation: none; }
+    .draw { animation: none; stroke-dashoffset: 0; }
+}

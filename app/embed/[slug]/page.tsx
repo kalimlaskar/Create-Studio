@@ -1,8 +1,10 @@
 import type { Metadata } from 'next';
 import { headers } from 'next/headers';
 import { EmbedPlayer } from '@/components/videos/EmbedPlayer';
+import { GatedEmbedPlayer } from '@/components/videos/VideoGate';
 import { findShare } from '@/lib/videos/public';
-import { playbackUrl, posterUrl } from '@/lib/videos/server';
+import { getStudioUser, playbackUrl, posterUrl } from '@/lib/videos/server';
+import { resolveGate } from '@/lib/videos/gating';
 import { getEffectivePlan } from '@/lib/plans/server';
 import { hostAllowed } from '@/lib/videos/types';
 
@@ -11,7 +13,7 @@ import { hostAllowed } from '@/lib/videos/types';
 
 export const metadata: Metadata = { title: 'Cliprame video', robots: { index: false, follow: false } };
 
-type Props = { params: Promise<{ slug: string }>; searchParams: Promise<{ autoplay?: string }> };
+type Props = { params: Promise<{ slug: string }>; searchParams: Promise<{ autoplay?: string; ctx?: string; page?: string; ref?: string }> };
 
 function Unavailable({ message }: { message: string }) {
     return (
@@ -25,7 +27,7 @@ function Unavailable({ message }: { message: string }) {
 }
 
 export default async function EmbedPage({ params, searchParams }: Props) {
-    const [{ slug }, { autoplay }] = await Promise.all([params, searchParams]);
+    const [{ slug }, { autoplay, ctx, page, ref }] = await Promise.all([params, searchParams]);
     const share = await findShare(slug);
     if (!share) return <Unavailable message="The link may have been turned off or the video deleted." />;
     const { video } = share;
@@ -46,21 +48,28 @@ export default async function EmbedPage({ params, searchParams }: Props) {
         return <Unavailable message="The owner only allows this video on their own website." />;
     }
 
-    const plan = await getEffectivePlan(video.owner_id).catch(() => 'free' as const);
+    const [plan, viewer] = await Promise.all([
+        getEffectivePlan(video.owner_id).catch(() => 'free' as const),
+        getStudioUser().catch(() => null),
+    ]);
+    // Protected videos: no video address in the page until the viewer unlocks it.
+    const access = await resolveGate(video, viewer?.id ?? null);
+    const player = {
+        slug,
+        title: video.title,
+        chapters: Array.isArray(video.chapters) ? video.chapters : [],
+        durationMs: video.duration_ms,
+        ctaLabel: video.cta_label,
+        ctaUrl: video.cta_url,
+        showBadge: plan === 'free',
+        autoplay: autoplay === '1',
+        referrerHost: onOwnSite ? null : embeddingHost,
+        interactions: access.interactions,
+        recipientEmail: share.link.recipient_email,
+        // The host page's link parameters and address, passed by embed.js, for form hidden fields.
+        host: page ? { query: (ctx ?? '').slice(0, 1000), pageUrl: page.slice(0, 500), referrer: (ref ?? '').slice(0, 500) } : null,
+    };
 
-    return (
-        <EmbedPlayer
-            slug={slug}
-            title={video.title}
-            playbackUrl={playbackUrl(video)}
-            posterUrl={posterUrl(video, 6 * 3600)}
-            chapters={Array.isArray(video.chapters) ? video.chapters : []}
-            durationMs={video.duration_ms}
-            ctaLabel={video.cta_label}
-            ctaUrl={video.cta_url}
-            showBadge={plan === 'free'}
-            autoplay={autoplay === '1'}
-            referrerHost={onOwnSite ? null : embeddingHost}
-        />
-    );
+    if (!access.open) return <GatedEmbedPlayer {...player} mode={access.mode} gate={access.gate} />;
+    return <EmbedPlayer {...player} playbackUrl={playbackUrl(video)} posterUrl={posterUrl(video, 6 * 3600)} accessToken={access.token} />;
 }

@@ -6,6 +6,8 @@ import { deleteObject, isR2Configured } from '@/lib/storage/r2';
 // "Authorization: Bearer <CRON_SECRET>".
 //   - Uploads that never finished (status "uploading" for over a day): files and rows deleted.
 //   - Razorpay webhook event IDs older than 90 days: deleted (only needed to skip retries).
+//   - Protected-video email codes and wrong-PIN records older than a day: deleted.
+//   - Records of sent viewing notifications older than 90 days: deleted.
 
 export const maxDuration = 60;
 const STALE_UPLOAD_MS = 24 * 3600 * 1000;
@@ -52,5 +54,12 @@ export async function GET(request: Request) {
         .delete({ count: 'exact' })
         .lt('received_at', new Date(Date.now() - 90 * 24 * 3600 * 1000).toISOString());
 
-    return Response.json({ removedUploads: removed, failedUploads: failed, prunedWebhookEvents: prunedEvents ?? 0, more: (stale?.length ?? 0) === BATCH });
+    const dayAgo = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
+    const [{ count: prunedCodes }, { count: prunedFailures }, { count: prunedNotifications }] = await Promise.all([
+        admin.from('video_access_codes').delete({ count: 'exact' }).lt('created_at', dayAgo),
+        admin.from('video_access_failures').delete({ count: 'exact' }).lt('created_at', dayAgo),
+        admin.from('notification_events').delete({ count: 'exact' }).lt('created_at', new Date(Date.now() - 90 * 24 * 3600 * 1000).toISOString()),
+    ]);
+
+    return Response.json({ removedUploads: removed, failedUploads: failed, prunedWebhookEvents: prunedEvents ?? 0, prunedAccessCodes: prunedCodes ?? 0, prunedAccessFailures: prunedFailures ?? 0, prunedNotifications: prunedNotifications ?? 0, more: (stale?.length ?? 0) === BATCH });
 }

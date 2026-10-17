@@ -52,6 +52,29 @@ describe('analytics', () => {
         expect(result.retention[45][1]).toBe(0.5);
         expect(result.chapters[1].reached).toBe(0.5);
     });
+
+    it('finds re-watches, skips and drop-offs', () => {
+        const rewatcher = seconds(0, 60);
+        for (let second = 10; second < 15; second += 1) rewatcher[second] = 2;
+        const skipper = seconds(0, 20);
+        for (let second = 40; second < 60; second += 1) skipper[second] = 1;
+        const { heatmap } = computeAnalytics(60_000, [], [
+            session('a', 'viewer-a', rewatcher),
+            session('b', 'viewer-b', skipper),
+            session('c', 'viewer-c', seconds(0, 30)),
+            session('d', 'viewer-d', seconds(0, 60)),
+        ], [], []);
+        // 60 seconds → 50 slices; find the slice holding a given second.
+        const at = (second: number) => heatmap.find((bucket) => second * 1000 >= bucket.startMs && second * 1000 < bucket.endMs)!;
+        expect(heatmap).toHaveLength(50);
+        expect(at(12).rewatched).toBe(0.25);
+        expect(at(30).skipped).toBe(0.25);
+        expect(at(30).droppedOff).toBe(0);
+        expect(at(29).droppedOff).toBe(0.25);
+        // Watching to the last second is finishing, not dropping off.
+        expect(at(59).droppedOff).toBe(0);
+        expect(heatmap.reduce((sum, bucket) => sum + bucket.droppedOff, 0)).toBe(0.25);
+    });
 });
 
 describe('embed websites', () => {

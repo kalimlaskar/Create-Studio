@@ -1,262 +1,266 @@
 'use client';
 
-import React, { useState } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 import Link from 'next/link';
-import Image from 'next/image';
-import type { CSSProperties } from 'react';
-import { Bricolage_Grotesque, Instrument_Sans } from 'next/font/google';
-import { ArrowRight, Sparkles, Play, Clock, CheckCircle2, X } from 'lucide-react';
+import { ArrowRight, BellRing, Check, Copy, EyeOff, Hash, Lock, Mail, MousePointerClick, Play, ScreenShare, Send, X } from 'lucide-react';
+import { D, focus, label, serif } from '@/components/marketing/theme';
 
-const display = Bricolage_Grotesque({ subsets: ['latin'], variable: '--font-display', display: 'swap' });
-const body = Instrument_Sans({ subsets: ['latin'], variable: '--font-body', display: 'swap' });
+const FLAGSHIP = {
+    title: 'A 2-minute product walkthrough',
+    description: 'Recorded and edited in Cliprame: screen and camera in one take, a teleprompter the viewer never sees, and the stumbles cut by deleting words.',
+    duration: '2:14',
+    videoUrl: 'https://assets.cliprame.com/Demo/saas-product-walkthrough.mp4',
+};
 
-const D = 'font-[family-name:var(--font-display)]';
-const focus =
-    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6A4CFF]/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[#F7F6FB]';
+type TourId = 'record' | 'send' | 'lock' | 'alert';
 
-const css = `
-@keyframes rise{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
-.rise{opacity:0;animation:rise .8s cubic-bezier(.2,.7,.2,1) forwards;animation-delay:calc(var(--d,0)*90ms)}
-.dots{background-image:radial-gradient(rgba(20,18,31,.1) 1px,transparent 1px);background-size:22px 22px;-webkit-mask-image:radial-gradient(ellipse at 50% 35%,#000 25%,transparent 70%);mask-image:radial-gradient(ellipse at 50% 35%,#000 25%,transparent 70%)}
-`;
+const TOUR: Array<{ id: TourId; step: string; title: string; text: string; icon: typeof Play }> = [
+    { id: 'record', step: 'You record', title: 'One take, with your notes on screen', text: 'Share your screen, keep your face in a floating card, and read talking points only you can see. Fix mistakes by deleting words.', icon: ScreenShare },
+    { id: 'send', step: 'They open', title: 'A page made for them', text: 'Your prospect gets a page with their name on it, your video, chapters to jump to and a button to book a call. No account needed.', icon: Send },
+    { id: 'lock', step: 'Optional lock', title: 'Only the right people get in', text: 'For pricing or proposals, ask for a PIN, a password or an email code, limited to their company.', icon: Lock },
+    { id: 'alert', step: 'You find out', title: 'A ping the moment they watch', text: 'Slack, HubSpot or your CRM hears when they start, finish or click, with how far they got and what they rewatched.', icon: BellRing },
+];
 
-function Wordmark() {
-    return (
-        <Link href="/" aria-label="Cliprame home" className={`group inline-flex shrink-0 items-center gap-2.5 rounded-full font-semibold tracking-tight text-[#14121F] ${focus}`}>
-            <Image src="/cliprame-icon.svg" alt="" width={36} height={36} className="h-9 w-9 transition-transform duration-200 group-hover:scale-105" />
-            <span className={`${D} text-lg font-bold`}>Cliprame</span>
-        </Link>
-    );
-}
-
-const navLink = `rounded-full px-4 py-2 text-sm font-medium text-[#14121F]/65 transition-colors hover:bg-[#14121F]/[0.06] hover:text-[#14121F] ${focus}`;
-const mobileNavLink = 'shrink-0 rounded-full bg-white/70 px-3.5 py-1.5 text-xs font-medium text-[#14121F]/70 backdrop-blur transition-colors hover:text-[#14121F]';
-const card = 'rounded-[2rem] border border-[#14121F]/10 bg-white shadow-[0_1px_0_rgba(20,18,31,0.04),0_24px_48px_-28px_rgba(20,18,31,0.28)]';
-const gradientText = 'bg-gradient-to-r from-[#6A4CFF] via-[#9a4cff] to-[#FF3D81] bg-clip-text text-transparent';
-
-const productDemos = [
+const SCRIPTS = [
     {
-        title: 'SaaS Product Walkthrough',
-        description: 'A 2-minute overview showing how to record software dashboards with a floating creator camera card.',
-        duration: '2:14',
-        badge: 'Flagship Demo',
-        bgGradient: 'from-[#14121F] via-[#2c2742] to-[#3b2d8f]',
-        videoUrl: 'https://assets.cliprame.com/Demo/saas-product-walkthrough.mp4',
+        title: 'Cold outreach',
+        when: 'First touch · 60–90 seconds',
+        lines: [
+            'Hi {name}, I made this video just for you.',
+            'I was looking at {company}’s site and noticed {one specific thing}.',
+            'Teams like yours usually lose time on {problem}. Here’s how we fix it. [show 1 screen]',
+            'If that’s useful, the button under this video books 15 minutes with me.',
+        ],
+        cta: 'Book 15 minutes',
     },
     {
-        title: 'Editing by Transcript',
-        description: 'See how highlighting filler words in the transcript instantly cuts them out of the video timeline.',
-        duration: '1:45',
-        badge: 'Editor Highlight',
-        bgGradient: 'from-[#6A4CFF] via-[#7d63ff] to-[#28C840]',
-        videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4',
+        title: 'Demo follow-up',
+        when: 'Same day as the call · 2 minutes',
+        lines: [
+            'Hi {name}, thanks for the time today.',
+            'You asked about {question}. Here it is in the product. [show it]',
+            'I added chapters so you can send the pricing part straight to {decision maker}.',
+            'Next step we agreed: {next step}. Click below if you want to move it up.',
+        ],
+        cta: 'Pick a time',
     },
     {
-        title: 'Hidden Teleprompter in Action',
-        description: 'Watch a creator read smoothly through a script while sharing their screen without ever looking away.',
-        duration: '1:30',
-        badge: 'Workflow',
-        bgGradient: 'from-[#FF3D81] via-[#ff689d] to-[#6A4CFF]',
-        videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
+        title: 'Proposal walkthrough',
+        when: 'With the proposal · lock it with a password',
+        lines: [
+            'Hi {name}, rather than send a PDF, I wanted to walk you through it.',
+            'Here’s the scope, and why we suggest {approach}. [scroll the proposal]',
+            'Pricing is in the third chapter, with the two options we discussed.',
+            'Any questions, reply to this email or book a call below.',
+        ],
+        cta: 'Accept proposal',
     },
     {
-        title: 'Hand-Tracked Air Drawing',
-        description: 'Circle buttons and highlight numbers in real time using hand gestures while talking through a feature.',
-        duration: '1:15',
-        badge: 'Interactive',
-        bgGradient: 'from-[#14121F] via-[#3b2d8f] to-[#FF3D81]',
-        videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4',
-    },
-    {
-        title: 'Photo to Parallax Reel',
-        description: 'Turn a static photo gallery into a high-impact, music-backed social reel with sci-fi transitions.',
-        duration: '0:55',
-        badge: 'Reels Studio',
-        bgGradient: 'from-[#38BDF8] via-[#6A4CFF] to-[#FF3D81]',
-        videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4',
-    },
-    {
-        title: 'Multi-Language AI Dubbing',
-        description: 'Generate translated captions and AI voiceovers in Hindi, Hinglish, and Spanish with a single click.',
-        duration: '1:20',
-        badge: 'AI Features',
-        bgGradient: 'from-[#FFE347] via-[#ffaa33] to-[#FF3D81]',
-        videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyrides.mp4',
+        title: 'Renewal check-in',
+        when: '45 days before renewal · 90 seconds',
+        lines: [
+            'Hi {name}, quick look back at the last year together.',
+            'Your team used {feature} the most, and saved about {result}.',
+            'Here’s what’s coming next that fits how you work. [show it]',
+            'Happy to plan the renewal whenever suits you.',
+        ],
+        cta: 'Plan the renewal',
     },
 ];
 
-interface ClientProps {
-    isLoggedIn: boolean;
-    userPlan: string;
-    displayName: string;
-}
+export default function DemoShowcaseClient({ isLoggedIn }: { isLoggedIn: boolean }) {
+    const [playing, setPlaying] = useState(false);
+    const [tour, setTour] = useState<TourId>('record');
+    const [copied, setCopied] = useState<string | null>(null);
+    const current = TOUR.find((item) => item.id === tour) ?? TOUR[0];
 
-export default function DemoShowcaseClient({ isLoggedIn, userPlan, displayName }: ClientProps) {
-    const [activeVideo, setActiveVideo] = useState<{ title: string; url: string } | null>(null);
-    const initialLetter = displayName.charAt(0).toUpperCase();
+    useEffect(() => {
+        if (!playing) return;
+        const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') setPlaying(false); };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [playing]);
+
+    const copyScript = async (title: string, lines: string[]) => {
+        try {
+            await navigator.clipboard.writeText(lines.join('\n'));
+            setCopied(title);
+            window.setTimeout(() => setCopied((value) => (value === title ? null : value)), 1800);
+        } catch { /* clipboard blocked; the script stays visible to copy by hand */ }
+    };
 
     return (
-        <main className={`${display.variable} ${body.variable} min-h-dvh overflow-x-clip bg-[#F7F6FB] font-[family-name:var(--font-body)] text-[#14121F] selection:bg-[#6A4CFF]/20`}>
-            <style dangerouslySetInnerHTML={{ __html: css }} />
-
-            {/* Floating glass nav */}
-            <header className="sticky top-0 z-50 px-3 pt-3 sm:px-6 sm:pt-4">
-                <div className="mx-auto flex h-14 max-w-5xl items-center justify-between gap-3 rounded-full border border-white/70 bg-white/70 pl-4 pr-2 shadow-[0_10px_30px_-10px_rgba(20,18,31,0.18)] backdrop-blur-xl sm:h-16 sm:pl-5">
-                    <Wordmark />
-                    <nav aria-label="Main navigation" className="hidden items-center gap-1 md:flex">
-                        <Link href="/" className={navLink}>Home</Link>
-                        <span aria-current="page" className="rounded-full bg-[#14121F]/[0.08] px-4 py-2 text-sm font-semibold text-[#14121F]">Demos</span>
-                        <Link href="/features" className={navLink}>Features</Link>
-                        <Link href="/pricing" className={navLink}>Pricing</Link>
-                    </nav>
-
-                    <div className="flex shrink-0 items-center gap-2">
-                        {isLoggedIn ? (
-                            <>
-                                {userPlan ? (
-                                    <span className="rounded-full bg-[#6A4CFF]/10 px-4 py-1.5 text-xs font-bold text-[#6A4CFF]">
-                                        {userPlan}
-                                    </span>
-                                ) : (
-                                    <Link href="/pricing" className="inline-flex items-center gap-1 rounded-full border border-[#14121F]/10 bg-[#F7F6FB] px-3 py-1.5 text-xs font-semibold text-[#14121F]/70 transition hover:bg-[#14121F]/10">
-                                        Free Tier · Upgrade
-                                    </Link>
-                                )}
-
-                                <Link
-                                    href="/studio"
-                                    className={`inline-flex items-center gap-2 rounded-full border border-[#14121F]/10 bg-white py-1.5 pl-2 pr-4 text-sm font-semibold text-[#14121F] shadow-sm transition hover:border-[#6A4CFF]/40 hover:shadow-md ${focus}`}
-                                >
-                                    <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#6A4CFF] text-xs font-bold text-white shadow-xs">
-                                        {initialLetter}
-                                    </span>
-                                    <span className="max-w-[100px] truncate">{displayName}</span>
-                                    <ArrowRight className="h-3.5 w-3.5 text-[#14121F]/40" />
-                                </Link>
-                            </>
-                        ) : (
-                            <>
-                                <Link href="/login" className={`rounded-full px-3 py-2 text-sm font-medium text-[#14121F]/75 transition-colors hover:text-[#14121F] sm:px-4 ${focus}`}>Log in</Link>
-                                <Link href="/login?setup=1" className={`inline-flex items-center gap-1.5 rounded-full bg-[#14121F] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#2c2742] sm:px-5 ${focus}`}>
-                                    Try the studio <ArrowRight className="h-3.5 w-3.5" />
-                                </Link>
-                            </>
-                        )}
-                    </div>
-                </div>
-                <nav aria-label="Mobile main navigation" className="mx-auto mt-2 flex max-w-5xl gap-1.5 overflow-x-auto px-1 [scrollbar-width:none] md:hidden [&::-webkit-scrollbar]:hidden">
-                    <Link href="/" className={mobileNavLink}>Home</Link>
-                    <span className="shrink-0 rounded-full bg-[#14121F] px-3.5 py-1.5 text-xs font-medium text-white">Demos</span>
-                    <Link href="/features" className={mobileNavLink}>Features</Link>
-                    <Link href="/pricing" className={mobileNavLink}>Pricing</Link>
-                </nav>
-            </header>
-
+        <>
             {/* Hero */}
-            <section className="relative mx-auto max-w-5xl px-5 pb-16 pt-16 text-center sm:px-8">
-                <div className="dots pointer-events-none absolute inset-x-0 top-0 -z-0 h-[400px]" aria-hidden="true" />
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-[#6A4CFF]/10 px-3.5 py-1 text-xs font-semibold text-[#6A4CFF]">
-                    <Sparkles className="h-3.5 w-3.5" /> Product Demo Library
-                </span>
-                <h1 className="mt-4 text-4xl font-extrabold tracking-tight sm:text-6xl">
-                    Explore Product <span className={gradientText}>Walkthroughs</span>
-                </h1>
-                <p className="mx-auto mt-4 max-w-2xl text-base text-[#14121F]/65 sm:text-lg">
-                    Browse our curated list of product demos and feature guides, recorded and edited entirely inside Cliprame. Click any card to watch the video.
-                </p>
+            <section className="mx-auto max-w-6xl px-5 pb-14 pt-14 sm:px-8 sm:pt-20">
+                <p className={label}>Demo</p>
+                <div className="mt-5 grid gap-8 lg:grid-cols-[1.2fr_.8fr] lg:items-end">
+                    <h1 className={`${D} text-[2.9rem] font-bold leading-[0.96] tracking-[-0.045em] sm:text-7xl`}>
+                        See it from <span className={`${serif} text-[#5B3DF5]`}>both sides.</span>
+                    </h1>
+                    <p className="text-[17px] leading-7 text-[#15120F]/62 lg:pb-2">What you record, what your prospect sees, and what you find out afterwards. Then borrow a script and send your first one.</p>
+                </div>
             </section>
 
-            {/* Product Demos List Grid */}
-            <section className="mx-auto max-w-6xl px-5 pb-28 sm:px-8">
-                <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
-                    {productDemos.map((demo) => (
-                        <div
-                            key={demo.title}
-                            onClick={() => setActiveVideo({ title: demo.title, url: demo.videoUrl })}
-                            className={`${card} group flex cursor-pointer flex-col overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_30px_60px_-20px_rgba(20,18,31,0.25)]`}
-                        >
-                            {/* Video Thumbnail Placeholder */}
-                            <div className={`relative aspect-video w-full bg-gradient-to-br ${demo.bgGradient} p-4 flex flex-col justify-between overflow-hidden`}>
-                                <div className="absolute inset-0 bg-black/10 backdrop-blur-[1px]" />
+            {/* Flagship video */}
+            <section className="mx-auto max-w-6xl px-5 pb-24 sm:px-8">
+                <button
+                    type="button"
+                    onClick={() => setPlaying(true)}
+                    className={`group grid w-full overflow-hidden rounded-2xl border border-[#15120F]/10 bg-white text-left transition hover:border-[#15120F]/25 md:grid-cols-[1.35fr_1fr] ${focus}`}
+                >
+                    <span className="relative flex aspect-video items-center justify-center bg-[#15120F]">
+                        <span className="absolute inset-0 bg-[radial-gradient(ellipse_at_30%_20%,rgba(91,61,245,0.35),transparent_60%)]" />
+                        <span className="relative flex h-16 w-16 items-center justify-center rounded-full bg-[#F6F4EF] text-[#15120F] transition group-hover:scale-105"><Play className="ml-1 h-6 w-6 fill-current" /></span>
+                        <span className="absolute bottom-4 left-4 text-[12px] tabular-nums text-[#F6F4EF]/70">{FLAGSHIP.duration}</span>
+                    </span>
+                    <span className="flex flex-col justify-center p-7 sm:p-9">
+                        <span className={label}>Made with Cliprame</span>
+                        <span className={`${D} mt-3 block text-2xl font-bold tracking-tight`}>{FLAGSHIP.title}</span>
+                        <span className="mt-3 block text-[15px] leading-7 text-[#15120F]/62">{FLAGSHIP.description}</span>
+                        <span className="mt-6 inline-flex items-center gap-1.5 text-[15px] font-semibold underline decoration-[#15120F]/25 underline-offset-4 group-hover:decoration-[#15120F]">Watch it <ArrowRight className="h-4 w-4" /></span>
+                    </span>
+                </button>
+            </section>
 
-                                <div className="relative z-10 flex items-center justify-between">
-                                    <span className="rounded-full bg-black/40 px-3 py-1 text-[11px] font-semibold text-white backdrop-blur-md">
-                                        {demo.badge}
+            {/* Both sides */}
+            <section aria-labelledby="tour-title" className="mx-auto max-w-6xl px-5 pb-24 sm:px-8">
+                <div className="mb-10 flex items-center gap-4"><span className={label}>01 — How one video plays out</span><span className="h-px flex-1 bg-[#15120F]/10" /></div>
+                <h2 id="tour-title" className="sr-only">How one video plays out</h2>
+                <div className="grid gap-8 lg:grid-cols-[.85fr_1.15fr]">
+                    <div role="tablist" aria-label="Steps" className="divide-y divide-[#15120F]/10 border-y border-[#15120F]/10">
+                        {TOUR.map((item, index) => {
+                            const active = item.id === tour;
+                            return (
+                                <button
+                                    key={item.id}
+                                    type="button"
+                                    role="tab"
+                                    aria-selected={active}
+                                    aria-controls="tour-panel"
+                                    onClick={() => setTour(item.id)}
+                                    className={`grid w-full grid-cols-[2.5rem_1fr] gap-3 py-5 text-left transition ${focus}`}
+                                >
+                                    <span className={`${serif} text-3xl leading-none ${active ? 'text-[#5B3DF5]' : 'text-[#15120F]/25'}`}>{index + 1}</span>
+                                    <span>
+                                        <span className="block text-[12px] font-semibold uppercase tracking-[0.12em] text-[#15120F]/40">{item.step}</span>
+                                        <span className={`${D} mt-1 block text-lg font-bold tracking-tight ${active ? '' : 'text-[#15120F]/55'}`}>{item.title}</span>
+                                        {active && <span className="mt-2 block text-[15px] leading-7 text-[#15120F]/62">{item.text}</span>}
                                     </span>
-                                    <span className="inline-flex items-center gap-1 rounded-full bg-black/40 px-2.5 py-1 text-[11px] font-medium text-white backdrop-blur-md">
-                                        <Clock className="h-3 w-3" /> {demo.duration}
-                                    </span>
-                                </div>
+                                </button>
+                            );
+                        })}
+                    </div>
 
-                                <div className="relative z-10 flex justify-center py-4">
-                                    <div className="flex h-14 w-14 items-center justify-center rounded-full bg-white/20 text-white shadow-lg backdrop-blur-md transition-transform duration-300 group-hover:scale-110 group-hover:bg-white/30">
-                                        <Play className="ml-0.5 h-6 w-6 fill-current" />
+                    <div id="tour-panel" role="tabpanel" aria-label={current.title} className="flex min-h-[24rem] items-center justify-center rounded-2xl border border-[#15120F]/10 bg-[#EFECE4] p-6 sm:p-10">
+                        <div key={tour} className="mk-rise w-full max-w-md">
+                            {tour === 'record' && (
+                                <div className="relative rounded-xl border border-[#15120F]/10 bg-white p-2 shadow-[0_30px_60px_-36px_rgba(21,18,15,0.5)]">
+                                    <div className="aspect-[16/10] rounded-lg bg-[#F3F1EC] p-4">
+                                        <span className="block h-2.5 w-1/3 rounded bg-[#15120F]/70" />
+                                        <span className="mt-3 block h-2 w-full rounded bg-[#15120F]/10" />
+                                        <span className="mt-2 block h-2 w-4/5 rounded bg-[#15120F]/10" />
+                                        <span className="mt-4 block h-[45%] rounded-lg border border-[#15120F]/8 bg-white" />
+                                    </div>
+                                    <span className="absolute left-4 top-4 inline-flex items-center gap-1.5 rounded bg-[#15120F] px-2 py-1 text-[10px] font-semibold text-white"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#E5484D]" />REC 00:38</span>
+                                    <span className="absolute -bottom-4 -right-4 h-20 w-24 rounded-lg bg-[linear-gradient(160deg,#E8C9A8,#C98B6B)] ring-4 ring-white" />
+                                    <div className="absolute -left-5 -top-7 w-44 -rotate-2 rounded-lg bg-[#15120F] p-2.5 text-[11px] text-[#F6F4EF] shadow-xl">
+                                        <p className="mb-1 flex items-center justify-between text-[9px] text-[#F6F4EF]/55">Teleprompter <span className="inline-flex items-center gap-1"><EyeOff className="h-2.5 w-2.5" />only you</span></p>
+                                        Hi Ana, I made this just for you…
                                     </div>
                                 </div>
-
-                                <div className="relative z-10 text-[10px] font-medium text-white/70">
-                                    Click to play demo
+                            )}
+                            {tour === 'send' && (
+                                <div className="rounded-xl border border-[#15120F]/10 bg-white p-5 shadow-[0_30px_60px_-36px_rgba(21,18,15,0.5)]">
+                                    <p className="text-xs font-semibold text-[#5B3DF5]">Hi Ana, this video is for you</p>
+                                    <p className={`${D} mt-0.5 text-lg font-bold tracking-tight`}>How Acme can onboard faster</p>
+                                    <div className="mt-3 flex aspect-video items-center justify-center rounded-lg bg-[#15120F]"><span className="flex h-11 w-11 items-center justify-center rounded-full bg-[#F6F4EF]"><Play className="ml-0.5 h-5 w-5 fill-current" /></span></div>
+                                    <div className="mt-3 flex flex-wrap items-center gap-1.5 text-[11px] text-[#15120F]/60">
+                                        {['0:00 Intro', '0:42 Your setup', '1:30 Pricing'].map((chapter) => <span key={chapter} className="rounded-md border border-[#15120F]/10 px-2 py-1">{chapter}</span>)}
+                                        <span className="ml-auto inline-flex items-center gap-1 rounded-md bg-[#15120F] px-2.5 py-1 font-semibold text-[#F6F4EF]"><MousePointerClick className="h-3 w-3" /> Book a call</span>
+                                    </div>
                                 </div>
-                            </div>
-
-                            {/* Content Details */}
-                            <div className="flex flex-1 flex-col justify-between p-6">
-                                <div>
-                                    <h3 className={`${D} text-xl font-bold tracking-tight text-[#14121F]`}>{demo.title}</h3>
-                                    <p className="mt-2 text-sm leading-relaxed text-[#14121F]/65">{demo.description}</p>
+                            )}
+                            {tour === 'lock' && (
+                                <div className="mx-auto max-w-xs rounded-xl border border-[#15120F]/10 bg-white p-5 shadow-[0_30px_60px_-36px_rgba(21,18,15,0.5)]">
+                                    <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#5B3DF5]/10 text-[#5B3DF5]"><Mail className="h-4 w-4" /></span>
+                                    <p className="mt-3 font-semibold">Confirm your email to watch</p>
+                                    <p className="text-xs text-[#15120F]/50">We’ll send a 6-digit code to your inbox.</p>
+                                    <span className="mt-4 block rounded-lg border border-[#15120F]/12 px-3 py-2.5 text-xs text-[#15120F]/65">ana@acme.com</span>
+                                    <span className="mt-2 block rounded-lg bg-[#15120F] py-2.5 text-center text-sm font-semibold text-[#F6F4EF]">Send code</span>
+                                    <p className="mt-3 flex items-center gap-1.5 text-[11px] text-[#15120F]/45"><Lock className="h-3 w-3" /> Only people at acme.com</p>
                                 </div>
-
-                                <div className="mt-6 flex items-center gap-2 text-xs font-semibold text-[#6A4CFF]">
-                                    <CheckCircle2 className="h-4 w-4" /> Built with Cliprame Studio
+                            )}
+                            {tour === 'alert' && (
+                                <div className="overflow-hidden rounded-xl border border-[#15120F]/10 bg-white shadow-[0_30px_60px_-36px_rgba(21,18,15,0.5)]">
+                                    <div className="flex items-center gap-2 bg-[#3F0E40] px-4 py-2.5 text-[12px] font-semibold text-white/90"><Hash className="h-3.5 w-3.5" /> sales-alerts</div>
+                                    <ul className="space-y-3.5 p-4">
+                                        {[
+                                            { time: '10:42', text: 'started watching', meta: 'desktop · Pune' },
+                                            { time: '10:45', text: 'watched it to the end', meta: '100% · rewatched Pricing' },
+                                            { time: '10:45', text: 'clicked Book a call', meta: '' },
+                                        ].map((alert, index) => (
+                                            <li key={alert.text} className="mk-rise flex gap-2.5" style={{ '--d': index } as CSSProperties}>
+                                                <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-[#15120F] text-[11px] font-bold text-[#F6F4EF]">C</span>
+                                                <p className="text-[13px] leading-[1.35rem] text-[#1D1C1D]"><span className="font-bold">Cliprame</span> <span className="text-[11px] text-[#1D1C1D]/45">{alert.time}</span><br /><span className="font-bold">Ana Lopez</span> <span className="text-[#1D1C1D]/60">(Acme)</span> {alert.text}{alert.meta && <><br /><span className="text-[11.5px] text-[#1D1C1D]/50">{alert.meta}</span></>}</p>
+                                            </li>
+                                        ))}
+                                    </ul>
                                 </div>
-                            </div>
+                            )}
                         </div>
+                    </div>
+                </div>
+            </section>
+
+            {/* Scripts */}
+            <section aria-labelledby="scripts-title" className="mx-auto max-w-6xl px-5 pb-24 sm:px-8">
+                <div className="mb-10 flex items-center gap-4"><span className={label}>02 — Scripts to borrow</span><span className="h-px flex-1 bg-[#15120F]/10" /></div>
+                <div className="mb-10 grid gap-6 lg:grid-cols-[.8fr_1.2fr]">
+                    <h2 id="scripts-title" className={`${D} text-4xl font-bold leading-[1.04] tracking-[-0.035em] sm:text-5xl`}>Four videos worth sending <span className={`${serif} text-[#5B3DF5]`}>this week.</span></h2>
+                    <p className="text-[16px] leading-7 text-[#15120F]/62 lg:pt-3">Copy one, swap the {'{brackets}'}, and paste it into the teleprompter. Keep it under two minutes; the button under the video does the rest.</p>
+                </div>
+                <div className="grid gap-5 md:grid-cols-2">
+                    {SCRIPTS.map((script) => (
+                        <article key={script.title} className="flex flex-col rounded-2xl border border-[#15120F]/10 bg-white p-6">
+                            <div className="flex items-start justify-between gap-3">
+                                <div>
+                                    <h3 className={`${D} text-xl font-bold tracking-tight`}>{script.title}</h3>
+                                    <p className="mt-0.5 text-[13px] text-[#15120F]/50">{script.when}</p>
+                                </div>
+                                <button type="button" onClick={() => void copyScript(script.title, script.lines)} className={`inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-[#15120F]/12 px-3 py-1.5 text-xs font-semibold transition hover:border-[#15120F]/30 ${focus}`}>
+                                    {copied === script.title ? <><Check className="h-3.5 w-3.5 text-[#0E9F6E]" /> Copied</> : <><Copy className="h-3.5 w-3.5" /> Copy</>}
+                                </button>
+                            </div>
+                            <ol className="mt-5 flex-1 space-y-2.5 border-l-2 border-[#5B3DF5]/30 pl-4 text-[15px] leading-7 text-[#15120F]/80">
+                                {script.lines.map((line) => <li key={line}>{line}</li>)}
+                            </ol>
+                            <p className="mt-5 border-t border-[#15120F]/[0.07] pt-4 text-[13px] text-[#15120F]/55">Button under the video: <span className={`${serif} text-base text-[#15120F]`}>“{script.cta}”</span></p>
+                        </article>
                     ))}
                 </div>
             </section>
 
-            {/* Video Popup Modal */}
-            {activeVideo && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-md">
-                    <div className="relative w-full max-w-4xl overflow-hidden rounded-3xl bg-neutral-900 shadow-2xl">
-                        <div className="flex items-center justify-between border-b border-neutral-800 px-6 py-4">
-                            <h3 className="text-base font-bold text-white">{activeVideo.title}</h3>
-                            <button
-                                type="button"
-                                onClick={() => setActiveVideo(null)}
-                                className="flex h-8 w-8 items-center justify-center rounded-full bg-neutral-800 text-neutral-300 hover:bg-neutral-700 hover:text-white"
-                            >
-                                <X className="h-4 w-4" />
-                            </button>
-                        </div>
-                        <div className="relative aspect-video w-full bg-black">
-                            <video
-                                src={activeVideo.url}
-                                controls
-                                autoPlay
-                                playsInline
-                                preload="auto"
-                                className="h-full w-full object-contain"
-                            />
-                        </div>
+            {/* Closing */}
+            <section className="mx-auto max-w-6xl px-5 pb-20 sm:px-8">
+                <div className="flex flex-col gap-8 rounded-2xl bg-[#15120F] px-7 py-14 text-[#F6F4EF] sm:px-14 lg:flex-row lg:items-end lg:justify-between">
+                    <h2 className={`${D} max-w-2xl text-4xl font-bold leading-[1.04] tracking-[-0.04em] sm:text-5xl`}>Your turn. Record one <span className={`${serif} text-[#B6A6FF]`}>in two minutes.</span></h2>
+                    <Link href={isLoggedIn ? '/studio' : '/signup'} className={`inline-flex w-fit items-center gap-2 rounded-xl bg-[#F6F4EF] px-5 py-3 text-[15px] font-semibold text-[#15120F] hover:bg-white ${focus}`}>
+                        {isLoggedIn ? 'Open your studio' : 'Start free'} <ArrowRight className="h-4 w-4" />
+                    </Link>
+                </div>
+            </section>
+
+            {/* Video */}
+            {playing && (
+                <div role="dialog" aria-modal="true" aria-label={FLAGSHIP.title} className="fixed inset-0 z-50 flex items-center justify-center bg-[#15120F]/85 p-4 backdrop-blur-sm" onMouseDown={(event) => { if (event.target === event.currentTarget) setPlaying(false); }}>
+                    <div className="relative w-full max-w-4xl overflow-hidden rounded-2xl bg-black">
+                        <button type="button" onClick={() => setPlaying(false)} aria-label="Close" className="absolute right-3 top-3 z-10 rounded-full bg-black/60 p-2 text-white/80 hover:text-white"><X className="h-4 w-4" /></button>
+                        <video src={FLAGSHIP.videoUrl} controls autoPlay playsInline className="aspect-video w-full" />
                     </div>
                 </div>
             )}
-
-            {/* Footer */}
-            <footer className="relative border-t border-[#14121F]/10">
-                <div className="mx-auto flex max-w-7xl flex-col gap-4 px-5 py-8 text-sm text-[#14121F]/55 sm:px-8 md:flex-row md:items-center md:justify-between lg:px-12">
-                    <Wordmark />
-                    <p>Record. Edit. Share your story.</p>
-                    <div className="flex items-center gap-5">
-                        <Link href="/pricing" className="transition hover:text-[#14121F]">Pricing</Link>
-                        {!isLoggedIn ? (
-                            <Link href="/login" className="transition hover:text-[#14121F]">Log in</Link>
-                        ) : null}
-                        <Link href="/studio" className="transition hover:text-[#14121F]">Go to Studio</Link>
-                    </div>
-                </div>
-            </footer>
-        </main>
+        </>
     );
 }
+

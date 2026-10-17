@@ -1,12 +1,15 @@
-import crypto from 'node:crypto';
 import { findShare } from '@/lib/videos/public';
 import { getStudioUser } from '@/lib/videos/server';
-import { capPlayedSeconds, isAutomatedAgent, NEW_SESSIONS_PER_IP_PER_HOUR, SESSION_REUSE_MS } from '@/lib/videos/tracking';
+import { cookies } from 'next/headers';
+import { leadFromCookie, readUnlock, unlockCookieName } from '@/lib/videos/access';
+import { gateForm, readInteractions } from '@/lib/videos/interactions';
+import { notifyViewing } from '@/lib/integrations/notify';
+import { capPlayedSeconds, ipHash, isAutomatedAgent, NEW_SESSIONS_PER_IP_PER_HOUR, SESSION_REUSE_MS } from '@/lib/videos/tracking';
 
 // Public endpoint the share page reports viewing to. It never trusts the page for
 // identity: the session is tied to the share link and to a random per-browser key.
 
-const EVENT_TYPES = new Set(['play', 'pause', 'seek', 'ended', 'chapter', 'cta']);
+const EVENT_TYPES = new Set(['play', 'pause', 'seek', 'ended', 'chapter', 'cta', 'form', 'booking']);
 const MAX_EVENTS = 50;
 const MAX_SECONDS = 900;
 
@@ -22,17 +25,12 @@ interface TrackBody {
     /** [second, timesPlayed] pairs since the last report. */
     seconds?: unknown;
     events?: unknown;
+    /** Unlock token for protected videos (also read from the unlock cookie). */
+    accessToken?: unknown;
 }
 
 const ok = (body: Record<string, unknown> = {}) => Response.json({ ok: true, ...body });
 
-/** Salted hash of the viewer's network address, for rate limiting only. */
-function ipHash(request: Request) {
-    const ip = (request.headers.get('x-forwarded-for') ?? request.headers.get('x-real-ip') ?? '').split(',')[0].trim();
-    if (!ip) return null;
-    const salt = process.env.ANALYTICS_SALT ?? process.env.SUPABASE_SERVICE_ROLE_KEY ?? 'cliprame';
-    return crypto.createHash('sha256').update(`${salt}:${ip}`).digest('hex').slice(0, 32);
-}
 const bad = (error: string, status = 400) => Response.json({ error }, { status });
 
 export async function POST(request: Request) {
@@ -50,12 +48,31 @@ export async function POST(request: Request) {
     const user = await getStudioUser().catch(() => null);
     if (user?.id === video.owner_id) return ok({ ignored: true });
 
+    // Protected videos only count viewers who unlocked them.
+    let viewerEmail: string | null = null;
+    if (video.access_mode !== 'public') {
+        const cookieToken = (await cookies()).get(unlockCookieName(video.id))?.value;
+        const unlock = readUnlock(body.accessToken, video) ?? readUnlock(cookieToken, video);
+        if (!unlock) return ok({ ignored: true, reason: 'locked' });
+        viewerEmail = unlock.email;
+    }
+    // A gate form both guards the video and names the viewer.
+    const gate = gateForm(readInteractions(video.interactions));
+    if (gate) {
+        const lead = await leadFromCookie(video.id, gate.id);
+        if (!lead) return ok({ ignored: true, reason: 'form' });
+        viewerEmail = viewerEmail ?? lead.email;
+    }
+
     const durationSec = Math.max(1, Math.ceil(video.duration_ms / 1000));
     const positionMs = Math.min(Math.max(0, Math.round(Number(body.positionMs) || 0)), video.duration_ms || Number.MAX_SAFE_INTEGER);
 
     let sessionId = typeof body.sessionId === 'string' && /^[0-9a-f-]{36}$/.test(body.sessionId) ? body.sessionId : null;
-    type SessionRow = { id: string; seconds_watched: number[] | null; watched_ms: number; max_position_ms: number; completed: boolean; cta_clicked: boolean; last_seen_at: string };
-    const columns = 'id,seconds_watched,watched_ms,max_position_ms,completed,cta_clicked,last_seen_at';
+    type SessionRow = {
+        id: string; seconds_watched: number[] | null; watched_ms: number; max_position_ms: number; completed: boolean; cta_clicked: boolean; last_seen_at: string;
+        device: string | null; country: string | null; source: 'share' | 'embed' | null; referrer_host: string | null; viewer_email: string | null;
+    };
+    const columns = 'id,seconds_watched,watched_ms,max_position_ms,completed,cta_clicked,last_seen_at,device,country,source,referrer_host,viewer_email';
     let session: SessionRow | null = null;
 
     if (sessionId) {
@@ -94,6 +111,7 @@ export async function POST(request: Request) {
             device,
             country,
             ip_hash: hashed,
+            viewer_email: viewerEmail,
             source: body.source === 'embed' ? 'embed' : 'share',
             referrer_host: body.source === 'embed' && typeof body.referrerHost === 'string' && /^[a-z0-9.-]{1,253}$/i.test(body.referrerHost) ? body.referrerHost.toLowerCase() : null,
         }).select(columns).single();
@@ -136,15 +154,23 @@ export async function POST(request: Request) {
         if (error) console.error('Could not save view events:', error);
     }
 
-    const { error } = await admin.from('view_sessions').update({
+    const updated = {
+        ...(viewerEmail ? { viewer_email: viewerEmail } : {}),
         seconds_watched: seconds,
         watched_ms: session.watched_ms + addedMs,
         max_position_ms: Math.max(session.max_position_ms, positionMs),
         completed: session.completed || body.completed === true || events.some((event) => event.type === 'ended'),
         cta_clicked: session.cta_clicked || events.some((event) => event.type === 'cta'),
         last_seen_at: new Date().toISOString(),
-    }).eq('id', sessionId);
+    };
+    const { error } = await admin.from('view_sessions').update(updated).eq('id', sessionId);
     if (error) console.error('Could not update view session:', error);
+    // Slack, HubSpot and webhooks hear about new moments after this response is sent.
+    else notifyViewing({
+        admin, request, video, link, before: session,
+        now: { ...session, ...updated, id: session.id, viewer_email: viewerEmail ?? session.viewer_email },
+        extra: events.some((event) => event.type === 'booking') ? ['call.booked'] : [],
+    });
 
     return ok({ sessionId });
 }

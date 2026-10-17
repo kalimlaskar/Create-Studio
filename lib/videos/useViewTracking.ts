@@ -7,7 +7,7 @@ import { useCallback, useEffect, useRef } from 'react';
 
 const FLUSH_MS = 5000;
 
-type TrackEvent = { type: 'play' | 'pause' | 'seek' | 'ended' | 'chapter' | 'cta'; positionMs: number; detail?: string };
+type TrackEvent = { type: 'play' | 'pause' | 'seek' | 'ended' | 'chapter' | 'cta' | 'form' | 'booking'; positionMs: number; detail?: string };
 
 function viewerKey() {
     try {
@@ -31,7 +31,7 @@ const deviceType = () => (/iPad|Tablet/i.test(navigator.userAgent) ? 'tablet' : 
  * plus play, pause, seek, chapter and button events. Reports are batched every
  * few seconds and sent with sendBeacon when the page is hidden or closed.
  */
-export function useViewTracking(slug: string, { source, referrerHost = null }: { source: 'share' | 'embed'; referrerHost?: string | null }) {
+export function useViewTracking(slug: string, { source, referrerHost = null, accessToken = null }: { source: 'share' | 'embed'; referrerHost?: string | null; accessToken?: string | null }) {
     const key = useRef('');
     const sessionId = useRef<string | null>(null);
     const seconds = useRef(new Map<number, number>());
@@ -49,6 +49,7 @@ export function useViewTracking(slug: string, { source, referrerHost = null }: {
             device: deviceType(),
             source,
             referrerHost,
+            accessToken,
             positionMs: Math.round(position.current),
             completed: completed.current,
             seconds: [...seconds.current.entries()],
@@ -56,7 +57,7 @@ export function useViewTracking(slug: string, { source, referrerHost = null }: {
         };
         seconds.current.clear();
         return body;
-    }, [slug, source, referrerHost]);
+    }, [slug, source, referrerHost, accessToken]);
 
     const flush = useCallback((force = false) => {
         if (!enabled.current) return;

@@ -4,9 +4,10 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { Bricolage_Grotesque, Instrument_Sans } from 'next/font/google';
-import { ArrowRight, Check, Compass, Film, FolderOpen, Home, Images, LoaderCircle, MonitorUp, Plus, Sparkles, Tag, Trash2, Upload, UserRound, Video, X, Zap } from 'lucide-react';
+import { ArrowRight, Check, FolderOpen, Images, LoaderCircle, MonitorUp, Sparkles, Trash2, Upload, UserRound, Video, X, Zap } from 'lucide-react';
 import type { DraftSummary } from '@/components/editor/drafts';
 import { deletePhotoReelDraft, listPhotoReelDrafts, PhotoReelDraftSummary } from './photoReelDrafts';
+import { MobileTabBar, StudioSidebar, type CreateId, type SidebarAccount } from '@/components/videos/StudioSidebar';
 
 const display = Bricolage_Grotesque({ subsets: ['latin'], variable: '--font-display', display: 'swap' });
 const body = Instrument_Sans({ subsets: ['latin'], variable: '--font-body', display: 'swap' });
@@ -17,14 +18,6 @@ const focus =
 const GUIDE_HIDDEN_KEY = 'cliprame-home-guide-hidden';
 
 type StepId = 'video' | 'reel' | 'profile' | 'plans';
-type CreateId = 'record' | 'upload' | 'reel';
-
-const CREATE_OPTIONS: Array<{ id: CreateId; label: string; hint: string; icon: typeof Video }> = [
-    { id: 'record', label: 'Record a video', hint: 'Camera or screen', icon: Video },
-    { id: 'upload', label: 'Upload a video', hint: 'Edit a clip you have', icon: Upload },
-    { id: 'reel', label: 'Photo + video reel', hint: 'Templates and music', icon: Images },
-];
-
 interface StudioHomeProps {
     creatorName: string;
     avatarUrl: string;
@@ -43,6 +36,8 @@ interface StudioHomeProps {
     onOpenVideoDraft: (id: string) => void;
     onDeleteVideoDraft: (id: string) => void;
     onEditProfile: () => void;
+    /** The shared studio sidebar's account and collapsed state, loaded on the server. */
+    sidebar?: { account: SidebarAccount | null; collapsed: boolean };
 }
 
 interface Project {
@@ -62,11 +57,11 @@ const formatDate = (time: number) => new Date(time).toLocaleDateString('en-IN', 
 
 export function StudioHome({
     creatorName, avatarUrl, username, userPlan, isPro, showUpgrade, videoDrafts, isLoadingDraft, profileMenu, notice, onDismissNotice,
-    onRecord, onUpload, onReel, onOpenVideoDraft, onDeleteVideoDraft, onEditProfile,
+    onRecord, onUpload, onReel, onOpenVideoDraft, onDeleteVideoDraft, onEditProfile, sidebar,
 }: StudioHomeProps) {
     const uploadInputRef = useRef<HTMLInputElement>(null);
     const [reelDrafts, setReelDrafts] = useState<PhotoReelDraftSummary[]>([]);
-    const [createOpen, setCreateOpen] = useState(false);
+    const [uploadPrompt, setUploadPrompt] = useState(false);
     const [guideHidden, setGuideHidden] = useState(true);
     const [selectedStep, setSelectedStep] = useState<StepId | null>(null);
 
@@ -139,8 +134,29 @@ export function StudioHome({
         }
     };
 
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        const create = params.get('create');
+        const wantsProfile = params.get('profile') === '1';
+        if (!create && !wantsProfile) return;
+        params.delete('create');
+        params.delete('profile');
+        window.history.replaceState(null, '', `${window.location.pathname}${params.size ? `?${params}` : ''}`);
+        // A file picker can't open without a click on this page, so upload asks for one.
+        if (create === 'record') onRecord();
+        else if (create === 'reel') onReel();
+        else if (create === 'upload') window.setTimeout(() => setUploadPrompt(true), 0);
+        if (wantsProfile) onEditProfile();
+        // Runs once, for the link that opened the page.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    // The sidebar shows profile edits made on this page straight away.
+    const sidebarAccount: SidebarAccount | null = sidebar?.account
+        ? { ...sidebar.account, name: creatorName || sidebar.account.name, avatarUrl: avatarUrl || sidebar.account.avatarUrl, handle: username || sidebar.account.handle }
+        : null;
+
     const runCreate = (id: CreateId) => {
-        setCreateOpen(false);
         if (id === 'record') onRecord();
         else if (id === 'upload') uploadInputRef.current?.click();
         else onReel();
@@ -161,59 +177,16 @@ export function StudioHome({
                 }}
             />
 
-            {/* Sidebar */}
-            <aside className="sticky top-0 hidden h-dvh w-64 shrink-0 flex-col border-r border-[#14121F]/8 bg-white px-4 py-5 md:flex">
-                <Link href="/" aria-label="Cliprame home" className={`inline-flex items-center gap-2.5 rounded-full px-1 ${focus}`}>
-                    <Image src="/cliprame-icon.svg" alt="" width={32} height={32} className="h-8 w-8" />
-                    <span className={`${D} text-lg font-bold tracking-tight`}>Cliprame</span>
-                </Link>
-
-                <div className="relative mt-6">
-                    <button
-                        type="button"
-                        aria-expanded={createOpen}
-                        aria-haspopup="menu"
-                        onClick={() => setCreateOpen((open) => !open)}
-                        className={`flex w-full items-center gap-2.5 rounded-full border-[1.5px] border-[#6A4CFF] bg-white px-4 py-2.5 text-sm font-semibold text-[#6A4CFF] transition hover:bg-[#6A4CFF]/5 ${focus}`}>
-                        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#6A4CFF] text-white"><Plus className="h-3.5 w-3.5" /></span>
-                        Create
-                    </button>
-                    {createOpen && (
-                        <>
-                            <button type="button" aria-label="Close create menu" tabIndex={-1} onClick={() => setCreateOpen(false)} className="fixed inset-0 z-10 cursor-default" />
-                            <div role="menu" className="absolute left-0 right-0 z-20 mt-2 rounded-2xl border border-[#14121F]/10 bg-white p-1.5 shadow-[0_20px_50px_-15px_rgba(20,18,31,0.2)]">
-                                {CREATE_OPTIONS.map(({ id, label, hint, icon: Icon }) => (
-                                    <button key={id} type="button" role="menuitem" onClick={() => runCreate(id)} className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition hover:bg-[#F7F6FB] ${focus}`}>
-                                        <Icon className="h-4 w-4 text-[#6A4CFF]" />
-                                        <span><span className="block text-sm font-semibold">{label}</span><span className="block text-xs text-[#14121F]/55">{hint}</span></span>
-                                    </button>
-                                ))}
-                            </div>
-                        </>
-                    )}
-                </div>
-
-                <nav aria-label="Studio" className="mt-6 space-y-1">
-                    <span aria-current="page" className="flex items-center gap-3 rounded-xl bg-[#14121F]/[0.06] px-3 py-2.5 text-sm font-semibold"><Home className="h-4 w-4" /> Home</span>
-                    <a href="#projects" className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-[#14121F]/70 transition hover:bg-[#14121F]/[0.04] hover:text-[#14121F] ${focus}`}><FolderOpen className="h-4 w-4" /> Projects</a>
-                    <Link href="/studio/videos" className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-[#14121F]/70 transition hover:bg-[#14121F]/[0.04] hover:text-[#14121F] ${focus}`}><Film className="h-4 w-4" /> Videos &amp; analytics</Link>
-                    <Link href="/features" className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-[#14121F]/70 transition hover:bg-[#14121F]/[0.04] hover:text-[#14121F] ${focus}`}><Compass className="h-4 w-4" /> Features</Link>
-                    <Link href="/pricing" className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-[#14121F]/70 transition hover:bg-[#14121F]/[0.04] hover:text-[#14121F] ${focus}`}><Tag className="h-4 w-4" /> Pricing</Link>
-                    {guideHidden && (
-                        <button type="button" onClick={showGuide} className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium text-[#14121F]/70 transition hover:bg-[#14121F]/[0.04] hover:text-[#14121F] ${focus}`}><Sparkles className="h-4 w-4" /> Getting started</button>
-                    )}
-                </nav>
-
-                <div className="mt-auto rounded-2xl border border-[#14121F]/8 bg-[#F7F6FB] p-4">
-                    <p className="text-xs font-semibold">{userPlan} plan</p>
-                    <p className="mt-1 text-xs leading-5 text-[#14121F]/60">
-                        {isPro ? 'Thanks for supporting Cliprame.' : '1-minute exports with a watermark. Upgrade for longer videos.'}
-                    </p>
-                    {showUpgrade && (
-                        <Link href="/pricing" className={`mt-3 inline-flex items-center gap-1.5 rounded-full bg-[#6A4CFF] px-3.5 py-1.5 text-xs font-semibold text-white transition hover:bg-[#5839e0] ${focus}`}><Zap className="h-3.5 w-3.5" /> Upgrade</Link>
-                    )}
-                </div>
-            </aside>
+            <StudioSidebar
+                account={sidebarAccount}
+                initialCollapsed={sidebar?.collapsed ?? false}
+                onCreate={runCreate}
+                onOpenProfile={onEditProfile}
+                extraItems={[
+                    { key: 'projects', label: 'Projects', icon: FolderOpen, href: '#projects' },
+                    ...(guideHidden ? [{ key: 'guide', label: 'Getting started', icon: Sparkles, onClick: showGuide }] : []),
+                ]}
+            />
 
             {/* Main */}
             <div className="min-w-0 flex-1">
@@ -226,7 +199,16 @@ export function StudioHome({
                     {profileMenu}
                 </header>
 
-                <div className="mx-auto max-w-6xl space-y-10 px-4 py-8 sm:px-8 sm:py-10">
+                <div className="mx-auto max-w-6xl space-y-10 px-4 pb-28 pt-8 sm:px-8 sm:pt-10 md:pb-10">
+                    {uploadPrompt && (
+                        <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#6A4CFF]/25 bg-[#6A4CFF]/[0.06] px-4 py-3 text-sm">
+                            <p className="font-medium">Choose the video you want to edit.</p>
+                            <span className="flex items-center gap-2">
+                                <button type="button" onClick={() => { setUploadPrompt(false); uploadInputRef.current?.click(); }} className={`rounded-full bg-[#6A4CFF] px-4 py-1.5 text-xs font-semibold text-white hover:bg-[#5839e0] ${focus}`}>Choose a video</button>
+                                <button type="button" onClick={() => setUploadPrompt(false)} aria-label="Dismiss" className={`rounded-lg p-1 text-[#14121F]/50 hover:text-[#14121F] ${focus}`}><X className="h-4 w-4" /></button>
+                            </span>
+                        </div>
+                    )}
                     {notice && (
                         <div role="alert" className="flex items-start justify-between gap-3 rounded-2xl border border-amber-300/60 bg-amber-50 px-4 py-3 text-sm text-amber-900">
                             <p>{notice}</p>
@@ -375,6 +357,7 @@ export function StudioHome({
                     </section>
                 </div>
             </div>
+            <MobileTabBar />
         </main>
     );
 }

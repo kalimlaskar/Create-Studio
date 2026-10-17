@@ -43,7 +43,13 @@
 
     function player(code, autoplay) {
         var frame = document.createElement('iframe');
-        frame.src = BASE + '/embed/' + encodeURIComponent(code) + (autoplay ? '?autoplay=1' : '');
+        // The host page's link parameters (UTM tags), address and referrer, for form hidden fields.
+        var params = new URLSearchParams();
+        if (autoplay) params.set('autoplay', '1');
+        params.set('page', location.href.split('#')[0].slice(0, 500));
+        if (location.search.length > 1) params.set('ctx', location.search.slice(1, 1000));
+        if (document.referrer) params.set('ref', document.referrer.slice(0, 500));
+        frame.src = BASE + '/embed/' + encodeURIComponent(code) + '?' + params.toString();
         frame.title = 'Cliprame video';
         frame.allow = 'autoplay; fullscreen; picture-in-picture; encrypted-media';
         frame.setAttribute('allowfullscreen', '');

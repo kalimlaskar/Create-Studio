@@ -3,6 +3,7 @@ import { CreatorStudioDashboard } from '@/components/studio/CreatorStudioDashboa
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { DEMO_SESSION_COOKIE, getDemoSessionUsername, isDemoAuthEnabled, verifyDemoSessionToken } from '@/lib/auth/demo';
 import { getPlanSummary } from '@/lib/plans/server';
+import { loadSidebar } from '@/lib/studio/account';
 import { cookies } from 'next/headers';
 
 export const metadata = { title: 'Your studio | Cliprame' };
@@ -47,7 +48,7 @@ export default async function StudioPage({ searchParams }: StudioPageProps) {
         .maybeSingle();
 
     // The plan comes only from the subscription record on the server, never from the browser.
-    const plan = await getPlanSummary(userId);
+    const [plan, sidebar] = await Promise.all([getPlanSummary(userId), loadSidebar()]);
 
     const userMetadata = data.claims.user_metadata as Record<string, unknown> | undefined;
     const metadataDisplayName = typeof userMetadata?.display_name === 'string' ? userMetadata.display_name : '';
@@ -69,6 +70,7 @@ export default async function StudioPage({ searchParams }: StudioPageProps) {
             isPro={plan.isPaid}
             userPlan={plan.name}
             planId={plan.plan}
+            sidebar={sidebar}
         />
     );
 }

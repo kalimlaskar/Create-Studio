@@ -1,48 +1,17 @@
-import { createSupabaseServerClient } from '@/lib/supabase/server';
-import { getPlanSummary } from '@/lib/plans/server';
+import { MarketingShell } from '@/components/marketing/MarketingShell';
+import { getMarketingSession } from '@/components/marketing/session';
 import DemoShowcaseClient from './DemoShowcaseClient';
 
-export const metadata = { title: 'Product Demos & Showcase | Cliprame' };
+export const metadata = {
+    title: 'Demo | Cliprame',
+    description: 'See a Cliprame video from both sides: what you record, what your prospect sees, and the alert you get when they watch. Plus scripts to borrow.',
+};
 
 export default async function DemoPage() {
-    let userPlan = '';
-    let isLoggedIn = false;
-    let displayName = 'User';
-
-    try {
-        const supabase = await createSupabaseServerClient();
-        if (supabase) {
-            const { data: authData } = await supabase.auth.getClaims();
-            if (authData?.claims?.sub) {
-                isLoggedIn = true;
-                const userId = authData.claims.sub;
-
-                const [profileRes, plan] = await Promise.all([
-                    supabase.from('profiles').select('display_name,username').eq('id', userId).maybeSingle(),
-                    // Plan comes only from the subscription record on the server.
-                    getPlanSummary(userId).catch(() => null),
-                ]);
-
-                if (profileRes.data?.display_name) {
-                    displayName = profileRes.data.display_name;
-                } else if (authData.claims.email) {
-                    displayName = String(authData.claims.email).split('@')[0];
-                }
-
-                if (plan?.isPaid) {
-                    userPlan = plan.name;
-                }
-            }
-        }
-    } catch (err) {
-        console.error('Failed to resolve session on demo page:', err);
-    }
-
+    const session = await getMarketingSession();
     return (
-        <DemoShowcaseClient
-            isLoggedIn={isLoggedIn}
-            userPlan={userPlan}
-            displayName={displayName}
-        />
+        <MarketingShell current="demo" session={session}>
+            <DemoShowcaseClient isLoggedIn={session.isLoggedIn} />
+        </MarketingShell>
     );
 }

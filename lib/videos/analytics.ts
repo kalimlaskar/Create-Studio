@@ -1,6 +1,6 @@
 // Turns raw viewer sessions into the numbers on a video's analytics page.
 // Kept free of database code so it can be unit-tested with plain objects.
-import type { Chapter, ChapterStats, VideoAnalytics, ViewerEvent, ViewerSummary } from './types';
+import type { Chapter, ChapterStats, HeatmapBucket, VideoAnalytics, ViewerEvent, ViewerSummary } from './types';
 
 export interface SessionInput {
     id: string;
@@ -18,6 +18,8 @@ export interface SessionInput {
     /** Missing on sessions recorded before embeds existed. */
     source?: 'share' | 'embed' | null;
     referrer_host?: string | null;
+    /** Set when the viewer unlocked a protected video with an email code. */
+    viewer_email?: string | null;
 }
 
 export interface LinkInput {
@@ -38,6 +40,8 @@ export interface EventInput {
 /** A session counts as a play once at least a second has been watched. */
 const PLAY_THRESHOLD_MS = 1000;
 const RETENTION_POINTS = 100;
+/** Fewer, wider cells than the retention line so each one stays readable on a phone. */
+const HEATMAP_BUCKETS = 50;
 /** A chapter counts as watched by a viewer when they played most of it. */
 const CHAPTER_WATCHED = 0.6;
 
@@ -51,6 +55,44 @@ const anyRewatched = (seconds: number[], from: number, to: number) => {
     for (let second = from; second < to; second += 1) if ((seconds[second] ?? 0) > 1) return true;
     return false;
 };
+
+const lastPlayedSecond = (seconds: number[]) => {
+    for (let second = seconds.length - 1; second >= 0; second -= 1) if ((seconds[second] ?? 0) > 0) return second;
+    return -1;
+};
+
+/**
+ * Where plays re-watched, skipped ahead or stopped, in equal slices of the video.
+ * Read from each play's per-second counts, so it needs no extra tracking:
+ * - re-watched: some second in the slice was played more than once;
+ * - skipped: nothing in the slice was played, but something after it was;
+ * - dropped off: the play's last watched second is in the slice and it didn't finish.
+ */
+export function computeHeatmap(durationSec: number, plays: SessionInput[]): HeatmapBucket[] {
+    const buckets = Math.min(HEATMAP_BUCKETS, durationSec);
+    const sessions = plays.map((session) => ({
+        seconds: session.seconds_watched ?? [],
+        last: Math.min(durationSec - 1, lastPlayedSecond(session.seconds_watched ?? [])),
+        // Playing up to the final second counts as finishing, even if the "ended" event was lost.
+        finished: session.completed || lastPlayedSecond(session.seconds_watched ?? []) >= durationSec - 1,
+    }));
+    const result: HeatmapBucket[] = [];
+    for (let bucket = 0; bucket < buckets; bucket += 1) {
+        const from = Math.floor((bucket / buckets) * durationSec);
+        const to = Math.max(from + 1, Math.floor(((bucket + 1) / buckets) * durationSec));
+        let rewatched = 0;
+        let skipped = 0;
+        let droppedOff = 0;
+        for (const session of sessions) {
+            if (anyRewatched(session.seconds, from, to)) rewatched += 1;
+            if (session.last >= to && countWatched(session.seconds, from, to) === 0) skipped += 1;
+            if (!session.finished && session.last >= from && session.last < to) droppedOff += 1;
+        }
+        const share = (count: number) => (sessions.length ? count / sessions.length : 0);
+        result.push({ startMs: from * 1000, endMs: to * 1000, rewatched: share(rewatched), skipped: share(skipped), droppedOff: share(droppedOff) });
+    }
+    return result;
+}
 
 function chapterRanges(chapters: Chapter[], durationSec: number) {
     return chapters.map((chapter, index) => {
@@ -114,13 +156,14 @@ export function computeAnalytics(durationMs: number, chapters: Chapter[], sessio
     const groups = new Map<string, SessionInput[]>();
     for (const session of sessions) {
         const link = session.share_link_id ? linkById.get(session.share_link_id) : undefined;
-        const key = link && (link.recipient_email || link.recipient_name) ? `link:${link.id}` : `viewer:${session.viewer_key}`;
+        const key = link && (link.recipient_email || link.recipient_name) ? `link:${link.id}` : session.viewer_email ? `email:${session.viewer_email}` : `viewer:${session.viewer_key}`;
         groups.set(key, [...(groups.get(key) ?? []), session]);
     }
 
     const viewers: ViewerSummary[] = [...groups.entries()].map(([key, group]) => {
         const link = group[0].share_link_id ? linkById.get(group[0].share_link_id) : undefined;
         const personal = key.startsWith('link:') ? link : undefined;
+        const verifiedEmail = group.find((session) => session.viewer_email)?.viewer_email ?? null;
         const seconds = mergeSeconds(group, durationSec);
         const furthest = Math.max(...group.map((session) => session.max_position_ms));
         const latest = group.reduce((a, b) => (a.last_seen_at > b.last_seen_at ? a : b));
@@ -139,8 +182,8 @@ export function computeAnalytics(durationMs: number, chapters: Chapter[], sessio
 
         return {
             key,
-            name: personal?.recipient_name || personal?.recipient_email || `Viewer ${group[0].viewer_key.slice(0, 4)}`,
-            email: personal?.recipient_email ?? null,
+            name: personal?.recipient_name || personal?.recipient_email || verifiedEmail || `Viewer ${group[0].viewer_key.slice(0, 4)}`,
+            email: personal?.recipient_email ?? verifiedEmail,
             company: personal?.recipient_company ?? null,
             linkId: personal?.id ?? null,
             sessions: group.filter((session) => session.watched_ms >= PLAY_THRESHOLD_MS).length,
@@ -176,8 +219,10 @@ export function computeAnalytics(durationMs: number, chapters: Chapter[], sessio
         ctaClicks: sessions.filter((session) => session.cta_clicked).length,
         totalWatchMs: sessions.reduce((sum, session) => sum + session.watched_ms, 0),
         retention,
+        heatmap: computeHeatmap(durationSec, plays),
         chapters: chapterStats,
         sources: [...sourceCounts.values()].sort((a, b) => b.plays - a.plays),
         viewers: viewers.slice(0, 200),
+        leads: [],
     };
 }

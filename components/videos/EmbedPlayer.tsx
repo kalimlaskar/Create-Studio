@@ -4,6 +4,9 @@ import { useEffect, useRef, useState } from 'react';
 import { ListVideo, MousePointerClick, Play, RotateCcw, X } from 'lucide-react';
 import { formatClock, type Chapter } from '@/lib/videos/types';
 import { useViewTracking } from '@/lib/videos/useViewTracking';
+import type { PublicInteraction } from '@/lib/videos/interactions';
+import { InteractionLayer } from './InteractionLayer';
+import type { HostPage } from './LeadForm';
 
 interface Props {
     slug: string;
@@ -17,12 +20,18 @@ interface Props {
     showBadge: boolean;
     autoplay: boolean;
     referrerHost: string | null;
+    /** Unlock token for protected videos, sent with analytics. */
+    accessToken?: string | null;
+    interactions?: PublicInteraction[];
+    recipientEmail?: string | null;
+    /** The page the video is embedded on (from embed.js), for form hidden fields. */
+    host?: HostPage | null;
 }
 
 const focus = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80';
 
 /** Full-size player for embeds: chapters menu, end screen with the button, and the same tracking as share pages. */
-export function EmbedPlayer({ slug, title, playbackUrl, posterUrl, chapters, durationMs, ctaLabel, ctaUrl, showBadge, autoplay, referrerHost }: Props) {
+export function EmbedPlayer({ slug, title, playbackUrl, posterUrl, chapters, durationMs, ctaLabel, ctaUrl, showBadge, autoplay, referrerHost, accessToken = null, interactions = [], recipientEmail = null, host = null }: Props) {
     const videoRef = useRef<HTMLVideoElement>(null);
     const lastSecond = useRef<number | null>(null);
     const [started, setStarted] = useState(false);
@@ -30,7 +39,7 @@ export function EmbedPlayer({ slug, title, playbackUrl, posterUrl, chapters, dur
     const [playing, setPlaying] = useState(false);
     const [chaptersOpen, setChaptersOpen] = useState(false);
     const [currentMs, setCurrentMs] = useState(0);
-    const tracking = useViewTracking(slug, { source: 'embed', referrerHost });
+    const tracking = useViewTracking(slug, { source: 'embed', referrerHost, accessToken });
     const hasCta = Boolean(ctaLabel && ctaUrl);
 
     // Popups open with ?autoplay=1. Browsers may block sound; then the play button stays.
@@ -151,6 +160,16 @@ export function EmbedPlayer({ slug, title, playbackUrl, posterUrl, chapters, dur
                     Powered by Cliprame
                 </a>
             )}
+            <InteractionLayer
+                videoRef={videoRef}
+                interactions={interactions}
+                slug={slug}
+                source="embed"
+                host={host}
+                accessToken={accessToken}
+                prefillEmail={recipientEmail}
+                onEvent={(type, detail) => tracking.event({ type, positionMs: (videoRef.current?.currentTime ?? 0) * 1000, detail })}
+            />
         </main>
     );
 }

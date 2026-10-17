@@ -1,240 +1,144 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import Image from 'next/image';
-import type { CSSProperties } from 'react';
-import { Bricolage_Grotesque, Instrument_Sans } from 'next/font/google';
-import { ArrowRight, Check, EyeOff, Hand, HelpCircle, Images, Layers, Mic, ScreenShare, Scissors, Sparkles, Type } from 'lucide-react';
+import { ArrowRight, BellRing, EyeOff, Link2, Plus, Repeat, ScreenShare, Scissors, ShieldCheck, Sparkles, UserRound } from 'lucide-react';
 import { PricingPlans } from '@/components/pricing/PricingPlans';
+import { MarketingShell } from '@/components/marketing/MarketingShell';
+import { getMarketingSession } from '@/components/marketing/session';
+import { D as DISPLAY, focus as FOCUS, label, serif } from '@/components/marketing/theme';
 import { PLAN_LIMITS, exportLabel, watermarkLabel } from '@/components/pricing/planLimits';
 
-const display = Bricolage_Grotesque({ subsets: ['latin'], variable: '--font-display', display: 'swap' });
-const body = Instrument_Sans({ subsets: ['latin'], variable: '--font-body', display: 'swap' });
 
 export const metadata: Metadata = {
     title: 'Pricing | Cliprame',
-    description: 'Start free with every Cliprame tool. Upgrade for longer exports, no watermark and more AI requests.',
+    description: 'Start free with tracked links, viewer analytics, protection and Slack/HubSpot alerts. Upgrade to host more videos, send longer walkthroughs and remove the watermark.',
 };
 
-const D = 'font-[family-name:var(--font-display)]';
-const focus =
-    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6A4CFF]/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[#F7F6FB]';
 
-const css = `
-html{scroll-behavior:smooth}
-@keyframes rise{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
-.rise{opacity:0;animation:rise .8s cubic-bezier(.2,.7,.2,1) forwards;animation-delay:calc(var(--d,0)*90ms)}
-.grain{background-image:radial-gradient(rgba(20,18,31,.04) 1px,transparent 1px);background-size:24px 24px}
-details summary::-webkit-details-marker{display:none}
-@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}.rise{animation:none;opacity:1}}
-`;
 
 const included = [
-    { icon: ScreenShare, title: 'Screen + camera in one take', text: 'Share your screen with a floating camera card, in browser, macOS or minimal frames.' },
-    { icon: EyeOff, title: 'Private teleprompter', text: 'Read your script on screen. It never appears in the recording.' },
-    { icon: Scissors, title: 'Edit by text', text: 'Delete words from the transcript to cut the video. Trim, split and restore anything.' },
-    { icon: Hand, title: 'Hand-tracked drawing', text: 'Draw, write and erase with your hand, with rough shapes snapping clean.' },
-    { icon: Images, title: 'Photo + video reels', text: 'Product templates, 3D depth photos, sci-fi transitions, music and effects.' },
-    { icon: Type, title: 'Captions that follow your voice', text: 'Word-by-word captions in English, Hindi and Hinglish.' },
-    { icon: Mic, title: 'AI scripts and voiceover', text: 'Scripts in seven languages and voiceover in English, Hindi, Bengali, Tamil and Telugu.' },
-    { icon: Layers, title: 'Backgrounds and looks', text: 'Blur, green screen, cutout, hologram and cartoon looks, with no setup.' },
-    { icon: Sparkles, title: 'Your brand on every video', text: 'Add your logo, badges and colors to reels and showcase videos.' },
+    { icon: Link2, title: 'Personal tracked links', text: 'A link per prospect, with their name on the page and their views attributed to them.' },
+    { icon: UserRound, title: 'Who watched, and how much', text: 'Every viewer with how far they got, their device and a timeline of what they did.' },
+    { icon: Repeat, title: 'Drop-off heatmaps', text: 'See where people rewatched, skipped or stopped, and which chapters they cared about.' },
+    { icon: ShieldCheck, title: 'PIN, password and email codes', text: 'Lock confidential pitches and limit them to named people or company domains.' },
+    { icon: BellRing, title: 'Slack, HubSpot and webhooks', text: 'Alerts when someone starts, finishes or clicks, sent where your team already works.' },
+    { icon: EyeOff, title: 'Private teleprompter', text: 'Read your talking points on screen. They never appear in the recording.' },
+    { icon: ScreenShare, title: 'Screen + camera in one take', text: 'A floating camera card next to your product, deck or proposal.' },
+    { icon: Scissors, title: 'Edit by text', text: 'Delete words from the transcript to cut the video. Restore anything you removed.' },
+    { icon: Sparkles, title: 'AI talking points', text: 'Scripts in seven languages, plus captions that follow your voice.' },
 ];
 
 const { free, creator, studio } = PLAN_LIMITS;
 
 const limitRows: Array<{ label: string; free: string; creator: string; studio: string }> = [
-    { label: 'All studio tools', free: 'Included', creator: 'Included', studio: 'Included' },
-    { label: 'Export length', free: `Up to ${exportLabel(free)}`, creator: `Up to ${exportLabel(creator)}`, studio: `Up to ${exportLabel(studio)}` },
+    { label: 'Videos hosted with tracked links', free: `${free.hostedVideos}`, creator: `${creator.hostedVideos}`, studio: `${studio.hostedVideos}` },
+    { label: 'Viewer analytics, protection and alerts', free: 'Included', creator: 'Included', studio: 'Included' },
+    { label: 'Limit embeds to your websites', free: '—', creator: 'Included', studio: 'Included' },
+    { label: 'Video length', free: `Up to ${exportLabel(free)}`, creator: `Up to ${exportLabel(creator)}`, studio: `Up to ${exportLabel(studio)}` },
     { label: 'Watermark', free: watermarkLabel(free), creator: watermarkLabel(creator), studio: watermarkLabel(studio) },
     { label: 'Transcription per month', free: `${free.transcriptionMinutes} min`, creator: `${creator.transcriptionMinutes} min`, studio: `${studio.transcriptionMinutes} min` },
     { label: 'AI voiceover per month', free: `${free.voiceoverMinutes} min`, creator: `${creator.voiceoverMinutes} min`, studio: `${studio.voiceoverMinutes} min` },
-    { label: 'Drafts', free: 'In your browser', creator: 'In your browser', studio: 'In your browser' },
 ];
 
 const faqs = [
-    { q: 'Is the free plan really free?', a: 'Yes. You can record, edit by text, make reels and use every tool without paying. Free exports are shorter and carry a small Cliprame watermark.' },
-    { q: 'What changes when I upgrade?', a: 'Your exports can be longer, the watermark goes away and you get far more AI requests each day. The tools themselves are the same on every plan.' },
-    { q: 'How does billing work?', a: 'Paid plans are monthly subscriptions in INR, processed securely by Razorpay. You can read the full terms in our refund and cancellation policy.' },
-    { q: 'Where are my videos and drafts stored?', a: 'On your device, in your browser. Audio is only sent for processing when you ask for captions, a transcript or AI features.' },
-    { q: 'Do I need to install anything?', a: 'No. Cliprame runs entirely in your browser tab.' },
+    { q: 'Is the free plan really free?', a: 'Yes. You can record, send tracked links, see full analytics, lock videos and connect Slack or HubSpot without paying. Free hosts fewer videos, keeps them shorter and adds a small Cliprame watermark.' },
+    { q: 'What changes when I upgrade?', a: 'You can host more videos, send longer walkthroughs, remove the watermark, limit embeds to your own websites and get more AI minutes. Tracking, analytics, protection and alerts are on every plan.' },
+    { q: 'What counts as a hosted video?', a: 'Each video you upload for sharing counts once, however many personal links you make for it. Delete a video to free up a slot.' },
+    { q: 'Do my prospects need an account?', a: 'No. They open the link and press play, or unlock it with a PIN, password or email code if you’ve locked it.' },
+    { q: 'How does billing work?', a: 'Paid plans are monthly subscriptions, processed securely by Razorpay. You can read the full terms in our refund and cancellation policy.' },
 ];
 
-function Wordmark() {
-    return (
-        <Link href="/" aria-label="Cliprame home" className={`group inline-flex shrink-0 items-center gap-2.5 rounded-full font-semibold tracking-tight text-[#14121F] ${focus}`}>
-            <Image src="/cliprame-icon.svg" alt="" width={36} height={36} className="h-9 w-9 transition-transform duration-200 group-hover:scale-105" />
-            <span className={`${D} text-lg font-bold`}>Cliprame</span>
-        </Link>
-    );
-}
-
-const navLink = `rounded-full px-4 py-2 text-sm font-medium text-[#14121F]/65 transition-colors hover:bg-[#14121F]/[0.06] hover:text-[#14121F] ${focus}`;
-const mobileNavLink = 'shrink-0 rounded-full bg-white/70 px-3.5 py-1.5 text-xs font-medium text-[#14121F]/70 backdrop-blur transition-colors hover:text-[#14121F]';
-
-export default function PricingPage() {
+export default async function PricingPage() {
     const razorpayReady = Boolean(process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET && process.env.SUPABASE_SERVICE_ROLE_KEY);
     const available = {
         creator: razorpayReady && Boolean(process.env.RAZORPAY_PLAN_ID_CREATOR || process.env.RAZORPAY_PLAN_ID),
         studio: razorpayReady && Boolean(process.env.RAZORPAY_PLAN_ID_STUDIO),
     };
+    const session = await getMarketingSession();
 
     return (
-        <main className={`${display.variable} ${body.variable} relative min-h-dvh overflow-x-clip bg-[#F7F6FB] font-[family-name:var(--font-body)] text-[#14121F] selection:bg-[#6A4CFF]/20`}>
-            <style dangerouslySetInnerHTML={{ __html: css }} />
-            <div className="grain pointer-events-none absolute inset-0 -z-10" />
-
-            <header className="sticky top-0 z-50 px-3 pt-3 sm:px-6 sm:pt-4">
-                <div className="mx-auto flex h-14 max-w-5xl items-center justify-between gap-3 rounded-full border border-white/70 bg-white/70 pl-4 pr-2 shadow-[0_10px_30px_-10px_rgba(20,18,31,0.18)] backdrop-blur-xl sm:h-16 sm:pl-5">
-                    <Wordmark />
-                    <nav aria-label="Main navigation" className="hidden items-center gap-1 md:flex">
-                        <Link href="/" className={navLink}>Home</Link>
-                        <Link href="/demo" className={navLink}>Demos</Link>
-                        <Link href="/features" className={navLink}>Features</Link>
-                        <span aria-current="page" className="rounded-full bg-[#14121F]/[0.08] px-4 py-2 text-sm font-semibold text-[#14121F]">Pricing</span>
-                    </nav>
-                    <div className="flex shrink-0 items-center gap-1">
-                        <Link href="/login" className={`rounded-full px-3 py-2 text-sm font-medium text-[#14121F]/75 transition-colors hover:text-[#14121F] sm:px-4 ${focus}`}>Log in</Link>
-                        <Link href="/login?setup=1" className={`inline-flex items-center gap-1.5 rounded-full bg-[#14121F] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#2c2742] sm:px-5 ${focus}`}>
-                            Try the studio <ArrowRight className="h-3.5 w-3.5" />
-                        </Link>
-                    </div>
-                </div>
-                <nav aria-label="Mobile main navigation" className="mx-auto mt-2 flex max-w-5xl gap-1.5 overflow-x-auto px-1 [scrollbar-width:none] md:hidden [&::-webkit-scrollbar]:hidden">
-                    <Link href="/" className={mobileNavLink}>Home</Link>
-                    <Link href="/demo" className={mobileNavLink}>Demos</Link>
-                    <Link href="/features" className={mobileNavLink}>Features</Link>
-                    <span className="shrink-0 rounded-full bg-[#14121F] px-3.5 py-1.5 text-xs font-medium text-white">Pricing</span>
-                </nav>
-            </header>
-
-            {/* Hero */}
-            <section className="relative mx-auto max-w-7xl px-5 pb-8 pt-12 sm:px-8 sm:pt-16 lg:px-12">
-                <div className="absolute -left-20 -top-10 -z-10 h-72 w-72 rounded-full bg-[#6A4CFF]/15 blur-3xl" />
-                <div className="absolute -right-20 top-10 -z-10 h-72 w-72 rounded-full bg-[#FF3D81]/10 blur-3xl" />
-
-                <div className="rise" style={{ '--d': 0 } as CSSProperties}>
-                    <span className="inline-flex items-center gap-1.5 rounded-full bg-[#6A4CFF]/10 px-3.5 py-1 text-xs font-semibold text-[#6A4CFF]">
-                        <Sparkles className="h-3.5 w-3.5" /> Plans &amp; pricing
-                    </span>
-                </div>
-
-                <div className="rise mt-4 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between" style={{ '--d': 1 } as CSSProperties}>
-                    <div>
-                        <h1 className={`${D} text-4xl font-extrabold tracking-[-0.03em] text-[#14121F] sm:text-5xl`}>Simple pricing. Every tool included.</h1>
-                        <p className="mt-3 max-w-xl text-base leading-7 text-[#14121F]/65">Start free. Upgrade when you need longer videos, no watermark and more AI.</p>
-                    </div>
-                    <span className="inline-flex w-fit items-center gap-2 rounded-full border border-[#14121F]/10 bg-white px-3.5 py-2 text-xs font-semibold text-[#14121F]/80 shadow-sm">
-                        <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-500" /> Free plan available
-                    </span>
+        <MarketingShell current="pricing" session={session}>
+            <section className="mx-auto max-w-6xl px-5 pb-12 pt-14 sm:px-8 sm:pt-20">
+                <p className={label}>Pricing</p>
+                <div className="mt-5 grid gap-8 lg:grid-cols-[1.2fr_.8fr] lg:items-end">
+                    <h1 className={`${DISPLAY} text-[2.9rem] font-bold leading-[0.96] tracking-[-0.045em] sm:text-7xl`}>
+                        Know who watched, <span className={`${serif} text-[#5B3DF5]`}>on every plan.</span>
+                    </h1>
+                    <p className="text-[17px] leading-7 text-[#15120F]/62 lg:pb-2">Tracking, analytics, forms, protection and alerts are always included. Upgrade when you send more videos, or longer ones.</p>
                 </div>
             </section>
 
-            {/* Plans */}
-            <div id="plans" className="relative mx-auto max-w-7xl scroll-mt-28 px-5 pb-12 sm:px-8 lg:px-12">
-                <div className="rise" style={{ '--d': 2 } as CSSProperties}>
-                    <PricingPlans available={available} supportEmail={process.env.NEXT_PUBLIC_SUPPORT_EMAIL} />
-                </div>
+            <div id="plans" className="mx-auto max-w-6xl scroll-mt-24 px-5 pb-20 sm:px-8">
+                <PricingPlans available={available} supportEmail={process.env.NEXT_PUBLIC_SUPPORT_EMAIL} />
             </div>
 
             {/* Compare */}
-            <section className="relative mx-auto max-w-5xl px-5 pb-20 sm:px-8 lg:px-12">
-                <div className="overflow-hidden rounded-[2rem] border border-[#14121F]/10 bg-white shadow-[0_15px_40px_-15px_rgba(20,18,31,0.06)]">
-                    <div className="overflow-x-auto">
-                        <table className="w-full min-w-[34rem] text-left text-sm">
-                            <caption className="sr-only">Compare Cliprame plans</caption>
-                            <thead>
-                                <tr className="border-b border-[#14121F]/10 bg-[#F7F6FB] text-xs font-bold uppercase tracking-wider text-[#14121F]/60">
-                                    <th scope="col" className="px-6 py-4">Compare plans</th>
-                                    <th scope="col" className="px-4 py-4">Free</th>
-                                    <th scope="col" className="px-4 py-4">Creator</th>
-                                    <th scope="col" className="px-4 py-4">Studio</th>
+            <section className="mx-auto max-w-6xl px-5 pb-24 sm:px-8">
+                <div className="mb-8 flex items-center gap-4"><span className={label}>Compare plans</span><span className="h-px flex-1 bg-[#15120F]/10" /></div>
+                <div className="overflow-x-auto">
+                    <table className="w-full min-w-[36rem] text-left text-[15px]">
+                        <caption className="sr-only">Compare Cliprame plans</caption>
+                        <thead>
+                            <tr className="text-[12px] uppercase tracking-[0.12em] text-[#15120F]/45">
+                                <th scope="col" className="pb-4 font-semibold"><span className="sr-only">Feature</span></th>
+                                <th scope="col" className="pb-4 font-semibold">Free</th>
+                                <th scope="col" className="pb-4 font-semibold">Creator</th>
+                                <th scope="col" className="pb-4 font-semibold">Studio</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-[#15120F]/10 border-y border-[#15120F]/10">
+                            {limitRows.map((row) => (
+                                <tr key={row.label}>
+                                    <th scope="row" className="py-4 pr-6 font-medium">{row.label}</th>
+                                    <td className="py-4 pr-4 text-[#15120F]/65">{row.free}</td>
+                                    <td className="py-4 pr-4 text-[#15120F]/65">{row.creator}</td>
+                                    <td className="py-4 text-[#15120F]/65">{row.studio}</td>
                                 </tr>
-                            </thead>
-                            <tbody className="divide-y divide-[#14121F]/10">
-                                {limitRows.map((row) => (
-                                    <tr key={row.label}>
-                                        <th scope="row" className="px-6 py-4 font-semibold text-[#14121F]">{row.label}</th>
-                                        <td className="px-4 py-4 text-[#14121F]/70">{row.free}</td>
-                                        <td className="px-4 py-4 text-[#14121F]/70">{row.creator}</td>
-                                        <td className="px-4 py-4 text-[#14121F]/70">{row.studio}</td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
+                            ))}
+                        </tbody>
+                    </table>
                 </div>
             </section>
 
-            {/* Included in every plan */}
-            <section id="included" className="relative mx-auto max-w-7xl scroll-mt-28 px-5 pb-24 sm:px-8 lg:px-12">
-                <div className="mb-10 max-w-2xl">
-                    <span className="inline-flex items-center gap-1.5 rounded-full bg-[#6A4CFF]/10 px-3.5 py-1 text-xs font-semibold text-[#6A4CFF]">
-                        <Layers className="h-3.5 w-3.5" /> In every plan
-                    </span>
-                    <h2 className={`${D} mt-3 text-3xl font-bold tracking-tight text-[#14121F] sm:text-4xl`}>The whole studio, from day one.</h2>
-                    <p className="mt-2 text-sm leading-6 text-[#14121F]/65">No locked features. Paid plans only change how long you can export, the watermark and your daily AI requests.</p>
+            {/* Included */}
+            <section id="included" className="mx-auto max-w-6xl scroll-mt-24 px-5 pb-24 sm:px-8">
+                <div className="mb-10 grid gap-6 lg:grid-cols-[.8fr_1.2fr]">
+                    <h2 className={`${DISPLAY} text-4xl font-bold leading-[1.04] tracking-[-0.035em] sm:text-5xl`}>In every plan, <span className={`${serif} text-[#5B3DF5]`}>from day one.</span></h2>
+                    <p className="text-[16px] leading-7 text-[#15120F]/62 lg:pt-3">Paid plans change how many videos you host, how long they can be, the watermark and your AI minutes. Everything that tells you who watched is the same on Free.</p>
                 </div>
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                <dl className="grid gap-x-10 border-t border-[#15120F]/10 sm:grid-cols-2 lg:grid-cols-3">
                     {included.map((item) => (
-                        <article key={item.title} className="rounded-[2rem] border border-[#14121F]/10 bg-white p-6 shadow-[0_15px_40px_-20px_rgba(20,18,31,0.12)] transition hover:-translate-y-1">
-                            <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#6A4CFF]/10 text-[#6A4CFF]"><item.icon className="h-5 w-5" /></span>
-                            <h3 className={`${D} mt-5 text-lg font-bold tracking-tight`}>{item.title}</h3>
-                            <p className="mt-2 text-sm leading-6 text-[#14121F]/65">{item.text}</p>
-                        </article>
+                        <div key={item.title} className="border-b border-[#15120F]/10 py-6">
+                            <dt className="flex items-center gap-2.5 font-semibold"><item.icon className="h-[18px] w-[18px] text-[#5B3DF5]" strokeWidth={1.8} />{item.title}</dt>
+                            <dd className="mt-2 text-[15px] leading-7 text-[#15120F]/62">{item.text}</dd>
+                        </div>
                     ))}
-                </div>
+                </dl>
             </section>
 
             {/* FAQ */}
-            <section id="faq" className="relative mx-auto max-w-4xl scroll-mt-28 px-5 pb-24 sm:px-8 lg:px-12">
-                <div className="text-center">
-                    <span className="inline-flex items-center gap-1.5 rounded-full bg-[#FF3D81]/10 px-3 py-1 text-xs font-semibold text-[#FF3D81]">
-                        <HelpCircle className="h-3.5 w-3.5" /> Common questions
-                    </span>
-                    <h2 className={`${D} mt-3 text-3xl font-bold tracking-tight sm:text-4xl`}>Good to know.</h2>
-                </div>
-                <div className="mt-10 space-y-3">
+            <section id="faq" className="mx-auto grid max-w-6xl scroll-mt-24 gap-10 px-5 pb-24 sm:px-8 lg:grid-cols-[.8fr_1.2fr]">
+                <h2 className={`${DISPLAY} text-4xl font-bold leading-[1.04] tracking-[-0.035em] sm:text-5xl`}>Good to <span className={`${serif} text-[#5B3DF5]`}>know.</span></h2>
+                <div className="divide-y divide-[#15120F]/10 border-y border-[#15120F]/10">
                     {faqs.map((faq) => (
-                        <details key={faq.q} className="group rounded-3xl border border-[#14121F]/10 bg-white px-6 py-5 shadow-[0_15px_40px_-25px_rgba(20,18,31,0.15)]">
-                            <summary className={`flex cursor-pointer list-none items-center justify-between gap-4 rounded-lg text-base font-semibold ${focus}`}>
+                        <details key={faq.q} className="group py-5 [&_summary::-webkit-details-marker]:hidden">
+                            <summary className={`flex cursor-pointer list-none items-center justify-between gap-4 rounded ${DISPLAY} text-lg font-bold tracking-tight ${FOCUS}`}>
                                 {faq.q}
-                                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#6A4CFF]/10 text-[#6A4CFF] transition-transform group-open:rotate-45">
-                                    <Check className="hidden" />+
-                                </span>
+                                <Plus className="h-5 w-5 shrink-0 text-[#15120F]/40 transition group-open:rotate-45" />
                             </summary>
-                            <p className="mt-3 max-w-2xl text-[15px] leading-7 text-[#14121F]/65">{faq.a}</p>
+                            <p className="mt-3 max-w-2xl text-[15.5px] leading-7 text-[#15120F]/62">{faq.a}</p>
                         </details>
                     ))}
                 </div>
             </section>
 
-            {/* Closing CTA */}
-            <section className="relative mx-auto max-w-7xl px-5 pb-20 sm:px-8 lg:px-12">
-                <div className="relative overflow-hidden rounded-[2.5rem] border border-[#14121F]/10 bg-[linear-gradient(135deg,#ede9ff,#ffe6f0_55%,#fff6c9)] px-6 py-14 text-center sm:px-12 sm:py-20">
-                    <div className="pointer-events-none absolute -left-20 -top-24 h-72 w-72 rounded-full bg-[#6A4CFF]/25 blur-3xl" />
-                    <div className="pointer-events-none absolute -bottom-28 -right-16 h-72 w-72 rounded-full bg-[#FF3D81]/25 blur-3xl" />
-                    <div className="relative">
-                        <h2 className={`${D} mx-auto max-w-2xl text-3xl font-extrabold leading-[1.05] tracking-[-0.03em] sm:text-5xl`}>Start free. Upgrade when you&apos;re ready.</h2>
-                        <Link href="/login?setup=1" className={`group mt-8 inline-flex items-center gap-2 rounded-full bg-[#14121F] px-7 py-4 text-sm font-semibold text-white shadow-[0_14px_34px_-10px_rgba(20,18,31,0.55)] transition hover:-translate-y-0.5 hover:bg-[#2c2742] ${focus}`}>
-                            Try the studio <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
-                        </Link>
-                    </div>
+            <section className="mx-auto max-w-6xl px-5 pb-20 sm:px-8">
+                <div className="flex flex-col gap-8 rounded-2xl bg-[#15120F] px-7 py-14 text-[#F6F4EF] sm:px-14 lg:flex-row lg:items-end lg:justify-between">
+                    <h2 className={`${DISPLAY} max-w-2xl text-4xl font-bold leading-[1.04] tracking-[-0.04em] sm:text-5xl`}>Your next follow-up <span className={`${serif} text-[#B6A6FF]`}>starts free.</span></h2>
+                    <Link href={session.isLoggedIn ? '/studio' : '/signup'} className={`inline-flex w-fit items-center gap-2 rounded-xl bg-[#F6F4EF] px-5 py-3 text-[15px] font-semibold text-[#15120F] hover:bg-white ${FOCUS}`}>
+                        {session.isLoggedIn ? 'Open your studio' : 'Start free'} <ArrowRight className="h-4 w-4" />
+                    </Link>
                 </div>
             </section>
-
-            <footer className="relative border-t border-[#14121F]/10 bg-white/40 backdrop-blur-md">
-                <div className="mx-auto flex max-w-7xl flex-col gap-4 px-5 py-8 text-sm text-[#14121F]/55 sm:px-8 md:flex-row md:items-center md:justify-between lg:px-12">
-                    <Wordmark />
-                    <p className="font-medium">Record. Edit. Share your story.</p>
-                    <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
-                        <Link href="/" className="transition hover:text-[#14121F]">Home</Link>
-                        <Link href="/terms" className="transition hover:text-[#14121F]">Terms</Link>
-                        <Link href="/privacy" className="transition hover:text-[#14121F]">Privacy</Link>
-                        <Link href="/refunds" className="transition hover:text-[#14121F]">Refunds</Link>
-                        <Link href="/login" className="transition hover:text-[#14121F]">Log in</Link>
-                    </div>
-                </div>
-            </footer>
-        </main>
+        </MarketingShell>
     );
 }

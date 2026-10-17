@@ -4,7 +4,8 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { isR2Configured, r2Url, readObjectRange } from '@/lib/storage/r2';
 import { mp4DurationMs } from './mp4';
-import type { Chapter, ShareLink, VideoListItem, VideoRecord } from './types';
+import type { AccessMode, Chapter, ShareLink, VideoListItem, VideoRecord } from './types';
+import { readInteractions } from './interactions';
 import { computeAnalytics } from './analytics';
 
 export interface VideoRow {
@@ -22,6 +23,10 @@ export interface VideoRow {
     cta_url: string | null;
     embed_enabled: boolean;
     embed_domains: string[] | null;
+    access_mode: AccessMode;
+    access_emails: string[] | null;
+    access_version: number;
+    interactions: unknown;
     created_at: string;
 }
 
@@ -37,7 +42,7 @@ export interface ShareLinkRow {
     created_at: string;
 }
 
-export const VIDEO_COLUMNS = 'id,owner_id,title,status,storage_key,poster_key,content_type,size_bytes,duration_ms,chapters,cta_label,cta_url,embed_enabled,embed_domains,created_at';
+export const VIDEO_COLUMNS = 'id,owner_id,title,status,storage_key,poster_key,content_type,size_bytes,duration_ms,chapters,cta_label,cta_url,embed_enabled,embed_domains,access_mode,access_emails,access_version,interactions,created_at';
 export const LINK_COLUMNS = 'id,video_id,slug,recipient_name,recipient_email,recipient_company,is_default,revoked_at,created_at';
 
 /** The signed-in creator and a Supabase client that acts as them (row-level security applies). */
@@ -53,6 +58,9 @@ export const newSlug = () => crypto.randomBytes(12).toString('base64url');
 
 /** PostgREST's "table not found": the video sharing migration hasn't been applied. */
 export const isMissingTable = (error: unknown) => (error as { code?: string } | null)?.code === 'PGRST205';
+/** Postgres "column does not exist": a newer migration hasn't been applied. */
+export const isMissingColumn = (error: unknown) => (error as { code?: string } | null)?.code === '42703';
+export const MISSING_COLUMNS_MESSAGE = 'The database is missing columns from a newer migration. Run the files in supabase/migrations you haven’t applied yet (the latest is 20261017000400_video_access.sql) in the Supabase SQL Editor.';
 export const MISSING_TABLES_MESSAGE = 'Video sharing isn’t set up in the database yet. Run supabase/migrations/20261017000000_video_sharing.sql in the Supabase SQL Editor.';
 
 /** Supabase errors print as {} because their fields aren't enumerable; this keeps the useful parts. */
@@ -78,6 +86,9 @@ export function toVideoRecord(row: VideoRow): VideoRecord {
         ctaUrl: row.cta_url,
         embedEnabled: row.embed_enabled ?? true,
         embedDomains: row.embed_domains ?? [],
+        accessMode: row.access_mode ?? 'public',
+        accessEmails: row.access_emails ?? [],
+        interactions: readInteractions(row.interactions),
         createdAt: row.created_at,
     };
 }
@@ -128,16 +139,32 @@ export async function listVideos(supabase: SupabaseClient): Promise<VideoListIte
 
 /** Loads sessions, links and events for one video and computes its analytics. */
 export async function loadAnalytics(supabase: SupabaseClient, video: Pick<VideoRow, 'id' | 'duration_ms' | 'chapters'>) {
-    const [sessions, links, events] = await Promise.all([
+    const [sessions, links, events, leads] = await Promise.all([
         supabase.from('view_sessions')
-            .select('id,share_link_id,viewer_key,started_at,last_seen_at,watched_ms,max_position_ms,seconds_watched,completed,cta_clicked,device,country,source,referrer_host')
+            .select('id,share_link_id,viewer_key,started_at,last_seen_at,watched_ms,max_position_ms,seconds_watched,completed,cta_clicked,device,country,source,referrer_host,viewer_email')
             .eq('video_id', video.id).order('started_at', { ascending: false }).limit(5000),
         supabase.from('share_links').select('id,recipient_name,recipient_email,recipient_company').eq('video_id', video.id),
         supabase.from('view_events').select('session_id,type,position_ms,detail,created_at')
             .eq('video_id', video.id).order('created_at', { ascending: false }).limit(5000),
+        supabase.from('lead_submissions').select('id,interaction_id,form_title,fields,hidden,email,forward_status,forward_error,created_at')
+            .eq('video_id', video.id).order('created_at', { ascending: false }).limit(1000),
     ]);
     if (sessions.error) throw sessions.error;
-    return computeAnalytics(video.duration_ms, Array.isArray(video.chapters) ? video.chapters : [], sessions.data ?? [], links.data ?? [], events.data ?? []);
+    return {
+        ...computeAnalytics(video.duration_ms, Array.isArray(video.chapters) ? video.chapters : [], sessions.data ?? [], links.data ?? [], events.data ?? []),
+        // Missing before the interactions migration runs; analytics still load without it.
+        leads: (leads.data ?? []).map((row) => ({
+            id: row.id,
+            formId: row.interaction_id,
+            formTitle: row.form_title,
+            fields: (row.fields ?? {}) as Record<string, string>,
+            hidden: (row.hidden ?? {}) as Record<string, string>,
+            email: row.email,
+            forwardStatus: row.forward_status,
+            forwardError: row.forward_error,
+            createdAt: row.created_at,
+        })),
+    };
 }
 
 /** The real length of an uploaded MP4, read from its header at either end of the file. Null if it doesn't say. */
