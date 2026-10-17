@@ -46,6 +46,7 @@ export function SiteHeader({ current, session }: { current: NavKey; session: Mar
     }, [open]);
 
     return (
+        <>
         <header className={`sticky top-0 z-50 border-b transition-colors duration-200 ${scrolled ? 'border-[#15120F]/10 bg-[#F6F4EF]/90 backdrop-blur-md' : 'border-transparent'}`}>
             <div className="mx-auto flex h-16 max-w-6xl items-center gap-8 px-5 sm:px-8">
                 <Wordmark />
@@ -77,9 +78,11 @@ export function SiteHeader({ current, session }: { current: NavKey; session: Mar
                     </button>
                 </div>
             </div>
+        </header>
 
+            {/* Rendered outside <header>: its backdrop-filter would make it the containing block for this fixed overlay. */}
             {open && (
-                <div role="dialog" aria-modal="true" aria-label="Menu" className="mk-paper fixed inset-0 z-50 px-5 pt-4 md:hidden">
+                <div role="dialog" aria-modal="true" aria-label="Menu" className="mk-paper fixed inset-0 z-60 overflow-y-auto px-5 pt-4 md:hidden">
                     <div className="flex h-12 items-center justify-between">
                         <Wordmark />
                         <button type="button" onClick={() => setOpen(false)} aria-label="Close menu" className={`rounded-lg p-2 text-[#15120F]/70 hover:bg-[#15120F]/5 ${focus}`}><X className="h-5 w-5" /></button>
@@ -103,6 +106,6 @@ export function SiteHeader({ current, session }: { current: NavKey; session: Mar
                     </div>
                 </div>
             )}
-        </header>
+        </>
     );
 }
