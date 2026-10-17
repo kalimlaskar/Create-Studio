@@ -2,7 +2,7 @@
 // Kept free of server imports so it can be unit-tested.
 
 export function adminEmailList(value = process.env.ADMIN_EMAILS ?? '') {
-    return value.split(',').map((email) => email.trim().toLowerCase()).filter((email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email));
+    return value.split(',').map((email) => email.trim().replace(/^["']+|["']+$/g, '').trim().toLowerCase()).filter((email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email));
 }
 
 /** Only a confirmed email address counts, so nobody can sign up as an admin's address and get in. */

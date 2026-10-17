@@ -7,6 +7,8 @@ describe('super admins', () => {
     it('reads the list from the setting, ignoring junk', () => {
         expect(list).toEqual(['kalim007mailbox@gmail.com', 'ops@cliprame.com']);
         expect(adminEmailList('')).toEqual([]);
+        // Quotes pasted into the hosting dashboard's value box are ignored.
+        expect(adminEmailList('"ops@cliprame.com"')).toEqual(['ops@cliprame.com']);
     });
 
     it('only lets in a confirmed, listed email', () => {
