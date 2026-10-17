@@ -1,10 +1,11 @@
 import Link from 'next/link';
 import { COMPANY, LegalPage } from '@/components/legal/LegalPage';
-import { PLAN_LIMITS } from '@/components/pricing/planLimits';
+import { getCatalogPlan } from '@/lib/plans/catalog';
 
 export const metadata = { title: 'Terms of service | Cliprame' };
 
-export default function TermsPage() {
+export default async function TermsPage() {
+    const free = await getCatalogPlan('free');
     return (
         <LegalPage
             current="/terms"
@@ -15,7 +16,7 @@ export default function TermsPage() {
 
             <h2>Plans and payment</h2>
             <ul>
-                <li>The Free plan is limited ({PLAN_LIMITS.free.exportSeconds}-second exports with a watermark, {PLAN_LIMITS.free.hostedVideos} hosted videos). Paid plans and their limits are listed on the <Link href="/pricing">pricing page</Link>.</li>
+                <li>The Free plan is limited ({free.exportSeconds}-second videos{free.watermark ? ' with a watermark' : ''}, {free.hostedVideos} hosted videos). Paid plans and their limits are listed on the <Link href="/pricing">pricing page</Link>.</li>
                 <li>Paid plans renew monthly through Razorpay until cancelled. You can cancel at any time; access continues until the end of the period you’ve paid for.</li>
                 <li>Refunds are handled as described at the time of purchase or as required by law.</li>
                 <li>We may change prices with at least 30 days’ notice; changes apply from your next renewal.</li>

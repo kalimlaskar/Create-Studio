@@ -17,7 +17,7 @@ export async function loadAccountOverview(supabase: SupabaseClient, userId: stri
     const rows = (videos.data ?? []) as Array<{ size_bytes: number | string | null }>;
     const now = new Date();
     return {
-        plan: { id: plan.plan, name: plan.name, isPaid: plan.isPaid, priceUsd: plan.limits.priceUsd },
+        plan: { id: plan.plan, name: plan.name, isPaid: plan.isPaid, priceUsd: plan.limits.priceUsd, priceInr: plan.limits.priceInr },
         billing: plan.isPaid && subscription.data ? {
             status: subscription.data.status as string,
             periodEnd: subscription.data.current_period_end as string | null,

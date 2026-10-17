@@ -9,6 +9,12 @@ const ACTIONS: Record<string, string> = {
     'video.restored': 'Restored a video',
     'video.reviewed': 'Opened a reported video',
     'report.dismissed': 'Dismissed a report',
+    'plan.created': 'Created a package',
+    'plan.updated': 'Edited a package',
+    'plan.archived': 'Archived a package',
+    'plan.restored': 'Restored a package',
+    'plan.hidden': 'Hid a package',
+    'plan.shown': 'Showed a package',
 };
 
 export default async function AdminAuditPage() {
@@ -29,7 +35,8 @@ export default async function AdminAuditPage() {
                     <tbody className="divide-y divide-[#14121F]/[0.06]">
                         {entries.map((entry) => {
                             const details = entry.details as Record<string, unknown>;
-                            const summary = [details.title && `“${details.title}”`, details.email, details.reason && `reason: ${details.reason}`, details.resolution].filter(Boolean).join(' · ');
+                            const reduced = Array.isArray(details.reduced) && details.reduced.length ? `reduced: ${(details.reduced as string[]).join(', ')}` : null;
+                            const summary = [details.title && `“${details.title}”`, details.name, details.email, details.price, details.reason && `reason: ${details.reason}`, details.resolution, reduced].filter(Boolean).join(' · ');
                             return (
                                 <tr key={entry.id}>
                                     <td className="whitespace-nowrap px-4 py-3 text-xs text-[#14121F]/60">{dateTime(entry.created_at)}</td>

@@ -1,12 +1,13 @@
 import { requireAdmin } from '@/lib/admin/auth';
 import { loadAdminOverview } from '@/lib/admin/data';
 import { adminMoney } from '@/lib/admin/money';
-import { PLAN_LIMITS } from '@/components/pricing/planLimits';
+import { getCatalog } from '@/lib/plans/catalog';
 import { D, PLAN_STYLE, Stat, card } from '@/components/admin/ui';
 
 export default async function AdminAiPage() {
     const admin = await requireAdmin();
-    const [{ users, totals }, { money, currency, rate }] = await Promise.all([loadAdminOverview(admin.db), adminMoney()]);
+    const [{ users, totals }, { money, currency, rate }, catalog] = await Promise.all([loadAdminOverview(admin.db), adminMoney(), getCatalog()]);
+    const planById = new Map(catalog.map((plan) => [plan.id, plan]));
     const rows = users.filter((user) => user.aiTranscriptionMin + user.aiVoiceoverMin > 0).sort((a, b) => (b.aiTranscriptionMin + b.aiVoiceoverMin) - (a.aiTranscriptionMin + a.aiVoiceoverMin));
     const month = new Date().toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
 
@@ -29,7 +30,7 @@ export default async function AdminAiPage() {
                     </thead>
                     <tbody className="divide-y divide-[#14121F]/[0.06]">
                         {rows.map((user) => {
-                            const limits = PLAN_LIMITS[user.plan];
+                            const limits = planById.get(user.plan) ?? catalog[0];
                             const bar = (used: number, limit: number) => (
                                 <div className="flex items-center gap-2.5">
                                     <span className="h-1.5 w-24 overflow-hidden rounded-full bg-[#14121F]/[0.07]"><span className={`block h-full rounded-full ${used >= limit ? 'bg-red-500' : used >= limit * 0.8 ? 'bg-amber-500' : 'bg-[#6A4CFF]'}`} style={{ width: `${Math.min(100, (used / Math.max(1, limit)) * 100)}%` }} /></span>

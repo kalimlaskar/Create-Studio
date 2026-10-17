@@ -13,7 +13,6 @@ import { useStudioSession } from '@/hooks/useStudioSession';
 import { deleteEditorDraft, DraftSummary, LoadedDraft, listEditorDrafts, loadEditorDraft } from '@/components/editor/drafts';
 import { PhotoReelStudio } from '@/components/studio/PhotoReelStudio';
 import { StudioHome } from '@/components/studio/StudioHome';
-import { PLAN_LIMITS, type PlanId } from '@/components/pricing/planLimits';
 import { useDocumentPip } from './useDocumentPip';
 import { FloatingStudioPip } from './FloatingStudioPip';
 import { ScreenShareControls } from '@/components/studio/Screensharecontrols';
@@ -33,7 +32,7 @@ export function CreatorStudioDashboard({
     profilePersistenceEnabled = false,
     isPro = false,
     userPlan = 'Free',
-    planId = 'free',
+    exportSeconds = 60,
     sidebar,
 }: {
     sidebar?: { account: SidebarAccount | null; collapsed: boolean };
@@ -45,10 +44,11 @@ export function CreatorStudioDashboard({
     isPro?: boolean;
     userPlan?: string;
     /** Decided on the server from the subscription record. */
-    planId?: PlanId;
+    /** Longest video the user's package allows. */
+    exportSeconds?: number;
 }) {
     // Longest export this plan allows. The server checks it again on upload.
-    const exportLimitMs = PLAN_LIMITS[planId].exportSeconds * 1000;
+    const exportLimitMs = exportSeconds * 1000;
 
     const [creationMode, setCreationMode] = useState<'choose' | 'record' | 'photos'>('choose');
     const [view, setView] = useState<'record' | 'edit'>('record');

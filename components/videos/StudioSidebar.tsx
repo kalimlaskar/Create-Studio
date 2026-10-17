@@ -14,7 +14,7 @@ export interface SidebarAccount {
     handle: string | null;
     email: string | null;
     avatarUrl: string | null;
-    plan: { id: 'free' | 'creator' | 'studio'; name: string; isPaid: boolean };
+    plan: { id: string; name: string; isPaid: boolean };
     videos: number;
     videoLimit: number;
     liveIntegrations: number;

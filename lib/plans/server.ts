@@ -1,14 +1,13 @@
 import 'server-only';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { PLAN_LIMITS, PlanId } from '@/components/pricing/planLimits';
+import { isPaidPlan, type PlanId } from '@/components/pricing/planLimits';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
-import { planFromSubscription } from './entitlement';
+import { hasPaidAccess } from './entitlement';
+import { getCatalog, getCatalogPlan, planForRazorpayId } from './catalog';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 
 export type AiKind = 'transcription' | 'voiceover';
 
-const CREATOR_PLAN_ID = process.env.RAZORPAY_PLAN_ID_CREATOR ?? process.env.RAZORPAY_PLAN_ID;
-const STUDIO_PLAN_ID = process.env.RAZORPAY_PLAN_ID_STUDIO;
 
 /* ------------------------------ helpers ------------------------------ */
 
@@ -28,8 +27,10 @@ const toSeconds = (seconds: number) => Math.max(1, Math.ceil(seconds));
 /** First day of the current month (UTC), the key for monthly usage. */
 const currentPeriod = () => `${new Date().toISOString().slice(0, 7)}-01`;
 
-const limitMinutesFor = (plan: PlanId, kind: AiKind) =>
-    kind === 'transcription' ? PLAN_LIMITS[plan].transcriptionMinutes : PLAN_LIMITS[plan].voiceoverMinutes;
+async function limitMinutesFor(plan: PlanId, kind: AiKind) {
+    const limits = await getCatalogPlan(plan);
+    return kind === 'transcription' ? limits.transcriptionMinutes : limits.voiceoverMinutes;
+}
 
 /* -------------------------------- user -------------------------------- */
 
@@ -57,13 +58,18 @@ export async function getEffectivePlan(userId: string): Promise<PlanId> {
         .eq('user_id', userId)
         .maybeSingle();
     if (error) console.error('[plans] Could not read subscription:', error.message);
-    return planFromSubscription(data ?? null, { creator: CREATOR_PLAN_ID, studio: STUDIO_PLAN_ID });
+    if (!hasPaidAccess(data ?? null)) return 'free';
+    const plan = planForRazorpayId(await getCatalog(), data?.razorpay_plan_id ?? null);
+    if (plan) return plan;
+    // A paying customer on a Razorpay plan we don't recognise keeps Creator rather than losing access.
+    console.warn('[plans] Paid subscription with an unknown razorpay_plan_id:', data?.razorpay_plan_id);
+    return 'creator';
 }
 
 /** Plan details for showing in the UI and enforcing limits. */
 export async function getPlanSummary(userId: string) {
-    const plan = await getEffectivePlan(userId);
-    return { plan, name: PLAN_LIMITS[plan].name, isPaid: plan !== 'free', limits: PLAN_LIMITS[plan] };
+    const limits = await getCatalogPlan(await getEffectivePlan(userId));
+    return { plan: limits.id, name: limits.name, isPaid: isPaidPlan(limits), limits };
 }
 
 /* ------------------------------- usage ------------------------------- */
@@ -75,7 +81,7 @@ export type UsageResult =
 /** Adds usage if it stays within the plan's monthly limit. The database does the check atomically. */
 export async function consumeAiSeconds(userId: string, kind: AiKind, seconds: number): Promise<UsageResult> {
     const plan = await getEffectivePlan(userId);
-    const limitMinutes = limitMinutesFor(plan, kind);
+    const limitMinutes = await limitMinutesFor(plan, kind);
     const charged = toSeconds(seconds);
 
     const { data, error } = await admin().rpc('consume_ai_seconds', {

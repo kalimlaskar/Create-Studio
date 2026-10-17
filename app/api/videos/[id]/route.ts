@@ -2,7 +2,7 @@ import { deleteObject } from '@/lib/storage/r2';
 import { getStudioUser, toVideoRecord, VIDEO_COLUMNS, type VideoRow } from '@/lib/videos/server';
 import { accessSecretProblem, ACCESS_MODES, normalizeAccessEmails, normalizeChapters, normalizeCtaUrl, normalizeEmbedDomains, type AccessMode } from '@/lib/videos/types';
 import { hashSecret, isEmailConfigured } from '@/lib/videos/access';
-import { normalizeInteractions } from '@/lib/videos/interactions';
+import { normalizeInteractions, readInteractions } from '@/lib/videos/interactions';
 import { publicHttpsUrl } from '@/lib/integrations/server';
 import { getPlanSummary } from '@/lib/plans/server';
 
@@ -20,6 +20,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
     const body = await request.json().catch(() => null) as { title?: unknown; chapters?: unknown; ctaLabel?: unknown; ctaUrl?: unknown; embedEnabled?: unknown; embedDomains?: unknown; accessMode?: unknown; accessSecret?: unknown; accessEmails?: unknown; interactions?: unknown } | null;
     const update: Record<string, unknown> = { updated_at: new Date().toISOString() };
+    // The user's package, loaded only if a change needs it.
+    let planPromise: ReturnType<typeof getPlanSummary> | null = null;
+    const plan = () => (planPromise ??= getPlanSummary(user.id));
 
     if (body?.title !== undefined) {
         const title = typeof body.title === 'string' ? body.title.trim().slice(0, 160) : '';
@@ -46,9 +49,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (body?.embedDomains !== undefined) {
         const domains = normalizeEmbedDomains(body.embedDomains);
         if (!domains) return fail('Enter website addresses like acme.com or *.acme.com, up to 20.', 400);
-        // Limiting embeds to your own websites is a paid feature.
-        if (domains.length && !(await getPlanSummary(user.id)).isPaid) {
-            return Response.json({ error: 'Limiting embeds to your websites is available on Creator and Studio plans.', upgradeUrl: '/pricing' }, { status: 403 });
+        // Whether a package can limit embeds is set per package in the admin dashboard.
+        if (domains.length && !(await plan()).limits.embedDomains) {
+            return Response.json({ error: 'Limiting embeds to your websites isn’t included in your plan.', upgradeUrl: '/pricing' }, { status: 403 });
         }
         update.embed_domains = domains;
     }
@@ -56,6 +59,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (body?.accessMode !== undefined || body?.accessSecret !== undefined || body?.accessEmails !== undefined) {
         const mode = (body?.accessMode ?? video.access_mode) as AccessMode;
         if (!ACCESS_MODES.includes(mode)) return fail('Choose who can watch the video.', 400);
+        // Adding a lock needs a package that includes it. Videos already locked keep their lock.
+        if (mode !== 'public' && mode !== video.access_mode && !(await plan()).limits.protection) {
+            return Response.json({ error: 'Locking videos with a PIN, password or email code isn’t included in your plan.', upgradeUrl: '/pricing' }, { status: 403 });
+        }
         if (mode === 'pin' || mode === 'password') {
             const secret = body?.accessSecret;
             // Keeping the same mode without a new value keeps the current PIN or password.
@@ -90,6 +97,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
             if (item.type === 'form' && item.destination.kind === 'url' && !publicHttpsUrl(item.destination.url)) {
                 return fail(`“${item.title}” posts to an address that isn’t a public https:// website.`, 400);
             }
+        }
+        // New forms need a package that includes them; forms already on the video keep working.
+        const existingForms = new Set(readInteractions(video.interactions).filter((item) => item.type === 'form').map((item) => item.id));
+        if (result.interactions.some((item) => item.type === 'form' && !existingForms.has(item.id)) && !(await plan()).limits.forms) {
+            return Response.json({ error: 'Lead forms aren’t included in your plan. Buttons and booking embeds still work.', upgradeUrl: '/pricing' }, { status: 403 });
         }
         update.interactions = result.interactions;
     }

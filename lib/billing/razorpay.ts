@@ -3,14 +3,7 @@ import 'server-only';
 import crypto from 'node:crypto';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-export type PaidPlan = 'creator' | 'studio';
-
-/** The Razorpay plan IDs you created in the Razorpay dashboard (they start with "plan_"). */
-export function planIdFor(plan: PaidPlan) {
-    return plan === 'studio'
-        ? process.env.RAZORPAY_PLAN_ID_STUDIO
-        : process.env.RAZORPAY_PLAN_ID_CREATOR ?? process.env.RAZORPAY_PLAN_ID;
-}
+// Which Razorpay plan a package uses lives in lib/plans/catalog.ts (razorpayIdForPlan).
 
 let db: SupabaseClient | null = null;
 

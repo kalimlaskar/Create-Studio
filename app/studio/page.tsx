@@ -69,7 +69,7 @@ export default async function StudioPage({ searchParams }: StudioPageProps) {
             profilePersistenceEnabled
             isPro={plan.isPaid}
             userPlan={plan.name}
-            planId={plan.plan}
+            exportSeconds={plan.limits.exportSeconds}
             sidebar={sidebar}
         />
     );

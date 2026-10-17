@@ -1,6 +1,8 @@
 // app/api/billing/subscribe/route.ts
 import { getRequestUserId } from '@/lib/plans/server';
-import { billingDb, planIdFor, razorpayApi } from '@/lib/billing/razorpay';
+import { billingDb, razorpayApi } from '@/lib/billing/razorpay';
+import { getCatalog, razorpayIdForPlan } from '@/lib/plans/catalog';
+import { isPaidPlan } from '@/components/pricing/planLimits';
 
 const fail = (error: string, status: number) => Response.json({ error }, { status });
 
@@ -9,10 +11,12 @@ export async function POST(request: Request) {
     if (!userId) return fail('Sign in to upgrade.', 401);
 
     const body = await request.json().catch(() => null) as { plan?: unknown } | null;
-    const plan = body?.plan;
-    if (plan !== 'creator' && plan !== 'studio') return fail('Choose the Creator or Studio plan.', 400);
+    // Any paid package an admin has made available (not archived).
+    const chosen = (await getCatalog()).find((item) => item.id === body?.plan && isPaidPlan(item) && !item.archived);
+    if (!chosen) return fail('Choose a plan to upgrade to.', 400);
+    const plan = chosen.id;
 
-    const razorpayPlanId = planIdFor(plan);
+    const razorpayPlanId = razorpayIdForPlan(chosen);
     const keyId = process.env.RAZORPAY_KEY_ID;
     if (!razorpayPlanId || !keyId) return fail('This plan is not available for purchase yet.', 503);
 

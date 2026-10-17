@@ -3,7 +3,7 @@
 export interface Meter { used: number; limit: number }
 
 export interface AccountOverview {
-    plan: { id: 'free' | 'creator' | 'studio'; name: string; isPaid: boolean; priceUsd: number };
+    plan: { id: string; name: string; isPaid: boolean; priceUsd: number; priceInr: number };
     /** Only for paid plans with a subscription record. */
     billing: { status: string; periodEnd: string | null; cancelAtPeriodEnd: boolean } | null;
     ai: { transcription: Meter; voiceover: Meter; resetsOn: string };

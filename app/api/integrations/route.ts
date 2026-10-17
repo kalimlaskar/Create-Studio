@@ -1,6 +1,7 @@
 import { getStudioUser, isMissingTable } from '@/lib/videos/server';
 import { encrypt, findDuplicate, INTEGRATION_COLUMNS, newWebhookSecret, prepareTarget, toIntegration, type IntegrationRow } from '@/lib/integrations/server';
 import { MAX_INTEGRATIONS, type IntegrationKind } from '@/lib/integrations/types';
+import { getPlanSummary } from '@/lib/plans/server';
 import { normalizeEvents, normalizeIntegrationName } from '@/lib/integrations/validate';
 
 const fail = (error: string, status = 400) => Response.json({ error }, { status });
@@ -25,7 +26,10 @@ export async function POST(request: Request) {
 
     const { count, error: countError } = await user.supabase.from('integrations').select('id', { count: 'exact', head: true });
     if (countError) return fail(isMissingTable(countError) ? SETUP_MESSAGE : 'Could not check your integrations.', 500);
-    if ((count ?? 0) >= MAX_INTEGRATIONS) return fail(`You can connect up to ${MAX_INTEGRATIONS} integrations. Remove one first.`);
+    // The package sets how many connections are allowed (never more than the hard cap).
+    const allowed = Math.min(MAX_INTEGRATIONS, (await getPlanSummary(user.id)).limits.maxIntegrations);
+    if (allowed === 0) return Response.json({ error: 'Integrations aren’t included in your plan.', upgradeUrl: '/pricing' }, { status: 403 });
+    if ((count ?? 0) >= allowed) return Response.json({ error: `Your plan allows ${allowed} ${allowed === 1 ? 'integration' : 'integrations'}. Remove one first, or upgrade for more.`, upgradeUrl: '/pricing' }, { status: 403 });
 
     const events = body?.events === undefined ? ['video.viewed', 'video.completed', 'cta.clicked'] : normalizeEvents(body.events);
     if (!events) return fail('Choose which moments to send.');

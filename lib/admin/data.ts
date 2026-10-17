@@ -1,7 +1,8 @@
 import 'server-only';
 import type { SupabaseClient, User } from '@supabase/supabase-js';
-import { PLAN_LIMITS, PLAN_ORDER, type PlanId } from '@/components/pricing/planLimits';
-import { planFromSubscription } from '@/lib/plans/entitlement';
+import { isPaidPlan, type CatalogPlan, type PlanId } from '@/components/pricing/planLimits';
+import { hasPaidAccess } from '@/lib/plans/entitlement';
+import { getCatalog, planForRazorpayId } from '@/lib/plans/catalog';
 
 // Everything the admin dashboard shows, read with the service role and summed up
 // here. Counts and usage only: no video contents, form answers or secrets.
@@ -78,8 +79,9 @@ export async function loadAdminOverview(db: SupabaseClient): Promise<AdminOvervi
     ]);
 
     const names = new Map((profiles.data ?? []).map((row) => [row.id as string, row.display_name as string | null]));
-    const ids = { creator: process.env.RAZORPAY_PLAN_ID_CREATOR ?? process.env.RAZORPAY_PLAN_ID, studio: process.env.RAZORPAY_PLAN_ID_STUDIO };
-    const plans = new Map((subscriptions.data ?? []).map((row) => [row.user_id as string, planFromSubscription(row as Parameters<typeof planFromSubscription>[0], ids)]));
+    const catalog = await getCatalog();
+    // Same rule as the app: paid access, then which package the Razorpay plan belongs to.
+    const plans = new Map((subscriptions.data ?? []).map((row) => [row.user_id as string, hasPaidAccess(row) ? planForRazorpayId(catalog, row.razorpay_plan_id) ?? 'creator' : 'free']));
     const banMap = new Map((bans.data ?? []).map((row) => [row.user_id as string, { reason: row.reason as string, at: row.banned_at as string }]));
     const ai = new Map((usage.data ?? []).map((row) => [row.user_id as string, { t: Math.round((row.transcription_seconds ?? 0) / 60), v: Math.round((row.voiceover_seconds ?? 0) / 60) }]));
 
@@ -125,8 +127,10 @@ export async function loadAdminOverview(db: SupabaseClient): Promise<AdminOvervi
         };
     });
 
-    const paying = PLAN_ORDER.filter((plan) => PLAN_LIMITS[plan].priceUsd > 0 || PLAN_LIMITS[plan].priceInr > 0)
-        .map((plan) => ({ plan, name: PLAN_LIMITS[plan].name, count: users.filter((user) => user.plan === plan).length }));
+    const priceOf = new Map<string, CatalogPlan>(catalog.map((plan) => [plan.id, plan]));
+    const paying = catalog.filter(isPaidPlan)
+        .map((plan) => ({ plan: plan.id, name: plan.name, count: users.filter((user) => user.plan === plan.id).length }))
+        .filter((row) => row.count > 0 || !priceOf.get(row.plan)?.archived);
     const aiTranscriptionMin = users.reduce((sum, user) => sum + user.aiTranscriptionMin, 0);
     const aiVoiceoverMin = users.reduce((sum, user) => sum + user.aiVoiceoverMin, 0);
     const age = (user: AdminUser) => Date.now() - new Date(user.createdAt).getTime();
@@ -144,8 +148,8 @@ export async function loadAdminOverview(db: SupabaseClient): Promise<AdminOvervi
             new30d: users.filter((user) => age(user) < 30 * DAY).length,
             paying,
             mrr: {
-                usd: paying.reduce((sum, row) => sum + row.count * PLAN_LIMITS[row.plan].priceUsd, 0),
-                inr: paying.reduce((sum, row) => sum + row.count * PLAN_LIMITS[row.plan].priceInr, 0),
+                usd: paying.reduce((sum, row) => sum + row.count * (priceOf.get(row.plan)?.priceUsd ?? 0), 0),
+                inr: paying.reduce((sum, row) => sum + row.count * (priceOf.get(row.plan)?.priceInr ?? 0), 0),
             },
             videos: (videos.data ?? []).length,
             storageBytes: users.reduce((sum, user) => sum + user.storageBytes, 0),

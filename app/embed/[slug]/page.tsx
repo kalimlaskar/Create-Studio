@@ -5,7 +5,7 @@ import { GatedEmbedPlayer } from '@/components/videos/VideoGate';
 import { findShare } from '@/lib/videos/public';
 import { getStudioUser, playbackUrl, posterUrl } from '@/lib/videos/server';
 import { resolveGate } from '@/lib/videos/gating';
-import { getEffectivePlan } from '@/lib/plans/server';
+import { getPlanSummary } from '@/lib/plans/server';
 import { hostAllowed } from '@/lib/videos/types';
 
 // The player shown inside other websites, via /embed.js or an iframe.
@@ -49,7 +49,7 @@ export default async function EmbedPage({ params, searchParams }: Props) {
     }
 
     const [plan, viewer] = await Promise.all([
-        getEffectivePlan(video.owner_id).catch(() => 'free' as const),
+        getPlanSummary(video.owner_id).catch(() => null),
         getStudioUser().catch(() => null),
     ]);
     // Protected videos: no video address in the page until the viewer unlocks it.
@@ -61,7 +61,7 @@ export default async function EmbedPage({ params, searchParams }: Props) {
         durationMs: video.duration_ms,
         ctaLabel: video.cta_label,
         ctaUrl: video.cta_url,
-        showBadge: plan === 'free',
+        showBadge: plan?.limits.watermark ?? true,
         autoplay: autoplay === '1',
         referrerHost: onOwnSite ? null : embeddingHost,
         interactions: access.interactions,

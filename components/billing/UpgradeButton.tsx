@@ -28,7 +28,7 @@ function loadCheckout() {
 }
 
 export function UpgradeButton({ plan, className, children }: {
-    plan: 'creator' | 'studio';
+    plan: string;
     className?: string;
     children: React.ReactNode;
 }) {

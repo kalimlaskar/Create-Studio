@@ -5,7 +5,8 @@ import { PricingPlans } from '@/components/pricing/PricingPlans';
 import { MarketingShell } from '@/components/marketing/MarketingShell';
 import { getMarketingSession } from '@/components/marketing/session';
 import { D as DISPLAY, focus as FOCUS, label, serif } from '@/components/marketing/theme';
-import { PLAN_LIMITS, exportLabel, watermarkLabel } from '@/components/pricing/planLimits';
+import { exportLabel, watermarkLabel, type CatalogPlan } from '@/components/pricing/planLimits';
+import { getCatalog, razorpayIdForPlan } from '@/lib/plans/catalog';
 
 
 export const metadata: Metadata = {
@@ -27,16 +28,18 @@ const included = [
     { icon: Sparkles, title: 'AI talking points', text: 'Scripts in seven languages, plus captions that follow your voice.' },
 ];
 
-const { free, creator, studio } = PLAN_LIMITS;
-
-const limitRows: Array<{ label: string; free: string; creator: string; studio: string }> = [
-    { label: 'Videos hosted with tracked links', free: `${free.hostedVideos}`, creator: `${creator.hostedVideos}`, studio: `${studio.hostedVideos}` },
-    { label: 'Viewer analytics, protection and alerts', free: 'Included', creator: 'Included', studio: 'Included' },
-    { label: 'Limit embeds to your websites', free: '—', creator: 'Included', studio: 'Included' },
-    { label: 'Video length', free: `Up to ${exportLabel(free)}`, creator: `Up to ${exportLabel(creator)}`, studio: `Up to ${exportLabel(studio)}` },
-    { label: 'Watermark', free: watermarkLabel(free), creator: watermarkLabel(creator), studio: watermarkLabel(studio) },
-    { label: 'Transcription per month', free: `${free.transcriptionMinutes} min`, creator: `${creator.transcriptionMinutes} min`, studio: `${studio.transcriptionMinutes} min` },
-    { label: 'AI voiceover per month', free: `${free.voiceoverMinutes} min`, creator: `${creator.voiceoverMinutes} min`, studio: `${studio.voiceoverMinutes} min` },
+/** The comparison table's rows, one value per package. */
+const limitRows: Array<{ label: string; value: (plan: CatalogPlan) => string }> = [
+    { label: 'Videos hosted with tracked links', value: (plan) => plan.hostedVideos.toLocaleString('en-IN') },
+    { label: 'Viewer analytics and heatmaps', value: () => 'Included' },
+    { label: 'PIN, password and email-code locks', value: (plan) => (plan.protection ? 'Included' : '—') },
+    { label: 'Lead forms in videos', value: (plan) => (plan.forms ? 'Included' : '—') },
+    { label: 'Slack, HubSpot and webhook alerts', value: (plan) => (plan.maxIntegrations >= 20 ? 'Included' : plan.maxIntegrations > 0 ? `Up to ${plan.maxIntegrations}` : '—') },
+    { label: 'Limit embeds to your websites', value: (plan) => (plan.embedDomains ? 'Included' : '—') },
+    { label: 'Video length', value: (plan) => `Up to ${exportLabel(plan)}` },
+    { label: 'Watermark', value: (plan) => watermarkLabel(plan) },
+    { label: 'Transcription per month', value: (plan) => `${plan.transcriptionMinutes} min` },
+    { label: 'AI voiceover per month', value: (plan) => `${plan.voiceoverMinutes} min` },
 ];
 
 const faqs = [
@@ -48,11 +51,10 @@ const faqs = [
 ];
 
 export default async function PricingPage() {
+    // Packages on sale, as set in the admin dashboard.
+    const plans = (await getCatalog()).filter((plan) => plan.isPublic && !plan.archived);
     const razorpayReady = Boolean(process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET && process.env.SUPABASE_SERVICE_ROLE_KEY);
-    const available = {
-        creator: razorpayReady && Boolean(process.env.RAZORPAY_PLAN_ID_CREATOR || process.env.RAZORPAY_PLAN_ID),
-        studio: razorpayReady && Boolean(process.env.RAZORPAY_PLAN_ID_STUDIO),
-    };
+    const available = Object.fromEntries(plans.map((plan) => [plan.id, razorpayReady && Boolean(razorpayIdForPlan(plan))]));
     const session = await getMarketingSession();
 
     return (
@@ -68,7 +70,7 @@ export default async function PricingPage() {
             </section>
 
             <div id="plans" className="mx-auto max-w-6xl scroll-mt-24 px-5 pb-20 sm:px-8">
-                <PricingPlans available={available} supportEmail={process.env.NEXT_PUBLIC_SUPPORT_EMAIL} />
+                <PricingPlans plans={plans} available={available} supportEmail={process.env.NEXT_PUBLIC_SUPPORT_EMAIL} />
             </div>
 
             {/* Compare */}
@@ -80,18 +82,14 @@ export default async function PricingPage() {
                         <thead>
                             <tr className="text-[12px] uppercase tracking-[0.12em] text-[#15120F]/45">
                                 <th scope="col" className="pb-4 font-semibold"><span className="sr-only">Feature</span></th>
-                                <th scope="col" className="pb-4 font-semibold">Free</th>
-                                <th scope="col" className="pb-4 font-semibold">Creator</th>
-                                <th scope="col" className="pb-4 font-semibold">Studio</th>
+                                {plans.map((plan) => <th key={plan.id} scope="col" className="pb-4 pr-4 font-semibold">{plan.name}</th>)}
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-[#15120F]/10 border-y border-[#15120F]/10">
                             {limitRows.map((row) => (
                                 <tr key={row.label}>
                                     <th scope="row" className="py-4 pr-6 font-medium">{row.label}</th>
-                                    <td className="py-4 pr-4 text-[#15120F]/65">{row.free}</td>
-                                    <td className="py-4 pr-4 text-[#15120F]/65">{row.creator}</td>
-                                    <td className="py-4 text-[#15120F]/65">{row.studio}</td>
+                                    {plans.map((plan) => <td key={plan.id} className="py-4 pr-4 text-[#15120F]/65">{row.value(plan)}</td>)}
                                 </tr>
                             ))}
                         </tbody>

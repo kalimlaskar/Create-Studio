@@ -4,7 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { UpgradeButton } from '@/components/billing/UpgradeButton';
 import { ArrowRight, BadgeCheck, BriefcaseBusiness, Building2, Check, Rocket } from 'lucide-react';
-import { PLAN_LIMITS, PLAN_ORDER, PlanId, PlanLimit, exportLabel, formatUsd } from './planLimits';
+import { exportLabel, formatUsd, isPaidPlan, type CatalogPlan } from './planLimits';
 
 type Audience = 'founder' | 'sales' | 'agency';
 
@@ -14,52 +14,44 @@ const audiences: Array<{ id: Audience; label: string; icon: typeof Rocket }> = [
     { id: 'agency', label: 'Agency', icon: Building2 },
 ];
 
-const audienceCopy: Record<Audience, { title: string; description: string; recommendation: PlanId }> = {
-    founder: { title: 'For founders', description: 'Send personal demos and investor updates, and follow up when they watch.', recommendation: 'creator' },
-    sales: { title: 'For sales', description: 'Send a video to every prospect and get alerts in Slack or HubSpot when they watch.', recommendation: 'studio' },
-    agency: { title: 'For agencies', description: 'Walk clients through proposals, lock them with a password, and see what they reread.', recommendation: 'creator' },
+/** Which paid package to suggest: the first one, or the biggest for sales teams. */
+const audienceCopy: Record<Audience, { description: string; pick: 'first' | 'last' }> = {
+    founder: { description: 'Send personal demos and investor updates, and follow up when they watch.', pick: 'first' },
+    sales: { description: 'Send a video to every prospect and get alerts in Slack or HubSpot when they watch.', pick: 'last' },
+    agency: { description: 'Walk clients through proposals, lock them with a password, and see what they reread.', pick: 'first' },
 };
 
-const planCopy: Record<PlanId, { badge: string; period: string; summary: string }> = {
-    free: { badge: 'No card needed', period: 'to get started', summary: 'Record, send and track your first videos, with the full analytics.' },
-    creator: { badge: 'For weekly outreach', period: 'per month', summary: 'Room for a video to every prospect, longer walkthroughs and no watermark.' },
-    studio: { badge: 'For high-volume teams', period: 'per month', summary: 'The most videos and the longest walkthroughs, for people who send every day.' },
+/** Words for the built-in packages until an admin writes a description. */
+const DEFAULT_SUMMARY: Record<string, string> = {
+    free: 'Record, send and track your first videos, with the full analytics.',
+    creator: 'Room for a video to every prospect, longer walkthroughs and no watermark.',
+    studio: 'The most videos and the longest walkthroughs, for people who send every day.',
 };
 
-const hosted = (plan: PlanLimit) => `${plan.hostedVideos} videos hosted with tracked links`;
-const aiFeatures = (plan: PlanLimit) => [
-    `${plan.transcriptionMinutes} min of transcription per month (captions and edit by text)`,
-    `${plan.voiceoverMinutes} min of AI voiceover per month`,
-];
-
-const planFeatures: Record<PlanId, string[]> = {
-    free: [
-        hosted(PLAN_LIMITS.free),
-        'Personal links, viewer analytics and drop-off heatmaps',
-        'PIN, password and email-code protection',
-        'Slack, HubSpot and webhook alerts',
-        'Private teleprompter, screen + camera, edit by text',
-        `Videos up to ${exportLabel(PLAN_LIMITS.free)}, with a Cliprame watermark`,
-        ...aiFeatures(PLAN_LIMITS.free),
-    ],
-    creator: [
-        'Everything in Free',
-        hosted(PLAN_LIMITS.creator),
-        `Videos up to ${exportLabel(PLAN_LIMITS.creator)}`,
-        'No watermark',
-        'Limit embeds to your own websites',
-        ...aiFeatures(PLAN_LIMITS.creator),
-    ],
-    studio: [
-        'Everything in Creator',
-        hosted(PLAN_LIMITS.studio),
-        `Videos up to ${exportLabel(PLAN_LIMITS.studio)}`,
-        ...aiFeatures(PLAN_LIMITS.studio),
-    ],
-};
+/** What a package includes, in words, from its limits. Later packages list only what's better. */
+function featuresFor(plan: CatalogPlan, previous: CatalogPlan | null) {
+    const lines: string[] = [];
+    const differs = <K extends keyof CatalogPlan>(key: K) => !previous || previous[key] !== plan[key];
+    if (previous) lines.push(`Everything in ${previous.name}`);
+    if (differs('hostedVideos')) lines.push(`${plan.hostedVideos.toLocaleString('en-IN')} videos hosted with tracked links`);
+    if (!previous) lines.push('Personal links, viewer analytics and drop-off heatmaps');
+    if (plan.protection && (!previous || !previous.protection)) lines.push('PIN, password and email-code protection');
+    if (plan.forms && (!previous || !previous.forms)) lines.push('Lead forms, buttons and booking embeds in videos');
+    if (plan.maxIntegrations > 0 && differs('maxIntegrations')) lines.push(plan.maxIntegrations >= 20 ? 'Slack, HubSpot and webhook alerts' : `Up to ${plan.maxIntegrations} Slack, HubSpot or webhook ${plan.maxIntegrations === 1 ? 'connection' : 'connections'}`);
+    if (!previous) lines.push('Private teleprompter, screen + camera, edit by text');
+    if (differs('exportSeconds') || differs('watermark')) lines.push(`Videos up to ${exportLabel(plan)}${plan.watermark ? ', with a Cliprame watermark' : ''}`);
+    if (previous?.watermark && !plan.watermark) lines.push('No watermark');
+    if (plan.embedDomains && (!previous || !previous.embedDomains)) lines.push('Limit embeds to your own websites');
+    if (differs('transcriptionMinutes')) lines.push(`${plan.transcriptionMinutes} min of transcription per month (captions and edit by text)`);
+    if (differs('voiceoverMinutes')) lines.push(`${plan.voiceoverMinutes} min of AI voiceover per month`);
+    return lines;
+}
 
 interface PricingPlansProps {
-    available: { creator: boolean; studio: boolean };
+    /** Packages on sale, in order. */
+    plans: CatalogPlan[];
+    /** Which packages can be bought right now (Razorpay is set up for them). */
+    available: Record<string, boolean>;
     supportEmail?: string;
 }
 
@@ -67,9 +59,11 @@ const primaryButton = 'inline-flex w-full items-center justify-center gap-2 roun
 const secondaryButton = 'inline-flex w-full items-center justify-center gap-2 rounded-xl border border-[#15120F]/15 px-5 py-3 text-[15px] font-semibold text-[#15120F] transition hover:border-[#15120F]/40 hover:bg-[#15120F]/[0.03]';
 const serif = 'font-[family-name:var(--font-serif)] font-normal italic';
 
-export function PricingPlans({ available, supportEmail }: PricingPlansProps) {
+export function PricingPlans({ plans, available, supportEmail }: PricingPlansProps) {
     const [audience, setAudience] = useState<Audience>('founder');
-    const recommendedPlan = audienceCopy[audience].recommendation;
+    const paid = plans.filter(isPaidPlan);
+    const suggested = (audienceCopy[audience].pick === 'last' ? paid[paid.length - 1] : paid[0]) ?? plans[0];
+    const recommendedPlan = suggested?.id;
 
     return (
         <>
@@ -93,17 +87,19 @@ export function PricingPlans({ available, supportEmail }: PricingPlansProps) {
                 </div>
                 <p className="flex items-start gap-2 text-sm text-[#15120F]/60 md:max-w-md md:text-right">
                     <BadgeCheck className="mt-0.5 h-4 w-4 shrink-0 text-[#5B3DF5] md:hidden" />
-                    <span>{audienceCopy[audience].description} We’d suggest <strong className="font-semibold text-[#15120F]">{PLAN_LIMITS[recommendedPlan].name}</strong>.</span>
+                    <span>{audienceCopy[audience].description} We’d suggest <strong className="font-semibold text-[#15120F]">{suggested?.name}</strong>.</span>
                 </p>
             </section>
 
             {/* Plans */}
-            <section aria-label="Cliprame plans" className="mt-10 grid gap-5 lg:grid-cols-3">
-                {PLAN_ORDER.map((id) => {
-                    const limits = PLAN_LIMITS[id];
-                    const copy = planCopy[id];
+            <section aria-label="Cliprame plans" className={`mt-10 grid gap-5 ${plans.length >= 4 ? 'md:grid-cols-2 xl:grid-cols-4' : 'lg:grid-cols-3'}`}>
+                {plans.map((limits, index) => {
+                    const id = limits.id;
+                    const free = !isPaidPlan(limits);
+                    const copy = { badge: free ? 'No card needed' : '', period: free ? 'to get started' : 'per month', summary: limits.description || DEFAULT_SUMMARY[id] || '' };
+                    const features = featuresFor(limits, index > 0 ? plans[index - 1] : null);
                     const recommended = id === recommendedPlan;
-                    const canCheckout = id === 'creator' ? available.creator : id === 'studio' ? available.studio : false;
+                    const canCheckout = Boolean(available[id]);
                     const contactHref = supportEmail ? `mailto:${supportEmail}?subject=${encodeURIComponent(`Cliprame ${limits.name} plan`)}` : '/login';
 
                     return (
@@ -126,7 +122,7 @@ export function PricingPlans({ available, supportEmail }: PricingPlansProps) {
                             </p>
 
                             <div className="mt-6">
-                                {id === 'free' ? (
+                                {free ? (
                                     <Link href="/signup" className={recommended ? primaryButton : secondaryButton}>Start free <ArrowRight className="h-4 w-4" /></Link>
                                 ) : canCheckout ? (
                                     <UpgradeButton plan={id} className={recommended ? primaryButton : secondaryButton}>Upgrade to {limits.name}</UpgradeButton>
@@ -136,7 +132,7 @@ export function PricingPlans({ available, supportEmail }: PricingPlansProps) {
                             </div>
 
                             <ul className="mt-7 space-y-3 border-t border-[#15120F]/10 pt-6">
-                                {planFeatures[id].map((feature) => (
+                                {features.map((feature) => (
                                     <li key={feature} className="flex items-start gap-2.5 text-[14.5px] leading-6 text-[#15120F]/75">
                                         <Check className="mt-1 h-4 w-4 shrink-0 text-[#5B3DF5]" strokeWidth={2.4} />
                                         {feature}
