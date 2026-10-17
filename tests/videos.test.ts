@@ -77,6 +77,21 @@ describe('analytics', () => {
     });
 });
 
+describe('time slices', () => {
+    it('never repeats or skips a slice, for any video length', () => {
+        for (let seconds = 1; seconds <= 600; seconds += 1) {
+            const { heatmap, retention } = computeAnalytics(seconds * 1000, [], [], [], []);
+            for (const starts of [heatmap.map((bucket) => bucket.startMs), retention.map(([ms]) => ms)]) {
+                expect(starts[0], `${seconds}s`).toBe(0);
+                for (let i = 1; i < starts.length; i += 1) expect(starts[i], `${seconds}s, slice ${i}`).toBeGreaterThan(starts[i - 1]);
+            }
+            // Heatmap slices tile the whole video with no gaps.
+            heatmap.forEach((bucket, i) => { if (i) expect(bucket.startMs).toBe(heatmap[i - 1].endMs); });
+            expect(heatmap[heatmap.length - 1].endMs).toBe(seconds * 1000);
+        }
+    });
+});
+
 describe('embed websites', () => {
     it('cleans website lists', async () => {
         const { normalizeEmbedDomains } = await import('@/lib/videos/types');

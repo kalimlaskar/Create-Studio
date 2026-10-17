@@ -4,6 +4,8 @@ export interface PlanLimit {
     name: string;
     /** Monthly price in USD. */
     priceUsd: number;
+    /** Monthly price in INR (placeholder until final pricing). Used for revenue in rupees. */
+    priceInr: number;
     /** Longest export, in seconds. */
     exportSeconds: number;
     watermark: boolean;
@@ -24,9 +26,9 @@ export interface PlanLimit {
  * Re-check these numbers whenever Gemini prices change.
  */
 export const PLAN_LIMITS: Record<PlanId, PlanLimit> = {
-    free: { name: 'Free', priceUsd: 0, exportSeconds: 60, watermark: true, transcriptionMinutes: 10, voiceoverMinutes: 2, hostedVideos: 5 },
-    creator: { name: 'Creator', priceUsd: 15, exportSeconds: 300, watermark: false, transcriptionMinutes: 90, voiceoverMinutes: 30, hostedVideos: 100 },
-    studio: { name: 'Studio', priceUsd: 35, exportSeconds: 900, watermark: false, transcriptionMinutes: 250, voiceoverMinutes: 100, hostedVideos: 500 },
+    free: { name: 'Free', priceUsd: 0, priceInr: 0, exportSeconds: 60, watermark: true, transcriptionMinutes: 10, voiceoverMinutes: 2, hostedVideos: 5 },
+    creator: { name: 'Creator', priceUsd: 15, priceInr: 1500, exportSeconds: 300, watermark: false, transcriptionMinutes: 90, voiceoverMinutes: 30, hostedVideos: 100 },
+    studio: { name: 'Studio', priceUsd: 35, priceInr: 3500, exportSeconds: 900, watermark: false, transcriptionMinutes: 250, voiceoverMinutes: 100, hostedVideos: 500 },
 };
 
 /**

@@ -10,6 +10,7 @@ export interface AccountOverview {
     /** Hosted videos are what fills up: each plan allows a number of them. */
     videos: Meter;
     storage: { usedBytes: number; maxVideoBytes: number; maxVideoSeconds: number };
+    isAdmin: boolean;
 }
 
 export const share = (meter: Meter) => (meter.limit > 0 ? Math.min(1, meter.used / meter.limit) : 0);

@@ -3,6 +3,7 @@ import { cookies } from 'next/headers';
 import { getStudioUser } from '@/lib/videos/server';
 import { getPlanSummary } from '@/lib/plans/server';
 import { SIDEBAR_COOKIE, type SidebarAccount } from '@/components/videos/StudioSidebar';
+import { isAdminEmail } from '@/lib/admin/emails';
 
 /** Who's signed in, their plan and a couple of counts for the studio sidebar. Never throws. */
 export async function loadSidebarAccount(): Promise<SidebarAccount | null> {
@@ -26,6 +27,7 @@ export async function loadSidebarAccount(): Promise<SidebarAccount | null> {
             videos: videos.count ?? 0,
             videoLimit: plan.limits.hostedVideos,
             liveIntegrations: integrations.count ?? 0,
+            isAdmin: isAdminEmail(email, true),
         };
     } catch (error) {
         console.error('Could not load the sidebar account:', error);

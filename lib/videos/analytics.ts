@@ -78,8 +78,9 @@ export function computeHeatmap(durationSec: number, plays: SessionInput[]): Heat
     }));
     const result: HeatmapBucket[] = [];
     for (let bucket = 0; bucket < buckets; bucket += 1) {
-        const from = Math.floor((bucket / buckets) * durationSec);
-        const to = Math.max(from + 1, Math.floor(((bucket + 1) / buckets) * durationSec));
+        // Multiply before dividing: (i / n) * n isn't always i in floating point (14 / 49 * 49 = 13.999…).
+        const from = Math.floor((bucket * durationSec) / buckets);
+        const to = Math.max(from + 1, Math.floor(((bucket + 1) * durationSec) / buckets));
         let rewatched = 0;
         let skipped = 0;
         let droppedOff = 0;
@@ -123,8 +124,8 @@ export function computeAnalytics(durationMs: number, chapters: Chapter[], sessio
     const points = Math.min(RETENTION_POINTS, durationSec);
     const retention: Array<[number, number]> = [];
     for (let point = 0; point < points; point += 1) {
-        const from = Math.floor((point / points) * durationSec);
-        const to = Math.max(from + 1, Math.floor(((point + 1) / points) * durationSec));
+        const from = Math.floor((point * durationSec) / points);
+        const to = Math.max(from + 1, Math.floor(((point + 1) * durationSec) / points));
         const watching = plays.filter((session) => countWatched(session.seconds_watched ?? [], from, to) > 0).length;
         retention.push([from * 1000, plays.length ? watching / plays.length : 0]);
     }

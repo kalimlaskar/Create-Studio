@@ -1,4 +1,5 @@
 import { isR2Configured, r2Url } from '@/lib/storage/r2';
+import { isAccountBanned } from '@/lib/admin/bans';
 import { describeDbError, getStudioUser, isMissingColumn, isMissingTable, listVideos, MISSING_COLUMNS_MESSAGE, MISSING_TABLES_MESSAGE, posterObjectKey, toVideoRecord, VIDEO_COLUMNS, videoObjectKey, type VideoRow } from '@/lib/videos/server';
 import { MAX_UPLOAD_BYTES, SHARE_CONTENT_TYPES } from '@/lib/videos/types';
 import { getPlanSummary } from '@/lib/plans/server';
@@ -23,6 +24,7 @@ export async function GET() {
 export async function POST(request: Request) {
     const user = await getStudioUser();
     if (!user) return fail('Sign in to upload videos.', 401);
+    if (await isAccountBanned(user.id)) return fail('This account has been suspended. Contact support if you think this is a mistake.', 403);
     if (!isR2Configured()) return fail('Video hosting isn’t set up on this server yet (R2 storage is not configured).', 503);
 
     const body = await request.json().catch(() => null) as { title?: unknown; contentType?: unknown; sizeBytes?: unknown; durationMs?: unknown; hasPoster?: unknown } | null;

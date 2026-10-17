@@ -28,6 +28,8 @@ export interface VideoRecord {
     accessEmails: string[];
     /** In-video forms, buttons and booking embeds (full settings; owners only). */
     interactions: Interaction[];
+    /** Set when an admin took the video down for breaking the content rules. */
+    removed: { at: string; reason: string | null } | null;
     createdAt: string;
 }
 

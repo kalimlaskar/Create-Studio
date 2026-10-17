@@ -68,13 +68,17 @@ export default function PrivacyPage() {
             <h3>The browser extension</h3>
             <p>Cliprame Recorder records the tab you choose. Recordings are kept in the extension on your device until you download them or send them to Cliprame. Privacy-mask rules are stored on your device, and masking runs only on sites you turn it on for, after Chrome asks your permission. Masks are applied in the page before recording, so masked data never reaches the video.</p>
 
+            <h3>Reports about videos</h3>
+            <p>Anyone watching a shared video can report it, without an account. We store the reason, any details and contact email the reporter chooses to give, and a hashed network address to stop repeated reports. The sender isn’t told who reported their video.</p>
+            <p>We don’t routinely watch people’s videos. A Cliprame administrator opens a video only to review a report about it, through a link that expires after 15 minutes, and every such viewing is recorded in an internal audit log. If a video breaks our rules, we may take it down or suspend the account. Taken-down videos stop playing but aren’t deleted straight away, so a mistake can be put right.</p>
+
             <h2>How we use it</h2>
             <ul>
                 <li>To run the service: sign-in, storage, sharing, exports and AI features you request.</li>
                 <li>To show senders their viewer analytics and form submissions.</li>
                 <li>To protect videos the sender locked, and to deliver alerts and form submissions to the tools the sender connected.</li>
                 <li>To bill subscriptions and enforce plan limits.</li>
-                <li>To keep the service secure, prevent abuse and fix problems.</li>
+                <li>To keep the service secure, prevent abuse and fix problems, including reviewing reported videos and acting on them.</li>
                 <li>To reply to support requests and feedback.</li>
             </ul>
             <p>Our legal bases are your consent and the performance of our contract with you; for viewer analytics and security, our and the sender’s legitimate interests, which viewers can object to as described below.</p>
@@ -111,6 +115,7 @@ export default function PrivacyPage() {
                 <li>Email codes and records of wrong PINs or passwords: deleted after one day.</li>
                 <li>Records of which alerts were sent (used to avoid sending one twice): deleted after 90 days.</li>
                 <li>Integration settings: until the sender removes the integration or deletes their account.</li>
+                <li>Reports about videos and the record of admin actions: as long as needed for safety and legal reasons.</li>
                 <li>Uploads that never finish: deleted automatically after 24 hours.</li>
                 <li>Payment records: as long as tax and accounting law requires.</li>
             </ul>

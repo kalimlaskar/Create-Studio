@@ -139,6 +139,12 @@ export function VideoDetail({ initialVideo, playbackUrl, posterUrl, initialLinks
                 className={`${D} -ml-2 w-full rounded-xl border border-transparent bg-transparent px-2 py-1 text-3xl font-bold tracking-tight outline-none hover:border-[#14121F]/10 focus:border-[#6A4CFF] focus:bg-white`}
             />
             {notice && <p role="alert" className="-mt-5 text-sm font-medium text-red-600">{notice}</p>}
+            {video.removed && (
+                <div role="alert" className="-mt-3 rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm text-red-800">
+                    <p className="font-semibold">This video was taken down by Cliprame for breaking our content rules{video.removed.reason ? `: ${video.removed.reason}` : ''}.</p>
+                    <p className="mt-1 text-red-800/80">It no longer plays on share links or embeds. If you think this is a mistake, contact support and we’ll take another look.</p>
+                </div>
+            )}
 
             <div className="grid gap-6 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]">
                 <section className="space-y-3">

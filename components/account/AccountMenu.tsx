@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { ChevronDown, Crown, Film, LogOut, Settings, Sparkles, Type } from 'lucide-react';
+import { ChevronDown, Crown, Film, LogOut, Settings, ShieldCheck, Sparkles, Type } from 'lucide-react';
 import { signOutAction } from '@/app/auth/actions';
 import { startTour } from '@/components/tour/ProductTour';
 import { share, type AccountOverview, type Meter } from '@/lib/studio/overviewTypes';
@@ -106,6 +106,7 @@ export function AccountMenu({ name, email, avatarUrl, planName, tone = 'light' }
                     <div className="p-1.5">
                         <Link role="menuitem" href="/studio/account" onClick={() => setOpen(false)} className={item}><Settings className="h-4 w-4" /> Account settings</Link>
                         <Link role="menuitem" href="/studio/account#plan" onClick={() => setOpen(false)} className={item}><Crown className="h-4 w-4" /> Plan & usage</Link>
+                        {overview?.isAdmin && <Link role="menuitem" href="/admin" onClick={() => setOpen(false)} className={`${item} font-semibold text-[#14121F]`}><ShieldCheck className="h-4 w-4 text-[#6A4CFF]" /> Admin dashboard</Link>}
                         <button role="menuitem" type="button" onClick={() => { setOpen(false); startTour(); }} className={item}><Sparkles className="h-4 w-4" /> Take the tour</button>
                         <div className="my-1 h-px bg-[#14121F]/[0.07]" />
                         <form action={signOutAction}>

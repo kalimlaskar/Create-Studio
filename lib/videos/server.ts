@@ -27,6 +27,8 @@ export interface VideoRow {
     access_emails: string[] | null;
     access_version: number;
     interactions: unknown;
+    banned_at: string | null;
+    banned_reason: string | null;
     created_at: string;
 }
 
@@ -42,7 +44,7 @@ export interface ShareLinkRow {
     created_at: string;
 }
 
-export const VIDEO_COLUMNS = 'id,owner_id,title,status,storage_key,poster_key,content_type,size_bytes,duration_ms,chapters,cta_label,cta_url,embed_enabled,embed_domains,access_mode,access_emails,access_version,interactions,created_at';
+export const VIDEO_COLUMNS = 'id,owner_id,title,status,storage_key,poster_key,content_type,size_bytes,duration_ms,chapters,cta_label,cta_url,embed_enabled,embed_domains,access_mode,access_emails,access_version,interactions,banned_at,banned_reason,created_at';
 export const LINK_COLUMNS = 'id,video_id,slug,recipient_name,recipient_email,recipient_company,is_default,revoked_at,created_at';
 
 /** The signed-in creator and a Supabase client that acts as them (row-level security applies). */
@@ -89,6 +91,7 @@ export function toVideoRecord(row: VideoRow): VideoRecord {
         accessMode: row.access_mode ?? 'public',
         accessEmails: row.access_emails ?? [],
         interactions: readInteractions(row.interactions),
+        removed: row.banned_at ? { at: row.banned_at, reason: row.banned_reason } : null,
         createdAt: row.created_at,
     };
 }

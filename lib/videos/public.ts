@@ -12,8 +12,11 @@ export async function findShare(slug: string) {
 
     const { data: link } = await admin.from('share_links').select(LINK_COLUMNS).eq('slug', slug).is('revoked_at', null).maybeSingle();
     if (!link) return null;
-    const { data: video } = await admin.from('videos').select(VIDEO_COLUMNS).eq('id', link.video_id).eq('status', 'ready').maybeSingle();
+    const { data: video } = await admin.from('videos').select(VIDEO_COLUMNS).eq('id', link.video_id).eq('status', 'ready').is('banned_at', null).maybeSingle();
     if (!video) return null;
+    // Nothing from a banned account is served.
+    const { data: ban } = await admin.from('account_bans').select('user_id').eq('user_id', video.owner_id).maybeSingle();
+    if (ban) return null;
     return { admin, link: link as ShareLinkRow, video: video as VideoRow };
 }
 

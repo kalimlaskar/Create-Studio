@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
-import { ArrowUpRight, ChevronsUpDown, Compass, Crown, Film, Home, Images, LogOut, PanelLeftClose, PanelLeftOpen, Plug, Plus, Sparkles, Tag, Upload, UserRound, Video, type LucideIcon } from 'lucide-react';
+import { ArrowUpRight, ChevronsUpDown, Compass, Crown, ShieldCheck, Film, Home, Images, LogOut, PanelLeftClose, PanelLeftOpen, Plug, Plus, Sparkles, Tag, Upload, UserRound, Video, type LucideIcon } from 'lucide-react';
 import { signOutAction } from '@/app/auth/actions';
 import { startTour } from '@/components/tour/ProductTour';
 import { D, focus } from './ui';
@@ -18,6 +18,8 @@ export interface SidebarAccount {
     videos: number;
     videoLimit: number;
     liveIntegrations: number;
+    /** Shows the admin dashboard link. The dashboard itself checks again on the server. */
+    isAdmin?: boolean;
 }
 
 /** Remembered in a cookie so the server renders the right width and nothing jumps on load. */
@@ -239,6 +241,9 @@ export function StudioSidebar({ account, initialCollapsed, onCreate, extraItems 
                             <Link role="menuitem" href="/pricing" onClick={() => setMenuOpen(false)} className={`flex items-center gap-2.5 rounded-xl px-2.5 py-2 text-sm font-medium text-[#14121F]/75 hover:bg-[#14121F]/[0.05] hover:text-[#14121F] ${focus}`}>
                                 <Crown className="h-4 w-4" /> {account.plan.isPaid ? `${account.plan.name} plan` : 'Upgrade plan'}
                             </Link>
+                            {account.isAdmin && (
+                                <Link role="menuitem" href="/admin" onClick={() => setMenuOpen(false)} className={`flex items-center gap-2.5 rounded-xl px-2.5 py-2 text-sm font-semibold text-[#14121F] hover:bg-[#14121F]/[0.05] ${focus}`}><ShieldCheck className="h-4 w-4 text-[#6A4CFF]" /> Admin dashboard</Link>
+                            )}
                             <button role="menuitem" type="button" onClick={() => { setMenuOpen(false); startTour(); }} className={`flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-sm font-medium text-[#14121F]/75 hover:bg-[#14121F]/[0.05] hover:text-[#14121F] ${focus}`}><Sparkles className="h-4 w-4" /> Take the tour</button>
                             <div className="my-1 h-px bg-[#14121F]/[0.07]" />
                             <form action={signOutAction}>

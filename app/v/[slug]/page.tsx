@@ -5,6 +5,7 @@ import { notFound } from 'next/navigation';
 import { Bricolage_Grotesque, Instrument_Sans } from 'next/font/google';
 import { SharePlayer } from '@/components/videos/SharePlayer';
 import { GatedSharePlayer } from '@/components/videos/VideoGate';
+import { ReportVideo } from '@/components/videos/ReportVideo';
 import { findShare, ownerDisplayName } from '@/lib/videos/public';
 import { getStudioUser, playbackUrl, posterUrl } from '@/lib/videos/server';
 import { resolveGate } from '@/lib/videos/gating';
@@ -74,6 +75,7 @@ export default async function SharePage({ params }: Props) {
                     {owner ?? 'The sender'} can see how this video is watched, such as which parts were played and whether the button was clicked. You don’t need an account. To opt out, turn on Global Privacy Control or “Do Not Track” in your browser.
                     {' '}<Link href="/privacy" className="font-semibold text-[#14121F]/60 hover:underline">Privacy</Link>
                     {' · '}<Link href="/" className="font-semibold text-[#14121F]/60 hover:underline">Made with Cliprame</Link>
+                    {' · '}<ReportVideo slug={slug} />
                 </p>
             </div>
         </main>

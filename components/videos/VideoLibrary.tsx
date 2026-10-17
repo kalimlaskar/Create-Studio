@@ -143,6 +143,7 @@ export function VideoLibrary({ initialVideos, hostingReady, setupMessage = null 
                                         ) : (
                                             <span className="absolute inset-0 grid place-items-center bg-black/55 text-sm font-semibold text-white">Upload didn’t finish</span>
                                         )}
+                                        {video.removed && <span className="absolute inset-0 grid place-items-center bg-red-900/70 text-sm font-semibold text-white">Taken down</span>}
                                         {video.accessMode !== 'public' && <span className="absolute left-2.5 top-2.5 inline-flex items-center gap-1 rounded-md bg-black/70 px-1.5 py-0.5 text-xs font-semibold text-white"><Lock className="h-3 w-3" /> {video.accessMode === 'pin' ? 'PIN' : video.accessMode === 'password' ? 'Password' : 'Email code'}</span>}
                                     </div>
                                     <div className="px-4 pb-1 pt-3.5">
