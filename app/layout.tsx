@@ -26,9 +26,9 @@ export const metadata: Metadata = {
     siteName: "Cliprame",
     images: [
       {
-        url: "/cliprame-og-image.png",
+        url: "/cliprame-og-image.jpg",
         width: 1200,
-        height: 630,
+        height: 675,
         alt: "Cliprame Studio Preview",
       },
     ],
@@ -40,7 +40,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Cliprame · Personal video for sales, with viewer tracking",
     description: "Record a personal video in one take, send one link, and know who watched: how far they got, what they rewatched, and whether they clicked to book. Alerts in Slack and HubSpot.",
-    images: ["/cliprame-og-image.png"],
+    images: ["/cliprame-og-image.jpg"],
   },
 };
 
