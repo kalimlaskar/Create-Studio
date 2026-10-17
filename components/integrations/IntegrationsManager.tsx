@@ -8,6 +8,7 @@ import {
 import { videoApi } from '@/lib/videos/upload';
 import { NOTIFICATION_TYPES, type Integration, type IntegrationKind, type NotificationType } from '@/lib/integrations/types';
 import { D, focus } from '@/components/videos/ui';
+import { ProductTour } from '@/components/tour/ProductTour';
 
 const inputClass = 'w-full rounded-xl border border-[#14121F]/12 bg-white px-3.5 py-2.5 text-sm outline-none transition placeholder:text-[#14121F]/35 focus:border-[#6A4CFF] focus:ring-4 focus:ring-[#6A4CFF]/10';
 
@@ -153,7 +154,7 @@ export function IntegrationsManager({ initialIntegrations, setupMessage }: { ini
         <div className="space-y-10">
             <Hero connected={integrations.filter((item) => item.enabled).length} onStart={() => setConnecting('slack')} />
 
-            <section aria-labelledby="add-title">
+            <section aria-labelledby="add-title" data-tour="tools">
                 <div className="flex items-end justify-between gap-3">
                     <div>
                         <h2 id="add-title" className={`${D} text-xl font-bold tracking-tight`}>Your tools</h2>
@@ -208,7 +209,7 @@ export function IntegrationsManager({ initialIntegrations, setupMessage }: { ini
 
             {secret && <SecretBox name={secret.name} value={secret.value} onClose={() => setSecret(null)} />}
 
-            <section aria-labelledby="connected-title">
+            <section aria-labelledby="connected-title" data-tour="connections">
                 <h2 id="connected-title" className={`${D} text-xl font-bold tracking-tight`}>
                     Your connections {integrations.length > 0 && <span className="ml-1 align-middle text-sm font-semibold text-[#14121F]/40">{integrations.length}</span>}
                 </h2>
@@ -234,6 +235,14 @@ export function IntegrationsManager({ initialIntegrations, setupMessage }: { ini
                     </ul>
                 )}
             </section>
+
+            <ProductTour
+                id="integrations"
+                steps={[
+                    { target: 'tools', title: 'Connect a tool', body: 'Slack for alerts, HubSpot for your CRM, or a webhook for anything else. Each takes about two minutes, with steps to follow.', placement: 'bottom' },
+                    { target: 'connections', title: 'Your connections', body: 'Turn each one on or off, choose which moments it hears about, and send a test to check it works.', placement: 'top' },
+                ]}
+            />
 
             {connecting && (
                 <ConnectDialog

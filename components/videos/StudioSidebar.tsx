@@ -6,6 +6,7 @@ import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { ArrowUpRight, ChevronsUpDown, Compass, Crown, Film, Home, Images, LogOut, PanelLeftClose, PanelLeftOpen, Plug, Plus, Sparkles, Tag, Upload, UserRound, Video, type LucideIcon } from 'lucide-react';
 import { signOutAction } from '@/app/auth/actions';
+import { startTour } from '@/components/tour/ProductTour';
 import { D, focus } from './ui';
 
 export interface SidebarAccount {
@@ -131,7 +132,7 @@ export function StudioSidebar({ account, initialCollapsed, onCreate, extraItems 
 
             <div className={`flex min-h-0 flex-1 flex-col overflow-y-auto pb-4 ${collapsed ? 'px-3' : 'px-4'}`}>
                 {/* Primary action: what to make */}
-                <div ref={createRef} className={`relative mt-2 ${collapsed ? 'self-center' : ''}`}>
+                <div ref={createRef} data-tour="create" className={`relative mt-2 ${collapsed ? 'self-center' : ''}`}>
                     <button
                         type="button"
                         onClick={() => setCreateOpen((value) => !value)}
@@ -200,7 +201,7 @@ export function StudioSidebar({ account, initialCollapsed, onCreate, extraItems 
 
             {/* Account */}
             {account && (
-                <div ref={menuRef} className={`relative border-t border-[#14121F]/[0.07] ${collapsed ? 'p-3' : 'p-3'}`}>
+                <div ref={menuRef} data-tour="account" className={`relative border-t border-[#14121F]/[0.07] ${collapsed ? 'p-3' : 'p-3'}`}>
                     <button
                         type="button"
                         onClick={() => setMenuOpen((value) => !value)}
@@ -233,11 +234,12 @@ export function StudioSidebar({ account, initialCollapsed, onCreate, extraItems 
                             {onOpenProfile ? (
                                 <button role="menuitem" type="button" onClick={() => { setMenuOpen(false); onOpenProfile(); }} className={`flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-sm font-medium text-[#14121F]/75 hover:bg-[#14121F]/[0.05] hover:text-[#14121F] ${focus}`}><UserRound className="h-4 w-4" /> Profile & settings</button>
                             ) : (
-                                <Link role="menuitem" href="/studio?profile=1" onClick={() => setMenuOpen(false)} className={`flex items-center gap-2.5 rounded-xl px-2.5 py-2 text-sm font-medium text-[#14121F]/75 hover:bg-[#14121F]/[0.05] hover:text-[#14121F] ${focus}`}><UserRound className="h-4 w-4" /> Profile & settings</Link>
+                                <Link role="menuitem" href="/studio/account" onClick={() => setMenuOpen(false)} className={`flex items-center gap-2.5 rounded-xl px-2.5 py-2 text-sm font-medium text-[#14121F]/75 hover:bg-[#14121F]/[0.05] hover:text-[#14121F] ${focus}`}><UserRound className="h-4 w-4" /> Profile & settings</Link>
                             )}
                             <Link role="menuitem" href="/pricing" onClick={() => setMenuOpen(false)} className={`flex items-center gap-2.5 rounded-xl px-2.5 py-2 text-sm font-medium text-[#14121F]/75 hover:bg-[#14121F]/[0.05] hover:text-[#14121F] ${focus}`}>
                                 <Crown className="h-4 w-4" /> {account.plan.isPaid ? `${account.plan.name} plan` : 'Upgrade plan'}
                             </Link>
+                            <button role="menuitem" type="button" onClick={() => { setMenuOpen(false); startTour(); }} className={`flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-sm font-medium text-[#14121F]/75 hover:bg-[#14121F]/[0.05] hover:text-[#14121F] ${focus}`}><Sparkles className="h-4 w-4" /> Take the tour</button>
                             <div className="my-1 h-px bg-[#14121F]/[0.07]" />
                             <form action={signOutAction}>
                                 <button role="menuitem" type="submit" className={`flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-sm font-medium text-red-600 hover:bg-red-50 ${focus}`}><LogOut className="h-4 w-4" /> Sign out</button>
@@ -265,6 +267,7 @@ function NavLink({ item, active, collapsed, badge, external }: { item: Item; act
         <li>
             <Link
                 href={item.href}
+                data-tour={`nav-${item.label.toLowerCase()}`}
                 aria-current={active ? 'page' : undefined}
                 className={`group relative flex items-center gap-3 rounded-xl text-sm transition ${collapsed ? 'h-11 w-11 justify-center mx-auto' : 'px-3 py-2.5'} ${active
                     ? 'bg-white font-semibold text-[#14121F] shadow-[0_1px_2px_rgba(20,18,31,0.06),0_6px_16px_-8px_rgba(20,18,31,0.25)] ring-1 ring-[#14121F]/[0.06]'

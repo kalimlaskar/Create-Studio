@@ -8,6 +8,7 @@ import { formatClock, formatPercent, parseClock, type AccessMode, type Chapter, 
 import { RetentionChart } from './RetentionChart';
 import { InteractionsPanel } from './InteractionsPanel';
 import { LeadsTable } from './LeadsTable';
+import { ProductTour } from '@/components/tour/ProductTour';
 import type { Interaction } from '@/lib/videos/interactions';
 import { DropOffHeatmap } from './DropOffHeatmap';
 import { copyEmailSnippet } from '@/lib/videos/shareClipboard';
@@ -141,7 +142,7 @@ export function VideoDetail({ initialVideo, playbackUrl, posterUrl, initialLinks
 
             <div className="grid gap-6 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]">
                 <section className="space-y-3">
-                    <div className="overflow-hidden rounded-3xl bg-[#0B0A10]">
+                    <div data-tour="player" className="overflow-hidden rounded-3xl bg-[#0B0A10]">
                         <video ref={playerRef} src={playbackUrl} poster={posterUrl ?? undefined} controls playsInline preload="metadata" onTimeUpdate={(event) => setCurrentMs(event.currentTarget.currentTime * 1000)} className="aspect-video w-full" />
                     </div>
                     {video.chapters.length > 0 && (
@@ -163,7 +164,7 @@ export function VideoDetail({ initialVideo, playbackUrl, posterUrl, initialLinks
                 <section className={`${card} p-1.5`}>
                     <div role="tablist" aria-label="Video settings" className="grid grid-cols-5 gap-1 rounded-[1.1rem] bg-[#F7F6FB] p-1">
                         {([['share', 'Share'], ['access', 'Access'], ['embed', 'Embed'], ['chapters', 'Chapters'], ['engage', 'Engage']] as const).map(([id, label]) => (
-                            <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => setTab(id)} className={`inline-flex items-center justify-center gap-1 truncate rounded-xl px-1.5 py-2 text-sm font-semibold transition ${tab === id ? 'bg-white shadow-sm' : 'text-[#14121F]/55 hover:text-[#14121F]'} ${focus}`}>{id === 'access' && video.accessMode !== 'public' && <Lock aria-label="Protected" className="h-3 w-3 shrink-0 text-[#6A4CFF]" />}{label}</button>
+                            <button key={id} type="button" role="tab" data-tour={`tab-${id}`} aria-selected={tab === id} onClick={() => setTab(id)} className={`inline-flex items-center justify-center gap-1 truncate rounded-xl px-1.5 py-2 text-sm font-semibold transition ${tab === id ? 'bg-white shadow-sm' : 'text-[#14121F]/55 hover:text-[#14121F]'} ${focus}`}>{id === 'access' && video.accessMode !== 'public' && <Lock aria-label="Protected" className="h-3 w-3 shrink-0 text-[#6A4CFF]" />}{label}</button>
                         ))}
                     </div>
                     <div role="tabpanel" className="p-4">
@@ -202,6 +203,17 @@ export function VideoDetail({ initialVideo, playbackUrl, posterUrl, initialLinks
             </div>
 
             <AnalyticsSection analytics={analytics} videoTitle={video.title} durationMs={video.durationMs} hasChapters={video.chapters.length > 0} refreshing={refreshing} onRefresh={() => void refresh()} onAddChapters={() => setTab('chapters')} onSeek={(ms) => { seek(ms); playerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }); }} />
+            <ProductTour
+                id="video"
+                steps={[
+                    { target: 'player', title: 'Your video', body: 'Preview it here. When you click a moment in the analytics below, the player jumps to it.', placement: 'right' },
+                    { target: 'tab-share', title: 'Share it', body: 'Copy the link, or make a personal link for each prospect so you know exactly who watched. There’s an email-ready thumbnail too.', placement: 'bottom' },
+                    { target: 'tab-access', title: 'Lock it', body: 'For pricing or proposals: ask for a PIN, a password or an email code before it plays.', placement: 'bottom' },
+                    { target: 'tab-engage', title: 'Turn views into leads', body: 'Add a form before the video, a button at the right moment, or your Calendly page at the end.', placement: 'bottom' },
+                    { target: 'stats', title: 'The numbers', body: 'Plays, viewers, how much they watched and who clicked your button. Refresh any time.', placement: 'top' },
+                    { target: 'heatmap', title: 'Where they rewatched or left', body: 'Darker means more viewers. Click a moment to watch exactly what made people replay or stop.', placement: 'top' },
+                ]}
+            />
         </div>
     );
 }
@@ -725,7 +737,7 @@ function AnalyticsSection({ analytics, videoTitle, durationMs, hasChapters, refr
                 <button type="button" onClick={onRefresh} disabled={refreshing} className={`inline-flex items-center gap-1.5 rounded-full border border-[#14121F]/12 bg-white px-3 py-1.5 text-xs font-semibold hover:border-[#14121F]/25 ${focus}`}><RefreshCw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} /> Refresh</button>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+            <div data-tour="stats" className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
                 {tiles.map((tile) => (
                     <div key={tile.label} className={`${card} p-4`}>
                         <p className="text-xs font-medium text-[#14121F]/55">{tile.label}</p>
@@ -774,7 +786,7 @@ function AnalyticsSection({ analytics, videoTitle, durationMs, hasChapters, refr
                 </div>
             </div>
 
-            <div className={`${card} p-5`}>
+            <div data-tour="heatmap" className={`${card} p-5`}>
                 <h3 className="font-semibold">Re-watches, skips and drop-offs</h3>
                 <p className="mt-0.5 text-xs text-[#14121F]/55">Where viewers went back over a part, jumped past it, or stopped watching. Click a moment to play it.</p>
                 <div className="mt-4">

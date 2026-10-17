@@ -1,7 +1,9 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import type { SidebarAccount } from '@/components/videos/StudioSidebar';
+import { AccountMenu } from '@/components/account/AccountMenu';
 import { Video, Pause, Play, Square, FolderOpen, Trash2, LoaderCircle, SlidersHorizontal, SwitchCamera, ArrowLeft, X } from 'lucide-react';
 import { SidebarControls } from '@/components/studio/SidebarControls';
 import { VideoCanvas } from '@/components/studio/VideoCanvas';
@@ -11,16 +13,11 @@ import { useStudioSession } from '@/hooks/useStudioSession';
 import { deleteEditorDraft, DraftSummary, LoadedDraft, listEditorDrafts, loadEditorDraft } from '@/components/editor/drafts';
 import { PhotoReelStudio } from '@/components/studio/PhotoReelStudio';
 import { StudioHome } from '@/components/studio/StudioHome';
-import { changePasswordAction, checkUsernameAvailabilityAction, deleteAccountAction, signOutAction, updateProfileAction, updateProfileAvatarAction } from '@/app/auth/actions';
-import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 import { PLAN_LIMITS, type PlanId } from '@/components/pricing/planLimits';
 import { useDocumentPip } from './useDocumentPip';
 import { FloatingStudioPip } from './FloatingStudioPip';
 import { ScreenShareControls } from '@/components/studio/Screensharecontrols';
 
-const D = 'font-[family-name:var(--font-display)]';
-const focus =
-    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6A4CFF]/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[#F7F6FB]';
 
 function getFallbackDisplayName(userEmail: string) {
     const accountName = userEmail.split(' · ')[0]?.split('@')[0] ?? '';
@@ -28,255 +25,6 @@ function getFallbackDisplayName(userEmail: string) {
     return words ? words.replace(/\b\w/g, (letter) => letter.toUpperCase()) : 'My creator space';
 }
 
-function ProfileMenu({ creatorName, username, avatarUrl, userEmail, profilePersistenceEnabled, onNameChange, onUsernameChange, onSave, onAvatarChange, saveState }: {
-    creatorName: string;
-    username: string;
-    avatarUrl: string;
-    userEmail: string;
-    profilePersistenceEnabled: boolean;
-    onNameChange: (name: string) => void;
-    onUsernameChange: (username: string) => void;
-    onSave: () => void;
-    onAvatarChange: (url: string) => void;
-    saveState: string;
-}) {
-    const [usernameCheck, setUsernameCheck] = useState('');
-    const [usernameCheckState, setUsernameCheckState] = useState<'available' | 'taken' | 'error' | ''>('');
-    const [avatarState, setAvatarState] = useState('');
-    const [password, setPassword] = useState('');
-    const [confirmPassword, setConfirmPassword] = useState('');
-    const [passwordState, setPasswordState] = useState('');
-    const [isChangingPassword, setIsChangingPassword] = useState(false);
-
-    // Modern delete account states
-    const [showDeleteSection, setShowDeleteSection] = useState(false);
-    const [confirmInput, setConfirmInput] = useState('');
-    const [isDeleting, setIsDeleting] = useState(false);
-    const [deleteError, setDeleteError] = useState('');
-
-    const checkUsername = async () => {
-        setUsernameCheck('Checking username…');
-        setUsernameCheckState('');
-        try {
-            const result = await checkUsernameAvailabilityAction(username);
-            if (result.error) {
-                setUsernameCheck(result.error);
-                setUsernameCheckState('error');
-            } else if (result.available) {
-                setUsernameCheck('Username is available');
-                setUsernameCheckState('available');
-            } else {
-                setUsernameCheck('That username is already taken');
-                setUsernameCheckState('taken');
-            }
-        } catch (error) {
-            console.error('Could not check username availability:', error);
-            setUsernameCheck('Could not check username availability. Please try again.');
-            setUsernameCheckState('error');
-        }
-    };
-
-    const uploadAvatar = async (event: React.ChangeEvent<HTMLInputElement>) => {
-        const file = event.target.files?.[0];
-        event.target.value = '';
-        if (!file) return;
-        if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
-            setAvatarState('Choose a JPG, PNG, or WebP image.');
-            return;
-        }
-        if (file.size > 5 * 1024 * 1024) {
-            setAvatarState('Profile pictures must be 5 MB or smaller.');
-            return;
-        }
-
-        const supabase = createSupabaseBrowserClient();
-        if (!supabase) {
-            setAvatarState('Profile picture upload is not configured.');
-            return;
-        }
-
-        setAvatarState('Uploading picture…');
-        try {
-            const { data: { user }, error: userError } = await supabase.auth.getUser();
-            if (userError || !user) {
-                setAvatarState('Sign in again to update your profile picture.');
-                return;
-            }
-
-            const extension = file.type === 'image/jpeg' ? 'jpg' : file.type === 'image/png' ? 'png' : 'webp';
-            const path = `${user.id}/avatar-${crypto.randomUUID()}.${extension}`;
-            const { error: uploadError } = await supabase.storage.from('profile-avatars').upload(path, file, {
-                contentType: file.type,
-                cacheControl: '3600',
-                upsert: false,
-            });
-            if (uploadError) {
-                console.error('Could not upload profile picture:', uploadError);
-                setAvatarState('Could not upload your picture. Check that the latest profile migration has been applied.');
-                return;
-            }
-
-            const result = await updateProfileAvatarAction(path);
-            if (result.error) {
-                await supabase.storage.from('profile-avatars').remove([path]);
-                setAvatarState(result.error);
-                return;
-            }
-
-            const { data } = supabase.storage.from('profile-avatars').getPublicUrl(path);
-            onAvatarChange(data.publicUrl);
-            setAvatarState('Profile picture updated');
-        } catch (error) {
-            console.error('Could not update profile picture:', error);
-            setAvatarState('Could not update your picture. Please try again.');
-        }
-    };
-
-    const changePassword = async (event: React.FormEvent<HTMLFormElement>) => {
-        event.preventDefault();
-        setIsChangingPassword(true);
-        setPasswordState('Updating password…');
-        try {
-            const result = await changePasswordAction(password, confirmPassword);
-            setPasswordState(result.error ?? 'Password updated');
-            if (!result.error) {
-                setPassword('');
-                setConfirmPassword('');
-            }
-        } catch (error) {
-            console.error('Could not update password:', error);
-            setPasswordState('Could not update your password. Please try again.');
-        } finally {
-            setIsChangingPassword(false);
-        }
-    };
-
-    const handleDeleteAccount = async (event: React.FormEvent) => {
-        event.preventDefault();
-        if (confirmInput !== 'delete') return;
-
-        setIsDeleting(true);
-        setDeleteError('');
-        try {
-            const result = await deleteAccountAction();
-            if (result?.error) {
-                setDeleteError(result.error);
-                setIsDeleting(false);
-            }
-        } catch (error) {
-            console.error('Account deletion failed:', error);
-            setDeleteError('Could not delete account. Please try again.');
-            setIsDeleting(false);
-        }
-    };
-
-    return (
-        <details id="profile-menu" className="relative">
-            <summary className={`flex max-w-[min(15rem,52vw)] cursor-pointer list-none items-center gap-2 rounded-full border border-[#14121F]/15 bg-white/80 px-3.5 py-2 text-xs font-semibold text-[#14121F] shadow-sm backdrop-blur transition hover:bg-white ${focus}`}>
-                <span aria-hidden="true" className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#6A4CFF]/20 bg-cover bg-center text-[10px] font-bold text-[#6A4CFF]" style={avatarUrl ? { backgroundImage: `url("${avatarUrl}")` } : undefined}>{!avatarUrl && (creatorName.trim().charAt(0).toUpperCase() || 'C')}</span>
-                <span className="truncate">{creatorName}</span>
-            </summary>
-            <div className="absolute right-0 mt-2 max-h-[75dvh] w-[min(22rem,calc(100vw-1.5rem))] overflow-y-auto rounded-3xl border border-[#14121F]/10 bg-white p-5 shadow-[0_20px_50px_-15px_rgba(20,18,31,0.15)] backdrop-blur-xl">
-                <div className="flex items-center gap-3">
-                    <span aria-hidden="true" className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#6A4CFF]/20 bg-cover bg-center text-lg font-bold text-[#6A4CFF]" style={avatarUrl ? { backgroundImage: `url("${avatarUrl}")` } : undefined}>{!avatarUrl && (creatorName.trim().charAt(0).toUpperCase() || 'C')}</span>
-                    <div className="min-w-0"><p className={`${D} truncate text-base font-bold text-[#14121F]`}>{creatorName}</p>{userEmail && <p className="mt-0.5 truncate text-xs text-[#14121F]/60">{userEmail}</p>}</div>
-                </div>
-                <div className="my-4 border-t border-[#14121F]/10" />
-                <label htmlFor="profile-picture" className={`inline-flex cursor-pointer items-center rounded-full border border-[#14121F]/15 bg-[#F7F6FB] px-3.5 py-2 text-xs font-semibold text-[#14121F] transition hover:bg-[#14121F] hover:text-white ${!profilePersistenceEnabled ? 'pointer-events-none opacity-50' : ''}`}>Update profile picture</label>
-                <input id="profile-picture" type="file" accept="image/jpeg,image/png,image/webp" disabled={!profilePersistenceEnabled} onChange={(event) => void uploadAvatar(event)} className="sr-only" />
-                <p className="mt-1.5 text-[11px] text-[#14121F]/50">JPG, PNG, or WebP · up to 5 MB</p>
-                {avatarState && <p role="status" className={`mt-1.5 text-xs font-medium ${avatarState === 'Profile picture updated' ? 'text-emerald-600' : avatarState.includes('…') ? 'text-[#14121F]/60' : 'text-red-600'}`}>{avatarState}</p>}
-
-                <div className="my-4 border-t border-[#14121F]/10" />
-                <label htmlFor="profile-display-name" className="block text-[11px] font-bold uppercase tracking-wider text-[#14121F]/70">Profile name</label>
-                <input id="profile-display-name" value={creatorName} onChange={(event) => onNameChange(event.target.value)} maxLength={80} autoComplete="name" className="mt-1.5 w-full rounded-2xl border border-[#14121F]/15 bg-[#F7F6FB] px-3.5 py-2.5 text-sm text-[#14121F] focus:border-[#6A4CFF] focus:bg-white focus:outline-none" />
-                <label htmlFor="profile-username" className="mt-3.5 block text-[11px] font-bold uppercase tracking-wider text-[#14121F]/70">Username</label>
-                <div className="mt-1.5 flex gap-2">
-                    <div className="flex min-w-0 flex-1 items-center rounded-2xl border border-[#14121F]/15 bg-[#F7F6FB] px-3.5 focus-within:border-[#6A4CFF] focus-within:bg-white"><span className="text-sm text-[#14121F]/50">@</span><input id="profile-username" value={username} onChange={(event) => { onUsernameChange(event.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 20)); setUsernameCheck(''); setUsernameCheckState(''); }} maxLength={20} autoComplete="username" disabled={!profilePersistenceEnabled} className="min-w-0 flex-1 bg-transparent py-2.5 text-sm text-[#14121F] outline-none disabled:opacity-50" /></div>
-                    <button type="button" onClick={() => void checkUsername()} disabled={!profilePersistenceEnabled || !username} className="rounded-xl border border-[#14121F]/15 bg-[#F7F6FB] px-3 text-xs font-semibold text-[#14121F] transition hover:bg-[#14121F] hover:text-white disabled:opacity-50">Check</button>
-                </div>
-                <p className="mt-1.5 text-[11px] text-[#14121F]/50">3–20 lowercase letters, numbers, or underscores.</p>
-                {usernameCheck && <p role="status" className={`mt-1.5 text-xs font-medium ${usernameCheckState === 'available' ? 'text-emerald-600' : usernameCheckState === 'taken' || usernameCheckState === 'error' ? 'text-red-600' : 'text-[#14121F]/60'}`}>{usernameCheck}</p>}
-                <button type="button" onClick={onSave} disabled={saveState === 'Saving…'} className="mt-4 w-full rounded-full bg-[#14121F] px-4 py-3 text-xs font-semibold text-white transition hover:bg-[#2c2742] disabled:cursor-wait disabled:opacity-60">Save profile</button>
-                {saveState && <p role="status" className={`mt-2 text-xs font-medium ${saveState === 'Profile saved' || saveState === 'Saved on this device' ? 'text-emerald-600' : saveState === 'Saving…' || saveState === 'Unsaved changes' ? 'text-[#14121F]/60' : 'text-red-600'}`}>{saveState}</p>}
-
-                {profilePersistenceEnabled && <>
-                    <div className="my-4 border-t border-[#14121F]/10" />
-                    <form onSubmit={(event) => void changePassword(event)} className="space-y-2.5">
-                        <label htmlFor="profile-password" className="block text-[11px] font-bold uppercase tracking-wider text-[#14121F]/70">Change password</label>
-                        <input id="profile-password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} minLength={8} maxLength={128} autoComplete="new-password" placeholder="New password" required className="w-full rounded-2xl border border-[#14121F]/15 bg-[#F7F6FB] px-3.5 py-2.5 text-sm text-[#14121F] placeholder:text-[#14121F]/40 focus:border-[#6A4CFF] focus:bg-white focus:outline-none" />
-                        <input type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} minLength={8} maxLength={128} autoComplete="new-password" placeholder="Confirm new password" aria-label="Confirm new password" required className="w-full rounded-2xl border border-[#14121F]/15 bg-[#F7F6FB] px-3.5 py-2.5 text-sm text-[#14121F] placeholder:text-[#14121F]/40 focus:border-[#6A4CFF] focus:bg-white focus:outline-none" />
-                        <button type="submit" disabled={isChangingPassword} className="w-full rounded-full border border-[#14121F]/15 bg-[#F7F6FB] px-4 py-2.5 text-xs font-semibold text-[#14121F] transition hover:bg-[#14121F] hover:text-white disabled:opacity-50">{isChangingPassword ? 'Updating…' : 'Update password'}</button>
-                        {passwordState && <p role="status" className={`text-xs font-medium ${passwordState === 'Password updated' ? 'text-emerald-600' : passwordState.includes('…') ? 'text-[#14121F]/60' : 'text-red-600'}`}>{passwordState}</p>}
-                    </form>
-                </>}
-                {!profilePersistenceEnabled && <p className="mt-3.5 text-[11px] text-[#14121F]/50">Account settings are unavailable in tester mode.</p>}
-                <form action={signOutAction} className="mt-4 border-t border-[#14121F]/10 pt-4">
-                    <button className="w-full rounded-full border border-[#14121F]/15 px-4 py-2.5 text-left text-xs font-semibold text-[#14121F] transition hover:bg-red-50 hover:text-red-600 hover:border-red-200">Sign out</button>
-                </form>
-
-                {profilePersistenceEnabled && (
-                    <div className="mt-4 border-t border-neutral-200/60 pt-4">
-                        {!showDeleteSection ? (
-                            <button
-                                type="button"
-                                onClick={() => setShowDeleteSection(true)}
-                                className="group flex w-full items-center justify-between rounded-2xl border border-red-500/20 bg-red-50/[0.4] px-4 py-3 text-left text-xs font-semibold text-red-600 transition hover:bg-red-50 hover:border-red-500/40"
-                            >
-                                <span>Delete account</span>
-                            </button>
-                        ) : (
-                            <form onSubmit={(e) => void handleDeleteAccount(e)} className="relative overflow-hidden rounded-2xl border border-red-500/30 bg-gradient-to-b from-red-50/90 to-red-100/40 p-4 text-left shadow-inner space-y-3">
-                                <div className="flex items-center justify-between text-red-700">
-                                    <div className="flex items-center gap-2">
-                                        <div className="flex h-6 w-6 items-center justify-center rounded-full bg-red-600 text-white shadow-sm">
-                                            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth="2.5" stroke="currentColor">
-                                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
-                                            </svg>
-                                        </div>
-                                        <p className="text-xs font-bold tracking-wide text-red-950">Are you absolutely sure?</p>
-                                    </div>
-                                    <button
-                                        type="button"
-                                        onClick={() => { setShowDeleteSection(false); setConfirmInput(''); setDeleteError(''); }}
-                                        className="text-red-400 hover:text-red-700 transition p-1"
-                                        title="Close"
-                                    >
-                                        <X className="h-4 w-4" />
-                                    </button>
-                                </div>
-
-                                <p className="text-[11px] leading-relaxed text-red-900/80">
-                                    This action cannot be undone. All your project drafts, subscription details, and profile data will be permanently wiped. Type <span className="rounded bg-red-200/70 px-1 py-0.5 font-mono font-bold text-red-950">delete</span> below to confirm.
-                                </p>
-
-                                <input
-                                    type="text"
-                                    value={confirmInput}
-                                    onChange={(e) => setConfirmInput(e.target.value)}
-                                    placeholder="Type 'delete' to confirm"
-                                    autoFocus
-                                    className="w-full rounded-xl border border-red-300/80 bg-white px-3.5 py-2.5 text-xs font-mono text-red-950 shadow-sm outline-none transition focus:border-red-600 focus:ring-2 focus:ring-red-600/20 placeholder:text-red-300"
-                                />
-
-                                <div className="flex items-center gap-2 pt-1">
-                                    <button
-                                        type="submit"
-                                        disabled={confirmInput !== 'delete' || isDeleting}
-                                        className="flex-1 rounded-xl bg-red-600 px-3.5 py-2.5 text-center text-xs font-semibold text-white shadow-md shadow-red-600/20 transition hover:bg-red-500 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
-                                    >
-                                        {isDeleting ? 'Deleting account…' : 'I understand, delete account'}
-                                    </button>
-                                </div>
-                                {deleteError && <p role="alert" className="rounded-lg bg-red-600/10 px-3 py-2 text-xs font-medium text-red-600 border border-red-600/20">{deleteError}</p>}
-                            </form>
-                        )}
-                    </div>
-                )}
-            </div>
-        </details>
-    );
-}
 export function CreatorStudioDashboard({
     userEmail,
     initialDisplayName = '',
@@ -465,14 +213,15 @@ export function CreatorStudioDashboard({
         }
     };
 
+    const router = useRouter();
     const [savedDrafts, setSavedDrafts] = useState<DraftSummary[]>([]);
     const [restoredDraft, setRestoredDraft] = useState<LoadedDraft | null>(null);
     const [isLoadingDraft, setIsLoadingDraft] = useState(false);
     const [showWelcome, setShowWelcome] = useState(false);
     const [creatorName, setCreatorName] = useState(initialDisplayName || getFallbackDisplayName(userEmail));
-    const [profileUsername, setProfileUsername] = useState(initialUsername);
-    const [profileAvatarUrl, setProfileAvatarUrl] = useState(initialAvatarUrl);
-    const [profileSaveState, setProfileSaveState] = useState('');
+    const profileUsername = initialUsername;
+    // Profile edits happen on /studio/account; this page shows what was saved.
+    const profileAvatarUrl = initialAvatarUrl;
     const creatorNameInitializedRef = useRef(false);
 
     const refreshDrafts = async () => {
@@ -505,41 +254,6 @@ export function CreatorStudioDashboard({
         });
         return () => window.cancelAnimationFrame(frame);
     }, [creationMode, initialDisplayName, userEmail]);
-
-    const updateCreatorName = (name: string) => {
-        const safeName = name.slice(0, 80);
-        setCreatorName(safeName);
-        setProfileSaveState(profilePersistenceEnabled ? 'Unsaved changes' : '');
-        window.localStorage.setItem('creator-studio-creator-name', safeName);
-    };
-
-    const saveCreatorProfile = async () => {
-        const safeName = creatorName.trim();
-        if (safeName.length < 2 || safeName.length > 80) {
-            setProfileSaveState('Profile name must be between 2 and 80 characters.');
-            return;
-        }
-        setCreatorName(safeName);
-        window.localStorage.setItem('creator-studio-creator-name', safeName);
-        if (!profilePersistenceEnabled) {
-            setProfileSaveState('Saved on this device');
-            return;
-        }
-        const safeUsername = profileUsername.trim().toLowerCase();
-        if (safeUsername && !/^[a-z0-9_]{3,20}$/.test(safeUsername)) {
-            setProfileSaveState('Usernames must be 3–20 characters using lowercase letters, numbers, or underscores.');
-            return;
-        }
-        setProfileSaveState('Saving…');
-        try {
-            const result = await updateProfileAction(safeName, safeUsername);
-            setProfileSaveState(result.error ?? 'Profile saved');
-            if (!result.error) setProfileUsername(safeUsername);
-        } catch (error) {
-            console.error('Could not save profile:', error);
-            setProfileSaveState('Could not save your profile. Please try again.');
-        }
-    };
 
     const dismissWelcome = (useSample: boolean) => {
         window.localStorage.setItem('creator-studio-first-run-v1', 'complete');
@@ -646,7 +360,8 @@ export function CreatorStudioDashboard({
 
     if (creationMode === 'photos') return <PhotoReelStudio exportLimitMs={exportLimitMs} isPro={isPro} initialDraftId={reelDraftId} onBack={() => { setReelDraftId(null); setCreationMode('choose'); }} />;
 
-    const profileMenu = <ProfileMenu creatorName={creatorName} username={profileUsername} avatarUrl={profileAvatarUrl} userEmail={userEmail} profilePersistenceEnabled={profilePersistenceEnabled} onNameChange={updateCreatorName} onUsernameChange={(username) => { setProfileUsername(username); setProfileSaveState('Unsaved changes'); }} onSave={() => void saveCreatorProfile()} onAvatarChange={setProfileAvatarUrl} saveState={profileSaveState} />;
+    const profileMenu = <AccountMenu name={creatorName} email={userEmail} avatarUrl={profileAvatarUrl} planName={userPlan} />;
+    const profileMenuDark = <AccountMenu name={creatorName} email={userEmail} avatarUrl={profileAvatarUrl} planName={userPlan} tone="dark" />;
 
     if ((view === 'edit' || (settings.inputMode === 'upload' && Boolean(settings.uploadedVideoUrl))) && activeVideoUrl) {
         return (
@@ -695,7 +410,7 @@ export function CreatorStudioDashboard({
                 onReel={(draftId) => { setReelDraftId(draftId ?? null); setCreationMode('photos'); }}
                 onOpenVideoDraft={(id) => void openDraft(id)}
                 onDeleteVideoDraft={(id) => void removeDraft(id)}
-                onEditProfile={() => document.getElementById('profile-menu')?.setAttribute('open', '')}
+                onEditProfile={() => router.push('/studio/account')}
                 sidebar={sidebar}
             />
         );
@@ -715,7 +430,7 @@ export function CreatorStudioDashboard({
                 <button type="button" onClick={() => { setShowWelcome(false); setCreationMode('choose'); }} aria-label="Back to home" className="absolute left-3 top-3 z-30 flex h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-neutral-950/80 text-neutral-100 backdrop-blur-md md:hidden"><ArrowLeft className="h-5 w-5" /></button>
                 <div className="absolute right-3 top-3 z-40 flex items-start gap-2 md:right-4">
                     <button type="button" onClick={() => { setShowWelcome(false); setCreationMode('choose'); }} className="hidden items-center rounded-lg border border-neutral-700 bg-neutral-900/95 px-3 py-2 text-xs font-semibold text-neutral-200 shadow-lg hover:bg-neutral-800 md:flex">Home</button>
-                    {profileMenu}
+                    {profileMenuDark}
                     <details className="relative">
                         <summary className="flex cursor-pointer list-none items-center gap-2 rounded-lg border border-neutral-700 bg-neutral-900/95 px-3 py-2 text-xs font-semibold text-neutral-200 shadow-lg hover:bg-neutral-800"><FolderOpen className="h-4 w-4" /> Projects ({savedDrafts.length})</summary>
                         <div className="absolute right-0 mt-2 max-h-[60dvh] w-[min(22rem,calc(100vw-1.5rem))] overflow-y-auto rounded-xl border border-neutral-700 bg-neutral-900 p-2 shadow-2xl">

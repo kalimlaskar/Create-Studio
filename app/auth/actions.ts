@@ -5,6 +5,7 @@ import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { createServerClient } from '@supabase/ssr';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { createDemoSessionToken, DEMO_SESSION_COOKIE, DEMO_SESSION_MAX_AGE, isDemoAuthEnabled, verifyDemoCredentials } from '@/lib/auth/demo';
 import { razorpayApi } from '@/lib/billing/razorpay';
 import { deleteObject, isR2Configured } from '@/lib/storage/r2';
@@ -153,6 +154,23 @@ export async function checkUsernameAvailabilityAction(username: string): Promise
     return { available: data === true };
 }
 
+/**
+ * Applies a change to the signed-in user's profile row, creating the row first if
+ * sign-up never did (the database trigger can miss accounts made before it existed).
+ * Users can't insert profiles themselves, so the missing row is created with the
+ * service role, always for the user's own id from their session.
+ */
+async function saveOwnProfile(supabase: NonNullable<Awaited<ReturnType<typeof createSupabaseServerClient>>>, userId: string, change: Record<string, unknown>, fallbackName: string) {
+    const update = { ...change, updated_at: new Date().toISOString() };
+    const { data, error } = await supabase.from('profiles').update(update).eq('id', userId).select('id').maybeSingle();
+    if (error || data) return { error };
+
+    const admin = createSupabaseAdminClient();
+    if (!admin) return { error: { message: 'missing profile row and no service role key' } };
+    const { error: insertError } = await admin.from('profiles').insert({ id: userId, display_name: fallbackName, ...update });
+    return { error: insertError };
+}
+
 export async function updateProfileAction(displayName: string, username: string): Promise<{ error?: string }> {
     const safeDisplayName = displayName.trim();
     const safeUsername = username.trim().toLowerCase();
@@ -169,15 +187,12 @@ export async function updateProfileAction(displayName: string, username: string)
     const { data: { user }, error: userError } = await supabase.auth.getUser();
     if (userError || !user) return { error: 'Sign in again to update your profile.' };
 
-    const { data, error } = await supabase
-        .from('profiles')
-        .update({ display_name: safeDisplayName, username: safeUsername || null, updated_at: new Date().toISOString() })
-        .eq('id', user.id)
-        .select('id')
-        .maybeSingle();
-
-    if (error?.code === '23505') return { error: 'That username is already taken. Choose another one.' };
-    if (error || !data) return { error: 'Could not save your profile. Check that the profiles migration has been applied.' };
+    const { error } = await saveOwnProfile(supabase, user.id, { display_name: safeDisplayName, username: safeUsername || null }, safeDisplayName);
+    if ((error as { code?: string } | null)?.code === '23505') return { error: 'That username is already taken. Choose another one.' };
+    if (error) {
+        console.error('Could not save profile:', error);
+        return { error: 'Could not save your profile. Please try again.' };
+    }
     return {};
 }
 
@@ -192,13 +207,11 @@ export async function updateProfileAvatarAction(path: string): Promise<{ error?:
         return { error: 'That profile picture path is not valid.' };
     }
 
-    const { data, error } = await supabase
-        .from('profiles')
-        .update({ avatar_path: path, updated_at: new Date().toISOString() })
-        .eq('id', user.id)
-        .select('id')
-        .maybeSingle();
-    if (error || !data) return { error: 'Could not save your profile picture. Check that the latest profile migration has been applied.' };
+    const { error } = await saveOwnProfile(supabase, user.id, { avatar_path: path }, (user.email ?? 'Creator').split('@')[0]);
+    if (error) {
+        console.error('Could not save profile picture:', error);
+        return { error: 'Could not save your profile picture. Please try again.' };
+    }
     return {};
 }
 

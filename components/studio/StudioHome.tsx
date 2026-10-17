@@ -8,6 +8,7 @@ import { ArrowRight, Check, FolderOpen, Images, LoaderCircle, MonitorUp, Sparkle
 import type { DraftSummary } from '@/components/editor/drafts';
 import { deletePhotoReelDraft, listPhotoReelDrafts, PhotoReelDraftSummary } from './photoReelDrafts';
 import { MobileTabBar, StudioSidebar, type CreateId, type SidebarAccount } from '@/components/videos/StudioSidebar';
+import { ProductTour } from '@/components/tour/ProductTour';
 
 const display = Bricolage_Grotesque({ subsets: ['latin'], variable: '--font-display', display: 'swap' });
 const body = Instrument_Sans({ subsets: ['latin'], variable: '--font-body', display: 'swap' });
@@ -230,7 +231,7 @@ export function StudioHome({
                     </section>
 
                     {/* Create */}
-                    <section aria-labelledby="create-title">
+                    <section aria-labelledby="create-title" data-tour="home-create">
                         <h2 id="create-title" className={`${D} text-xl font-bold tracking-tight`}>Create something new</h2>
                         <div className="mt-4 grid gap-4 sm:grid-cols-3">
                             <button type="button" onClick={onRecord} className={`group rounded-3xl border border-[#14121F]/8 bg-white p-5 text-left transition hover:-translate-y-0.5 hover:border-[#6A4CFF]/40 hover:shadow-[0_15px_40px_-20px_rgba(106,76,255,0.35)] ${focus}`}>
@@ -256,7 +257,7 @@ export function StudioHome({
 
                     {/* Getting started */}
                     {!guideHidden && (
-                        <section aria-labelledby="guide-title">
+                        <section aria-labelledby="guide-title" data-tour="getting-started">
                             <div className="flex items-center justify-between gap-3">
                                 <h2 id="guide-title" className={`${D} text-xl font-bold tracking-tight`}>Getting started</h2>
                                 <button type="button" onClick={hideGuide} className={`rounded-full px-3 py-1.5 text-sm font-semibold text-[#6A4CFF] transition hover:bg-[#6A4CFF]/10 ${focus}`}>Hide</button>
@@ -358,6 +359,18 @@ export function StudioHome({
                 </div>
             </div>
             <MobileTabBar />
+            <ProductTour
+                id="home"
+                steps={[
+                    { title: `Welcome to Cliprame${creatorName ? `, ${creatorName.split(' ')[0]}` : ''}`, body: 'A 30-second look at where things are. You can skip it, and replay it any time from your account menu.' },
+                    { target: 'create', title: 'Start here', body: 'Record with your camera or screen, upload a clip you already have, or make a photo + video reel.', placement: 'right' },
+                    { target: 'home-create', title: 'Or pick from the home page', body: 'The same three ways to make a video. Recordings get a teleprompter only you can see, and you edit by deleting words.', placement: 'bottom' },
+                    { target: 'nav-videos', title: 'Your videos, and who watched', body: 'Upload a video for sharing, make a personal link for each prospect, then see who watched, how much and what they rewatched.', placement: 'right' },
+                    { target: 'nav-integrations', title: 'Alerts where you work', body: 'Connect Slack or HubSpot to hear the moment someone presses play, fills in a form or books a call.', placement: 'right' },
+                    { target: 'getting-started', title: 'Your checklist', body: 'A few steps to get set up. It ticks itself off as you go, and you can hide it when you’re done.', placement: 'top' },
+                    { target: 'account', title: 'Your account', body: 'Profile, plan and sign-out live here, along with this tour if you ever want it again.', placement: 'right' },
+                ]}
+            />
         </main>
     );
 }
