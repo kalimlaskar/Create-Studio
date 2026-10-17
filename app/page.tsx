@@ -55,7 +55,7 @@ export default async function HomePage() {
   return (
     <MarketingShell current="home" session={session}>
       {/* Hero */}
-      <section className="mx-auto max-w-6xl px-5 pb-28 pt-14 sm:px-8 sm:pt-20">
+      <section className="mx-auto max-w-6xl px-5 pb-28 pt-8 sm:px-8 sm:pt-10">
         <p className="mk-rise inline-flex items-center gap-2 text-[13px] text-[#15120F]/60" style={{ '--d': 0 } as CSSProperties}>
           <span className="relative flex h-2 w-2"><span className="animate-ping-soft absolute inline-flex h-full w-full rounded-full bg-[#0E9F6E]" /><span className="relative inline-flex h-2 w-2 rounded-full bg-[#0E9F6E]" /></span>
           Video for sales and outreach
