@@ -11,6 +11,7 @@ import { LeadsTable } from './LeadsTable';
 import { ProductTour } from '@/components/tour/ProductTour';
 import type { Interaction } from '@/lib/videos/interactions';
 import { DropOffHeatmap } from './DropOffHeatmap';
+import { ThumbnailEditor } from './ThumbnailEditor';
 import { copyEmailSnippet } from '@/lib/videos/shareClipboard';
 import { track } from '@/lib/analytics';
 
@@ -48,7 +49,7 @@ const shareUrl = (slug: string) => `${window.location.origin}/v/${slug}`;
 /** The page origin, read only in the browser so server and client render the same first. */
 const useOrigin = () => useSyncExternalStore(() => () => {}, () => window.location.origin, () => '');
 
-export function VideoDetail({ initialVideo, playbackUrl, posterUrl, initialLinks, initialAnalytics, isPaid, emailCodesAvailable }: Props) {
+export function VideoDetail({ initialVideo, playbackUrl, posterUrl: initialPosterUrl, initialLinks, initialAnalytics, isPaid, emailCodesAvailable }: Props) {
     const playerRef = useRef<HTMLVideoElement>(null);
     const [video, setVideo] = useState(initialVideo);
     const [links, setLinks] = useState(initialLinks);
@@ -59,6 +60,7 @@ export function VideoDetail({ initialVideo, playbackUrl, posterUrl, initialLinks
     const [copied, setCopied] = useState<string | null>(null);
     const [notice, setNotice] = useState('');
     const [currentMs, setCurrentMs] = useState(0);
+    const [posterUrl, setPosterUrl] = useState(initialPosterUrl);
 
     const defaultLink = links.find((link) => link.isDefault) ?? null;
     const flash = (key: string) => { setCopied(key); setTimeout(() => setCopied((value) => (value === key ? null : value)), 1800); };
@@ -151,6 +153,9 @@ export function VideoDetail({ initialVideo, playbackUrl, posterUrl, initialLinks
                     <div data-tour="player" className="overflow-hidden rounded-3xl bg-[#0B0A10]">
                         <video ref={playerRef} src={playbackUrl} poster={posterUrl ?? undefined} controls playsInline preload="metadata" onTimeUpdate={(event) => setCurrentMs(event.currentTarget.currentTime * 1000)} className="aspect-video w-full" />
                     </div>
+                    {!video.removed && (
+                        <ThumbnailEditor videoId={video.id} playbackUrl={playbackUrl} posterUrl={posterUrl} player={playerRef} onChange={(change) => { setVideo(change.video); setPosterUrl(change.posterUrl); }} />
+                    )}
                     {video.chapters.length > 0 && (
                         <ol className="flex flex-wrap gap-2" aria-label="Chapters">
                             {video.chapters.map((chapter) => {
