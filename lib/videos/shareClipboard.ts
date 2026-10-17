@@ -14,7 +14,9 @@ export async function copyEmailSnippet({ slug, title, durationMs, recipientName 
     const url = shareUrlFor(slug);
     const greeting = recipientName ? `Hi ${recipientName.split(' ')[0]},` : 'Hi,';
     const label = `▶ Watch “${title}” (${formatClock(durationMs)})`;
-    const html = `<p>${escapeHtml(greeting)}</p><p>I recorded a quick video for you:</p><p><a href="${url}"><img src="${window.location.origin}/v/${slug}/thumbnail" alt="${escapeHtml(label)}" width="480" style="border-radius:12px;max-width:100%;border:0"></a></p><p><a href="${url}">${escapeHtml(label)}</a></p>`;
+    // Same look as the Gmail extension inserts: thumbnail, then a dark button. Inline styles survive in email clients.
+    const button = `display:inline-block;padding:11px 20px;border-radius:999px;background:#14121F;color:#ffffff;font-family:Arial,Helvetica,sans-serif;font-size:14px;font-weight:700;line-height:1;text-decoration:none`;
+    const html = `<p>${escapeHtml(greeting)}</p><p>I recorded a quick video for you:</p><p><a href="${url}"><img src="${window.location.origin}/v/${slug}/thumbnail" alt="${escapeHtml(label)}" width="480" style="width:480px;max-width:100%;height:auto;border:0;border-radius:14px;display:block"></a></p><p><a href="${url}" style="${button}">▶&nbsp; Watch the video · ${formatClock(durationMs)}</a></p>`;
     const text = `${greeting}\n\nI recorded a quick video for you:\n${label}\n${url}`;
     try {
         await navigator.clipboard.write([new ClipboardItem({ 'text/html': new Blob([html], { type: 'text/html' }), 'text/plain': new Blob([text], { type: 'text/plain' }) })]);

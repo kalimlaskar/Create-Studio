@@ -70,6 +70,25 @@ If you aren't signed in, the import link is kept through login.
 
 The allowed Cliprame addresses are listed in three places that must stay in sync: `manifest.json` (content script and web-accessible resources), `bridge.js` (`ALLOWED`) and `result.html` (the "Open in" options).
 
+## Gmail
+
+Every compose and reply window in Gmail gets a **Video** button next to **Send**.
+
+1. Click it to see your Cliprame videos (from the workspace you're in), newest first. Search by title.
+2. **Personal link for** lists the people in the To field. Pick one and Cliprame makes a personal link: the video page greets them by name and their views are credited to them. Choose **Anyone with the link** to insert the video's shared link instead.
+3. Click a video. A clickable thumbnail with a play button and a "▶ Watch …" link are inserted where your cursor was (or at the top of the message).
+
+**Record a new video** and **Open Cliprame** open the studio in a new tab. If you aren't signed in to Cliprame, the panel offers **Sign in**, then **try again**.
+
+How it works (`gmail.js`):
+- A `MutationObserver` finds new message bodies (`[contenteditable][g_editable]`) and adds the button to their toolbar row (`tr.btC`, after the send cell `td.gU.Up`; the send button's tooltip is the fallback). If Gmail changes these, the button won't appear; nothing else breaks.
+- Gmail enforces Trusted Types, so the script never uses `innerHTML`. Nodes are built with DOM calls, the panel lives in a closed shadow root styled with a constructed stylesheet, and the video is inserted with `Range.insertNode`, followed by an `input` event so Gmail saves the draft.
+- Recipients come from Gmail's recipient chips (`data-hovercard-id`). Your own address (from the tab title) is left out.
+- The content script never calls Cliprame itself. It asks `background.js` (`gmail-videos`, `gmail-link`, `open-cliprame`), which only answers messages from `https://mail.google.com` and calls `/api/videos` and `/api/videos/<id>/links` with your Cliprame session cookies. Tabs it opens are limited to a few studio paths.
+- The Cliprame address is the one chosen on the review page (`cliprameOrigin`): www.cliprame.com, or localhost:3000 for development.
+
+Members of a team can insert a teammate's video, but only with **Anyone with the link**: personal links can only be made by the video's creator or a workspace admin.
+
 ## Troubleshooting
 
 **The popup says "Camera bubble removed".**
@@ -90,3 +109,5 @@ Every page uses the shared tokens in `theme.css` and the Lucide icons in `icons.
 | `activeTab`, `scripting` | Add the camera bubble and masks to the current tab |
 | `storage` | Recording state and per-site mask rules |
 | Optional site access | Requested per site when masking or the camera bubble is turned on |
+| Gmail (`mail.google.com`) | Add the Video button to compose windows |
+| Cliprame (`cliprame.com`, `localhost:3000`) | List your videos and make personal links from Gmail, with your Cliprame sign-in |

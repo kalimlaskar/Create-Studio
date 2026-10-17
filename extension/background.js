@@ -302,6 +302,64 @@ const handlers = {
     },
 };
 
+/* ---------------------------------- Gmail ---------------------------------- */
+// gmail.js asks for these. Requests go to Cliprame with the browser's Cliprame session
+// (host permission lets the service worker send its cookies), so nothing is stored here.
+
+const CLIPRAME_ORIGINS = ['https://www.cliprame.com', 'http://localhost:3000'];
+const OPENABLE_PATHS = /^\/(studio(\/videos)?(\?create=record)?|login\?next=\/studio\/videos)$/;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+/** The Cliprame address chosen on the review page; cliprame.com unless it's set to localhost. */
+async function cliprameOrigin() {
+    const { cliprameOrigin: chosen } = await chrome.storage.local.get('cliprameOrigin');
+    return CLIPRAME_ORIGINS.includes(chosen) ? chosen : CLIPRAME_ORIGINS[0];
+}
+
+function fromGmail(sender) {
+    if (sender.id !== chrome.runtime.id || sender.origin !== 'https://mail.google.com') throw new Error('Not allowed.');
+}
+
+async function cliprameApi(path, init = {}) {
+    const origin = await cliprameOrigin();
+    let response;
+    try {
+        response = await fetch(`${origin}${path}`, {
+            ...init,
+            credentials: 'include',
+            headers: init.body ? { 'Content-Type': 'application/json' } : undefined,
+            cache: 'no-store',
+        });
+    } catch {
+        throw new Error(`Couldn’t reach ${new URL(origin).host}. Check your connection.`);
+    }
+    if (response.status === 401) return { origin, signedOut: true };
+    const data = await response.json().catch(() => null);
+    if (!response.ok) throw new Error(data?.error || `Cliprame answered ${response.status}.`);
+    return { origin, ...data };
+}
+
+handlers['gmail-videos'] = (_message, sender) => {
+    fromGmail(sender);
+    return cliprameApi('/api/videos');
+};
+
+handlers['gmail-link'] = (message, sender) => {
+    fromGmail(sender);
+    if (!UUID.test(message.videoId ?? '')) throw new Error('Choose a video.');
+    const text = (value, max) => (typeof value === 'string' ? value.trim().slice(0, max) : '');
+    return cliprameApi(`/api/videos/${message.videoId}/links`, {
+        method: 'POST',
+        body: JSON.stringify({ recipientName: text(message.recipientName, 120), recipientEmail: text(message.recipientEmail, 254) }),
+    });
+};
+
+handlers['open-cliprame'] = async (message, sender) => {
+    fromGmail(sender);
+    if (!OPENABLE_PATHS.test(message.path ?? '')) throw new Error('Not allowed.');
+    await chrome.tabs.create({ url: `${await cliprameOrigin()}${message.path}`, index: sender.tab ? sender.tab.index + 1 : undefined });
+};
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message?.target !== 'background') return false;
     const handler = handlers[message.type];
