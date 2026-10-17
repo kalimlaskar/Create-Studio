@@ -81,13 +81,36 @@
         return null;
     }
 
+    const CHIPS = '[data-hovercard-id*="@"], [email*="@"]';
+
+    /**
+     * The part of the page holding this message's To field. It sits above the message
+     * body, outside the box that holds the body and the Send row, so this walks up from
+     * the body until it finds recipients, stopping at the edge of the compose window.
+     */
+    function recipientsScope(body) {
+        for (let node = body.parentElement; node && node !== document.body; node = node.parentElement) {
+            if (node.querySelector(CHIPS) || node.querySelector('input[name="to"], textarea[name="to"]')) return node;
+            if (node.matches('[role="dialog"], .aoI')) return node;
+        }
+        return body;
+    }
+
     /** People in the To field, from Gmail's recipient chips. Leaves out the signed-in account (it's in the tab title). */
     function recipientsIn(root) {
         const self = (document.title.match(/[^\s@]+@[^\s@]+\.[^\s@]+/)?.[0] ?? '').toLowerCase();
         const seen = new Map(self ? [[self, null]] : []);
-        for (const chip of root.querySelectorAll('[data-hovercard-id*="@"], span[email]')) {
+        // Gmail also keeps the recipients in a hidden field, as "Name <email>, …".
+        for (const field of root.querySelectorAll('input[name="to"], textarea[name="to"]')) {
+            for (const part of (field.value || '').split(',')) {
+                const email = (part.match(/[^\s<>"]+@[^\s<>"]+\.[^\s<>"]+/)?.[0] ?? '').toLowerCase();
+                if (!email || seen.has(email)) continue;
+                seen.set(email, { email, name: part.replace(/<[^>]*>/g, '').replace(/\S+@\S+/g, '').replace(/["'(),]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120) });
+            }
+        }
+        for (const chip of root.querySelectorAll(CHIPS)) {
             const email = (chip.getAttribute('data-hovercard-id') || chip.getAttribute('email') || '').trim().toLowerCase();
-            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || seen.has(email)) continue;
+            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || (seen.has(email) && (seen.get(email) === null || seen.get(email).name))) continue;
             // Chips can read "Sairin Laskar <sairin@…>", so the address part is taken out of the name.
             const raw = chip.getAttribute('data-name') || chip.getAttribute('name') || chip.textContent || '';
             const name = raw.replace(/<[^>]*>/g, '').replace(/\S+@\S+/g, '').replace(/["'(),]/g, ' ').replace(/\s+/g, ' ').trim();
@@ -124,7 +147,7 @@
         const open = (event) => {
             event.preventDefault();
             remember();
-            panel.open({ anchor: button, body, root: found.root, range: () => saved });
+            panel.open({ anchor: button, body, root: recipientsScope(body), range: () => saved });
         };
         button.addEventListener('mousedown', (event) => event.preventDefault());
         button.addEventListener('click', open);
