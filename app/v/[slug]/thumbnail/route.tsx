@@ -21,7 +21,9 @@ export async function GET(_request: Request, { params }: { params: Promise<{ slu
         ? admin.storage.from('profile-avatars').getPublicUrl(profile.avatar_path).data.publicUrl
         : null;
     const firstName = link.recipient_name?.trim().split(/\s+/)[0] || null;
-    const greeting = firstName ? `Hi ${firstName.slice(0, 24)}, I made this for you` : sender ? `A video from ${sender.slice(0, 40)}` : null;
+    // A personal link without a name (only an email) still reads as personal.
+    const personal = Boolean(link.recipient_name || link.recipient_email);
+    const greeting = firstName ? `Hi ${firstName.slice(0, 24)}, I made this for you` : personal ? 'I made this for you' : sender ? `A video from ${sender.slice(0, 40)}` : null;
 
     return new ImageResponse(
         <Thumbnail title={video.title} duration={formatClock(video.duration_ms)} poster={poster} greeting={greeting} sender={sender} avatar={avatar} />,

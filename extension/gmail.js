@@ -88,8 +88,10 @@
         for (const chip of root.querySelectorAll('[data-hovercard-id*="@"], span[email]')) {
             const email = (chip.getAttribute('data-hovercard-id') || chip.getAttribute('email') || '').trim().toLowerCase();
             if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || seen.has(email)) continue;
-            const label = (chip.getAttribute('data-name') || chip.getAttribute('name') || chip.textContent || '').trim();
-            seen.set(email, { email, name: label && label.toLowerCase() !== email && !label.includes('@') ? label.slice(0, 120) : '' });
+            // Chips can read "Sairin Laskar <sairin@…>", so the address part is taken out of the name.
+            const raw = chip.getAttribute('data-name') || chip.getAttribute('name') || chip.textContent || '';
+            const name = raw.replace(/<[^>]*>/g, '').replace(/\S+@\S+/g, '').replace(/["'(),]/g, ' ').replace(/\s+/g, ' ').trim();
+            seen.set(email, { email, name: name.slice(0, 120) });
         }
         return [...seen.values()].filter(Boolean);
     }
