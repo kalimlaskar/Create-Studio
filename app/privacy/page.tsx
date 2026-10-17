@@ -22,6 +22,7 @@ export default function PrivacyPage() {
             <h2>What we collect</h2>
             <h3>Your account</h3>
             <p>Email address, display name, username and profile photo, and your password (stored only as a secure hash by our sign-in provider). If you subscribe, we keep your plan, subscription status and payment references from Razorpay. We never see or store card or bank details.</p>
+            <p>If you sign in with Google, Google tells us your name, email address and profile photo, and confirms your email. We don’t get your Google password or access to anything else in your Google account.</p>
 
             <h3>Your content</h3>
             <ul>

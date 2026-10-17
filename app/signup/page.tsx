@@ -1,5 +1,6 @@
 import { AuthForm } from '@/components/auth/AuthForm';
 import { AuthShell } from '@/components/auth/AuthShell';
+import { enabledSocialProviders } from '@/lib/auth/providers';
 import { isDemoAuthEnabled } from '@/lib/auth/demo';
 
 export const metadata = { title: 'Create your account | Cliprame' };
@@ -22,6 +23,7 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
                 setup={!supabaseConfigured}
                 demoMode={isDemoAuthEnabled()}
                 supabaseConfigured={supabaseConfigured}
+                providers={supabaseConfigured ? enabledSocialProviders() : []}
             />
         </AuthShell>
     );

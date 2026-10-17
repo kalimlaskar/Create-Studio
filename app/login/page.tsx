@@ -1,5 +1,6 @@
 import { AuthForm } from '@/components/auth/AuthForm';
 import { AuthShell } from '@/components/auth/AuthShell';
+import { enabledSocialProviders } from '@/lib/auth/providers';
 import { getTemporaryAuthUsername, isDemoAuthEnabled } from '@/lib/auth/demo';
 
 export const metadata = { title: 'Log in | Cliprame Studio' };
@@ -23,6 +24,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
                 demoMode={isDemoAuthEnabled()}
                 demoUsername={getTemporaryAuthUsername()}
                 supabaseConfigured={supabaseConfigured}
+                providers={supabaseConfigured ? enabledSocialProviders() : []}
                 error={params.error}
                 notice={params.notice}
             />

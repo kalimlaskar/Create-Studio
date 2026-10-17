@@ -8,6 +8,7 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { createDemoSessionToken, DEMO_SESSION_COOKIE, DEMO_SESSION_MAX_AGE, isDemoAuthEnabled, verifyDemoCredentials } from '@/lib/auth/demo';
 import { razorpayApi } from '@/lib/billing/razorpay';
+import { enabledSocialProviders, isSocialProvider } from '@/lib/auth/providers';
 import { deleteObject, isR2Configured } from '@/lib/storage/r2';
 
 export interface AuthFormState {
@@ -102,6 +103,29 @@ export async function verifySignInOtpAction(_state: AuthFormState, formData: For
     const { error } = await supabase.auth.verifyOtp({ email, token, type: 'email' });
     if (error) return { error: 'That code is invalid or expired. Request a new one and try again.' };
     redirect(next);
+}
+
+/** Starts "Continue with Google" (or another enabled provider): off to the provider, back via /auth/callback. */
+export async function socialSignInAction(_state: AuthFormState, formData: FormData): Promise<AuthFormState> {
+    const provider = formData.get('provider');
+    const next = getSafeNext(formData.get('next'));
+    if (!isSocialProvider(provider) || !enabledSocialProviders().includes(provider)) return { error: 'That sign-in option isn’t available.' };
+
+    const supabase = await createSupabaseServerClient();
+    if (!supabase) return { error: 'Sign-in is unavailable. Configure Supabase to continue.' };
+
+    const requestHeaders = await headers();
+    const origin = process.env.NEXT_PUBLIC_SITE_URL ?? requestHeaders.get('origin') ?? 'http://localhost:3000';
+    const { data, error } = await supabase.auth.signInWithOAuth({
+        provider,
+        options: {
+            redirectTo: `${origin}/auth/callback?next=${encodeURIComponent(next)}`,
+            // Let people pick which Google account, instead of silently reusing the last one.
+            queryParams: provider === 'google' ? { prompt: 'select_account' } : undefined,
+        },
+    });
+    if (error || !data.url) return { error: error ? getAuthErrorMessage(error, 'We couldn’t start sign-in. Try again.') : 'We couldn’t start sign-in. Try again.' };
+    redirect(data.url);
 }
 
 export async function signUpAction(_state: AuthFormState, formData: FormData): Promise<AuthFormState> {

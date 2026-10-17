@@ -5,9 +5,44 @@ import { useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { ArrowRight, LoaderCircle, LockKeyhole, Mail } from 'lucide-react';
-import { requestSignInOtpAction, signInAction, signUpAction, verifySignInOtpAction, type AuthFormState } from '@/app/auth/actions';
+import { requestSignInOtpAction, signInAction, signUpAction, socialSignInAction, verifySignInOtpAction, type AuthFormState } from '@/app/auth/actions';
+import { SOCIAL_PROVIDERS, type SocialProvider } from '@/lib/auth/providers';
 
 const initialState: AuthFormState = {};
+
+/** Google's "G" mark, as its sign-in branding guidelines ask for. */
+function GoogleMark() {
+    return (
+        <svg viewBox="0 0 48 48" aria-hidden="true" className="h-[18px] w-[18px]">
+            <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z" />
+            <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z" />
+            <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z" />
+            <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z" />
+        </svg>
+    );
+}
+
+function SocialButtons({ providers, next, isSignup }: { providers: SocialProvider[]; next: string; isSignup: boolean }) {
+    const [state, action, pending] = useActionState<AuthFormState, FormData>(socialSignInAction, initialState);
+    return (
+        <div className="mb-4 space-y-3">
+            {providers.map((provider) => (
+                <form key={provider} action={action}>
+                    <input type="hidden" name="provider" value={provider} />
+                    <input type="hidden" name="next" value={next} />
+                    <button type="submit" disabled={pending} className="flex w-full items-center justify-center gap-3 rounded-xl bg-white px-4 py-3 text-sm font-semibold text-[#1F1F1F] transition hover:bg-white/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6A4CFF]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[#14121F] disabled:cursor-wait disabled:opacity-70">
+                        {pending ? <LoaderCircle className="h-[18px] w-[18px] animate-spin" /> : provider === 'google' ? <GoogleMark /> : null}
+                        {isSignup ? 'Sign up' : 'Continue'} with {SOCIAL_PROVIDERS[provider].label}
+                    </button>
+                </form>
+            ))}
+            {state.error && <p role="alert" className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-200">{state.error}</p>}
+            <div className="flex items-center gap-3 text-[11px] font-medium uppercase tracking-[0.18em] text-white/35">
+                <span className="h-px flex-1 bg-white/10" />or{isSignup ? ' with email' : ''}<span className="h-px flex-1 bg-white/10" />
+            </div>
+        </div>
+    );
+}
 
 /* Shared styles, tuned for a dark (#14121F) surface and the Cliprame violet. */
 const inputCls =
@@ -17,13 +52,15 @@ const primaryBtn =
     'flex w-full items-center justify-center gap-2 rounded-xl bg-[#6A4CFF] px-4 py-3.5 text-sm font-semibold text-white shadow-lg shadow-[#6A4CFF]/25 transition hover:bg-[#7B60FF] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6A4CFF]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[#14121F] disabled:cursor-wait disabled:opacity-60';
 const linkBtn = 'w-full text-center text-xs font-medium text-white/55 transition hover:text-white';
 
-export function AuthForm({ mode, next = '/studio', setup = false, demoMode = false, demoUsername = '', supabaseConfigured = false, notice, error: initialError, variant = 'card' }: {
+export function AuthForm({ mode, next = '/studio', setup = false, demoMode = false, demoUsername = '', supabaseConfigured = false, providers = [], notice, error: initialError, variant = 'card' }: {
     mode: 'login' | 'signup';
     next?: string;
     setup?: boolean;
     demoMode?: boolean;
     demoUsername?: string;
     supabaseConfigured?: boolean;
+    /** Social sign-in buttons to show, e.g. ['google']. */
+    providers?: SocialProvider[];
     notice?: string;
     error?: string;
     /** 'card' = original standalone look (signup page). 'embedded' = compact, no nested card, for use inside an existing card. */
@@ -61,6 +98,8 @@ export function AuthForm({ mode, next = '/studio', setup = false, demoMode = fal
             </div>}
             {notice && <p role="status" className="mb-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm leading-relaxed text-emerald-100">{notice}</p>}
             {initialError && <p role="alert" className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm leading-relaxed text-red-200">{initialError}</p>}
+
+            {providers.length > 0 && !demoMode && !authUnavailable && !isOtpStep && <SocialButtons providers={providers} next={next} isSignup={isSignup} />}
 
             {showTabs && (
                 <div role="tablist" aria-label="Sign-in method" className="mb-4 grid grid-cols-2 gap-1 rounded-xl bg-white/[0.06] p-1 text-xs font-semibold">
