@@ -47,6 +47,7 @@ export function normalizePlanInput(input: unknown, { isFree }: { isFree: boolean
         voiceoverMinutes: whole(limits.voiceoverMinutes, 0, 1_000_000),
         aiDailyRequests: whole(limits.aiDailyRequests, 0, 100_000),
         maxIntegrations: whole(limits.maxIntegrations, 0, 20),
+        seats: whole(limits.seats, 1, 1000),
     };
     const labels: Record<keyof typeof numbers, string> = {
         exportSeconds: 'Longest video must be between 10 seconds and 4 hours.',
@@ -55,6 +56,7 @@ export function normalizePlanInput(input: unknown, { isFree }: { isFree: boolean
         voiceoverMinutes: 'Enter AI voiceover minutes per month.',
         aiDailyRequests: 'Enter AI requests per day.',
         maxIntegrations: 'Integrations must be between 0 and 20.',
+        seats: 'Team seats must be between 1 and 1000.',
     };
     for (const key of Object.keys(numbers) as Array<keyof typeof numbers>) {
         if (numbers[key] === null) return { ok: false, error: labels[key] };
@@ -94,6 +96,7 @@ export function reducedLimits(before: Omit<PlanLimit, 'name'>, after: CleanPlan[
     less('voiceoverMinutes', 'Voiceover minutes');
     less('aiDailyRequests', 'AI requests per day');
     less('maxIntegrations', 'Integrations');
+    less('seats', 'Team seats');
     if (!before.watermark && after.watermark) changes.push('Watermark turned on');
     for (const [key, label] of [['protection', 'Video locks'], ['forms', 'Lead forms'], ['embedDomains', 'Embed domain limits']] as const) {
         if (before[key] && !after[key]) changes.push(`${label} turned off`);

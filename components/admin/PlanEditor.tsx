@@ -14,7 +14,7 @@ const BLANK: CatalogPlan = {
     id: '', name: '', description: null, priceUsd: 0, priceInr: 0, isPublic: true, archived: false, sortOrder: 0,
     razorpayPlanId: null, legacyRazorpayPlanIds: [],
     exportSeconds: 600, watermark: false, transcriptionMinutes: 150, voiceoverMinutes: 50, hostedVideos: 250,
-    aiDailyRequests: 200, embedDomains: true, protection: true, forms: true, maxIntegrations: 20,
+    aiDailyRequests: 200, embedDomains: true, protection: true, forms: true, maxIntegrations: 20, seats: 3,
 };
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
@@ -70,7 +70,7 @@ function Editor({ plan, subscribers, razorpayReady, effectiveRazorpayId, onClose
         razorpayPlanId: razorpayId,
         limits: {
             exportSeconds: draft.exportSeconds, watermark: draft.watermark, transcriptionMinutes: draft.transcriptionMinutes, voiceoverMinutes: draft.voiceoverMinutes,
-            hostedVideos: draft.hostedVideos, aiDailyRequests: draft.aiDailyRequests, embedDomains: draft.embedDomains, protection: draft.protection, forms: draft.forms, maxIntegrations: draft.maxIntegrations,
+            hostedVideos: draft.hostedVideos, aiDailyRequests: draft.aiDailyRequests, embedDomains: draft.embedDomains, protection: draft.protection, forms: draft.forms, maxIntegrations: draft.maxIntegrations, seats: draft.seats,
         },
     };
     // Warn before taking anything away from people already paying for this package.
@@ -122,6 +122,7 @@ function Editor({ plan, subscribers, razorpayReady, effectiveRazorpayId, onClose
                             <Field label="Transcription min / month" hint="Captions and edit by text."><input type="number" min={0} value={draft.transcriptionMinutes} onChange={(event) => set('transcriptionMinutes', Number(event.target.value))} className={input} /></Field>
                             <Field label="AI voiceover min / month"><input type="number" min={0} value={draft.voiceoverMinutes} onChange={(event) => set('voiceoverMinutes', Number(event.target.value))} className={input} /></Field>
                             <Field label="Integrations (0–20)" hint="Slack, HubSpot and webhooks."><input type="number" min={0} max={20} value={draft.maxIntegrations} onChange={(event) => set('maxIntegrations', Number(event.target.value))} className={input} /></Field>
+                            <Field label="Team seats" hint="People per workspace, owner included."><input type="number" min={1} max={1000} value={draft.seats} onChange={(event) => set('seats', Number(event.target.value))} className={input} /></Field>
                         </div>
                         <div className="mt-3 grid gap-2 sm:grid-cols-2">
                             <Toggle label="Cliprame watermark" hint="On exported and embedded videos." checked={draft.watermark} onChange={(value) => set('watermark', value)} />

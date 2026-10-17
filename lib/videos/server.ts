@@ -11,6 +11,7 @@ import { computeAnalytics } from './analytics';
 export interface VideoRow {
     id: string;
     owner_id: string;
+    workspace_id: string;
     title: string;
     status: 'uploading' | 'ready';
     storage_key: string;
@@ -44,7 +45,7 @@ export interface ShareLinkRow {
     created_at: string;
 }
 
-export const VIDEO_COLUMNS = 'id,owner_id,title,status,storage_key,poster_key,content_type,size_bytes,duration_ms,chapters,cta_label,cta_url,embed_enabled,embed_domains,access_mode,access_emails,access_version,interactions,banned_at,banned_reason,created_at';
+export const VIDEO_COLUMNS = 'id,owner_id,workspace_id,title,status,storage_key,poster_key,content_type,size_bytes,duration_ms,chapters,cta_label,cta_url,embed_enabled,embed_domains,access_mode,access_emails,access_version,interactions,banned_at,banned_reason,created_at';
 export const LINK_COLUMNS = 'id,video_id,slug,recipient_name,recipient_email,recipient_company,is_default,revoked_at,created_at';
 
 /** The signed-in creator and a Supabase client that acts as them (row-level security applies). */
@@ -113,9 +114,11 @@ export function toShareLink(row: ShareLinkRow): ShareLink {
 export const playbackUrl = (row: Pick<VideoRow, 'storage_key'>) => r2Url('GET', row.storage_key, 6 * 3600);
 export const posterUrl = (row: Pick<VideoRow, 'poster_key'>, expiresIn = 3600) => (row.poster_key && isR2Configured() ? r2Url('GET', row.poster_key, expiresIn) : null);
 
-/** The creator's library, newest first, with view counts. */
-export async function listVideos(supabase: SupabaseClient): Promise<VideoListItem[]> {
-    const { data: videos, error } = await supabase.from('videos').select(VIDEO_COLUMNS).order('created_at', { ascending: false }).limit(200);
+/** A workspace's library (or, without one, everything the user can see), newest first, with view counts. */
+export async function listVideos(supabase: SupabaseClient, workspaceId?: string | null): Promise<VideoListItem[]> {
+    let query = supabase.from('videos').select(VIDEO_COLUMNS);
+    if (workspaceId) query = query.eq('workspace_id', workspaceId);
+    const { data: videos, error } = await query.order('created_at', { ascending: false }).limit(200);
     if (error) throw error;
     const rows = (videos ?? []) as VideoRow[];
     if (!rows.length) return [];

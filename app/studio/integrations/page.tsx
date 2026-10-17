@@ -1,15 +1,16 @@
 import { redirect } from 'next/navigation';
 import { VideosShell } from '@/components/videos/VideosShell';
 import { IntegrationsManager } from '@/components/integrations/IntegrationsManager';
-import { getStudioUser, isMissingTable } from '@/lib/videos/server';
+import { isMissingTable } from '@/lib/videos/server';
+import { getWorkspaceContext, inWorkspace } from '@/lib/workspaces/server';
 import { INTEGRATION_COLUMNS, toIntegration, type IntegrationRow } from '@/lib/integrations/server';
 
 export const metadata = { title: 'Integrations | Cliprame' };
 
 export default async function IntegrationsPage() {
-    const user = await getStudioUser();
-    if (!user) redirect('/login?next=/studio/integrations');
-    const { data, error } = await user.supabase.from('integrations').select(INTEGRATION_COLUMNS).order('created_at');
+    const context = await getWorkspaceContext();
+    if (!context) redirect('/login?next=/studio/integrations');
+    const { data, error } = await inWorkspace(context.user.supabase.from('integrations').select(INTEGRATION_COLUMNS), context.active?.id).order('created_at');
     if (error && !isMissingTable(error)) console.error('Could not load integrations:', error);
     return (
         <VideosShell title="Integrations" active="/studio/integrations">

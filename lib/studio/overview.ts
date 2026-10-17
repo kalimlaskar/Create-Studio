@@ -10,7 +10,7 @@ export async function loadAccountOverview(supabase: SupabaseClient, userId: stri
     const [plan, usage, videos, subscription, { data: claims }] = await Promise.all([
         getPlanSummary(userId),
         getUsageThisMonth(userId).catch(() => ({ transcriptionMinutes: 0, voiceoverMinutes: 0 })),
-        supabase.from('videos').select('size_bytes').limit(1000),
+        supabase.from('videos').select('size_bytes').eq('owner_id', userId).limit(1000),
         supabase.from('subscriptions').select('status,current_period_end,cancel_at_period_end').eq('user_id', userId).maybeSingle(),
         supabase.auth.getClaims(),
     ]);

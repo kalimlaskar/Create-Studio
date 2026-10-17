@@ -3,7 +3,7 @@ import { DEFAULT_CATALOG, PLAN_LIMITS } from '@/components/pricing/planLimits';
 import { planForRazorpayId, toCatalogPlan } from '@/lib/plans/catalog';
 import { normalizePlanInput, planIdFrom, reducedLimits } from '@/lib/plans/validate';
 
-const limits = { exportSeconds: 600, watermark: false, transcriptionMinutes: 150, voiceoverMinutes: 50, hostedVideos: 250, aiDailyRequests: 200, embedDomains: true, protection: true, forms: true, maxIntegrations: 20 };
+const limits = { exportSeconds: 600, watermark: false, transcriptionMinutes: 150, voiceoverMinutes: 50, hostedVideos: 250, aiDailyRequests: 200, embedDomains: true, protection: true, forms: true, maxIntegrations: 20, seats: 3 };
 
 describe('package settings', () => {
     it('accepts a paid package and makes a safe id from its name', () => {

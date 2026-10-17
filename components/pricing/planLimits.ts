@@ -26,6 +26,8 @@ export interface PlanLimit {
     forms: boolean;
     /** Slack, HubSpot and webhook connections allowed. */
     maxIntegrations: number;
+    /** People in each workspace the account owns, including the owner. */
+    seats: number;
 }
 
 /**
@@ -42,9 +44,9 @@ export interface PlanLimit {
  * isn't there yet.
  */
 export const PLAN_LIMITS: Record<PlanId, PlanLimit> = {
-    free: { name: 'Free', priceUsd: 0, priceInr: 0, exportSeconds: 60, watermark: true, transcriptionMinutes: 10, voiceoverMinutes: 2, hostedVideos: 5, aiDailyRequests: 12, embedDomains: false, protection: true, forms: true, maxIntegrations: 20 },
-    creator: { name: 'Creator', priceUsd: 15, priceInr: 1500, exportSeconds: 300, watermark: false, transcriptionMinutes: 90, voiceoverMinutes: 30, hostedVideos: 100, aiDailyRequests: 200, embedDomains: true, protection: true, forms: true, maxIntegrations: 20 },
-    studio: { name: 'Studio', priceUsd: 35, priceInr: 3500, exportSeconds: 900, watermark: false, transcriptionMinutes: 250, voiceoverMinutes: 100, hostedVideos: 500, aiDailyRequests: 200, embedDomains: true, protection: true, forms: true, maxIntegrations: 20 },
+    free: { name: 'Free', priceUsd: 0, priceInr: 0, exportSeconds: 60, watermark: true, transcriptionMinutes: 10, voiceoverMinutes: 2, hostedVideos: 5, aiDailyRequests: 12, embedDomains: false, protection: true, forms: true, maxIntegrations: 20, seats: 1 },
+    creator: { name: 'Creator', priceUsd: 15, priceInr: 1500, exportSeconds: 300, watermark: false, transcriptionMinutes: 90, voiceoverMinutes: 30, hostedVideos: 100, aiDailyRequests: 200, embedDomains: true, protection: true, forms: true, maxIntegrations: 20, seats: 3 },
+    studio: { name: 'Studio', priceUsd: 35, priceInr: 3500, exportSeconds: 900, watermark: false, transcriptionMinutes: 250, voiceoverMinutes: 100, hostedVideos: 500, aiDailyRequests: 200, embedDomains: true, protection: true, forms: true, maxIntegrations: 20, seats: 10 },
 };
 
 /** A package as the app uses it: limits plus what the admin set around them. */

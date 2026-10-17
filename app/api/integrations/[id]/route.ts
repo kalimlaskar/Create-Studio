@@ -9,7 +9,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const { id } = await params;
     const user = await getStudioUser();
     if (!user) return fail('Sign in again.', 401);
-    const { data: row } = await user.supabase.from('integrations').select('id,kind').eq('id', id).maybeSingle();
+    const { data: row } = await user.supabase.from('integrations').select('id,kind,workspace_id').eq('id', id).maybeSingle();
     if (!row) return fail('Integration not found.', 404);
 
     const body = await request.json().catch(() => null) as { name?: unknown; events?: unknown; identifiedOnly?: unknown; enabled?: unknown; target?: unknown; rotateSecret?: unknown } | null;
@@ -31,7 +31,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (body?.target !== undefined) {
         const prepared = await prepareTarget(row.kind, body.target);
         if ('error' in prepared) return fail(prepared.error);
-        const duplicate = await findDuplicate(user.supabase, row.kind, prepared.target, id);
+        const duplicate = await findDuplicate(user.supabase, row.kind, prepared.target, id, row.workspace_id);
         if (duplicate) return fail(`This is already connected as “${duplicate.name}”.`, 409);
         update.target_encrypted = encrypt(prepared.target);
         update.target_hint = prepared.hint;

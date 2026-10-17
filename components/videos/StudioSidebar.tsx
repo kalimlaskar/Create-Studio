@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
-import { ArrowUpRight, ChevronsUpDown, Compass, Crown, ShieldCheck, Film, Home, Images, LogOut, PanelLeftClose, PanelLeftOpen, Plug, Plus, Sparkles, Tag, Upload, UserRound, Video, type LucideIcon } from 'lucide-react';
+import { ArrowUpRight, ChevronsUpDown, Compass, Crown, ShieldCheck, Film, Home, Images, LogOut, PanelLeftClose, PanelLeftOpen, Plug, Plus, Sparkles, Tag, Upload, UserRound, Users, Video, type LucideIcon } from 'lucide-react';
 import { signOutAction } from '@/app/auth/actions';
 import { startTour } from '@/components/tour/ProductTour';
 import { D, focus } from './ui';
@@ -20,6 +20,8 @@ export interface SidebarAccount {
     liveIntegrations: number;
     /** Shows the admin dashboard link. The dashboard itself checks again on the server. */
     isAdmin?: boolean;
+    /** The workspace the studio is showing, and how many the person is in. */
+    workspace?: { name: string; count: number } | null;
 }
 
 /** Remembered in a cookie so the server renders the right width and nothing jumps on load. */
@@ -52,6 +54,7 @@ const WORKSPACE: Item[] = [
     { href: '/studio', label: 'Home', icon: Home, match: (path) => path === '/studio' },
     { href: '/studio/videos', label: 'Videos', icon: Film, match: (path) => path.startsWith('/studio/videos') },
     { href: '/studio/integrations', label: 'Integrations', icon: Plug, match: (path) => path.startsWith('/studio/integrations') },
+    { href: '/studio/team', label: 'Team', icon: Users, match: (path) => path.startsWith('/studio/team') },
 ];
 
 const EXPLORE: Item[] = [
@@ -133,6 +136,14 @@ export function StudioSidebar({ account, initialCollapsed, onCreate, extraItems 
             </div>
 
             <div className={`flex min-h-0 flex-1 flex-col overflow-y-auto pb-4 ${collapsed ? 'px-3' : 'px-4'}`}>
+                {/* Which workspace this is, once there's more than one to be in. */}
+                {account?.workspace && account.workspace.count > 1 && !collapsed && (
+                    <Link href="/studio/team" className={`mb-2 flex items-center gap-2 rounded-xl border border-[#14121F]/[0.07] bg-[#F7F6FB] px-3 py-2 text-xs transition hover:bg-white ${focus}`}>
+                        <Users className="h-3.5 w-3.5 shrink-0 text-[#6A4CFF]" />
+                        <span className="min-w-0 flex-1 truncate font-semibold">{account.workspace.name}</span>
+                        <span className="shrink-0 text-[#14121F]/45">Switch</span>
+                    </Link>
+                )}
                 {/* Primary action: what to make */}
                 <div ref={createRef} data-tour="create" className={`relative mt-2 ${collapsed ? 'self-center' : ''}`}>
                     <button
@@ -312,7 +323,7 @@ export function MobileTabBar() {
     const tabs = [...WORKSPACE, { href: '/pricing', label: 'Plans', icon: Crown, match: (path: string) => path === '/pricing' }];
     return (
         <nav aria-label="Studio" className="fixed inset-x-3 bottom-3 z-40 rounded-2xl border border-[#14121F]/10 bg-white/90 p-1.5 shadow-[0_16px_40px_-16px_rgba(20,18,31,0.45)] backdrop-blur-xl md:hidden" style={{ paddingBottom: 'max(0.375rem, env(safe-area-inset-bottom))' }}>
-            <ul className="grid grid-cols-4">
+            <ul className="grid grid-cols-5">
                 {tabs.map(({ href, label, icon: Icon, match }) => {
                     const active = match(pathname);
                     return (

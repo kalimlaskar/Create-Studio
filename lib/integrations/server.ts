@@ -120,11 +120,13 @@ export async function prepareTarget(kind: IntegrationKind, input: unknown): Prom
 }
 
 /**
- * The owner's existing integration that already sends to this target, if any. Targets are
- * encrypted with a random IV, so they're compared after decrypting (an owner has at most 20).
+ * An integration in the workspace that already sends to this target, if any. Targets are
+ * encrypted with a random IV, so they're compared after decrypting (a workspace has few).
  */
-export async function findDuplicate(supabase: SupabaseClient, kind: IntegrationKind, target: string, exceptId?: string) {
-    const { data } = await supabase.from('integrations').select('id,name,target_encrypted').eq('kind', kind);
+export async function findDuplicate(supabase: SupabaseClient, kind: IntegrationKind, target: string, exceptId?: string, workspaceId?: string | null) {
+    let query = supabase.from('integrations').select('id,name,target_encrypted').eq('kind', kind);
+    if (workspaceId) query = query.eq('workspace_id', workspaceId);
+    const { data } = await query;
     const same = (stored: string) => {
         try { return decrypt(stored) === target; } catch { return false; }
     };
@@ -260,10 +262,10 @@ export async function deliver(admin: SupabaseClient, row: IntegrationRow, payloa
     return result;
 }
 
-/** Sends notifications to every matching integration of the video's owner. */
-export async function dispatchNotifications(admin: SupabaseClient, ownerId: string, payloads: NotificationPayload[]) {
+/** Sends notifications to every matching integration in the video's workspace. */
+export async function dispatchNotifications(admin: SupabaseClient, workspaceId: string, payloads: NotificationPayload[]) {
     if (!payloads.length) return;
-    const { data: rows } = await admin.from('integrations').select('*').eq('owner_id', ownerId).eq('enabled', true);
+    const { data: rows } = await admin.from('integrations').select('*').eq('workspace_id', workspaceId).eq('enabled', true);
     const jobs = (rows as IntegrationRow[] | null ?? []).flatMap((row) => payloads
         .filter((payload) => row.events.includes(payload.type) && (!row.identified_only || payload.viewer.identified))
         .map((payload) => deliver(admin, row, payload)));

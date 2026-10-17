@@ -3,6 +3,7 @@ import { isAccountBanned } from '@/lib/admin/bans';
 import { describeDbError, getStudioUser, isMissingColumn, isMissingTable, listVideos, MISSING_COLUMNS_MESSAGE, MISSING_TABLES_MESSAGE, posterObjectKey, toVideoRecord, VIDEO_COLUMNS, videoObjectKey, type VideoRow } from '@/lib/videos/server';
 import { MAX_UPLOAD_BYTES, SHARE_CONTENT_TYPES } from '@/lib/videos/types';
 import { getPlanSummary } from '@/lib/plans/server';
+import { getWorkspaceContext } from '@/lib/workspaces/server';
 import { maxUploadBytes } from '@/components/pricing/planLimits';
 
 const fail = (error: string, status: number) => Response.json({ error }, { status });
@@ -10,10 +11,10 @@ const planLimit = (error: string) => Response.json({ error, upgradeUrl: '/pricin
 const describeSeconds = (seconds: number) => (seconds >= 60 ? `${Math.round(seconds / 60)} minute${seconds >= 120 ? 's' : ''}` : `${seconds} seconds`);
 
 export async function GET() {
-    const user = await getStudioUser();
-    if (!user) return fail('Sign in to see your videos.', 401);
+    const context = await getWorkspaceContext();
+    if (!context) return fail('Sign in to see your videos.', 401);
     try {
-        return Response.json({ videos: await listVideos(user.supabase) }, { headers: { 'Cache-Control': 'no-store' } });
+        return Response.json({ videos: await listVideos(context.user.supabase, context.active?.id) }, { headers: { 'Cache-Control': 'no-store' } });
     } catch (error) {
         console.error('Could not list videos:', describeDbError(error));
         return fail(isMissingTable(error) ? MISSING_TABLES_MESSAGE : isMissingColumn(error) ? MISSING_COLUMNS_MESSAGE : 'Could not load your videos.', 500);
@@ -45,7 +46,8 @@ export async function POST(request: Request) {
     if (sizeBytes > maxUploadBytes(limits)) {
         return planLimit(`This file is larger than your ${limits.name} plan allows for a ${describeSeconds(limits.exportSeconds)} video. Export it at 720p or trim it.`);
     }
-    const { count } = await user.supabase.from('videos').select('id', { count: 'exact', head: true });
+    // Plans are per person, so this counts the videos they made, in any workspace.
+    const { count } = await user.supabase.from('videos').select('id', { count: 'exact', head: true }).eq('owner_id', user.id);
     if ((count ?? 0) >= limits.hostedVideos) {
         return planLimit(`Your ${limits.name} plan can host ${limits.hostedVideos} videos. Delete one in Videos${plan === 'studio' ? '' : ', or upgrade for more'}.`);
     }

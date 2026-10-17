@@ -63,12 +63,12 @@ export const siteUrlFor = (request: Request) => (process.env.NEXT_PUBLIC_SITE_UR
 
 /**
  * After the response is sent, records the moments this report crossed (once per
- * session, even if reports arrive twice) and notifies the owner's integrations.
+ * session, even if reports arrive twice) and notifies the workspace's integrations.
  */
 export function notifyViewing({ admin, request, video, link, before, now, extra = [] }: {
     admin: SupabaseClient;
     request: Request;
-    video: Pick<VideoRow, 'id' | 'owner_id' | 'title' | 'duration_ms'>;
+    video: Pick<VideoRow, 'id' | 'owner_id' | 'workspace_id' | 'title' | 'duration_ms'>;
     link: Pick<ShareLinkRow, 'slug' | 'recipient_name' | 'recipient_email' | 'recipient_company'>;
     before: Pick<SessionState, 'watched_ms' | 'completed' | 'cta_clicked'>;
     now: SessionState;
@@ -81,14 +81,14 @@ export function notifyViewing({ admin, request, video, link, before, now, extra 
 
     after(async () => {
         try {
-            const { count } = await admin.from('integrations').select('id', { count: 'exact', head: true }).eq('owner_id', video.owner_id).eq('enabled', true);
+            const { count } = await admin.from('integrations').select('id', { count: 'exact', head: true }).eq('workspace_id', video.workspace_id).eq('enabled', true);
             if (!count) return;
             const { data: fresh, error } = await admin.from('notification_events')
                 .upsert(moments.map((type) => ({ owner_id: video.owner_id, video_id: video.id, session_id: now.id, type })), { onConflict: 'session_id,type', ignoreDuplicates: true })
                 .select('type');
             if (error) throw error;
             const types = (fresh ?? []).map((row) => row.type as NotificationType);
-            await dispatchNotifications(admin, video.owner_id, types.map((type) => buildPayload(type, { video, link, session: now, siteUrl })));
+            await dispatchNotifications(admin, video.workspace_id, types.map((type) => buildPayload(type, { video, link, session: now, siteUrl })));
         } catch (error) {
             console.error('Could not send viewing notifications:', error);
         }
@@ -96,13 +96,13 @@ export function notifyViewing({ admin, request, video, link, before, now, extra 
 }
 
 /**
- * After the response is sent, tells the owner's integrations about a form submission.
+ * After the response is sent, tells the workspace's integrations about a form submission.
  * Every submission is its own event, so there's no once-per-session check here.
  */
 export function notifyLead({ admin, request, video, link, form, email, source }: {
     admin: SupabaseClient;
     request: Request;
-    video: Pick<VideoRow, 'id' | 'owner_id' | 'title' | 'duration_ms'>;
+    video: Pick<VideoRow, 'id' | 'owner_id' | 'workspace_id' | 'title' | 'duration_ms'>;
     link: Pick<ShareLinkRow, 'slug' | 'recipient_name' | 'recipient_email' | 'recipient_company'>;
     form: { id: string; title: string; values: Record<string, string>; hidden: Record<string, string> };
     email: string | null;
@@ -120,7 +120,7 @@ export function notifyLead({ admin, request, video, link, form, email, source }:
                 session: { watched_ms: 0, completed: false, cta_clicked: false, seconds_watched: [], device: null, country: null, source, referrer_host: null, viewer_email: email },
                 siteUrl,
             });
-            await dispatchNotifications(admin, video.owner_id, [{ ...payload, form }]);
+            await dispatchNotifications(admin, video.workspace_id, [{ ...payload, form }]);
         } catch (error) {
             console.error('Could not send form notifications:', error);
         }

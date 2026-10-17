@@ -133,6 +133,8 @@ export async function signUpAction(_state: AuthFormState, formData: FormData): P
     const email = String(formData.get('email') ?? '').trim();
     const password = String(formData.get('password') ?? '');
     const confirmPassword = String(formData.get('confirmPassword') ?? '');
+    // Kept through email confirmation, so an invite link still lands on the invite after sign-up.
+    const next = getSafeNext(formData.get('next'));
     if (name.length < 2) return { error: 'Enter your name (at least 2 characters).' };
     if (!email || !/^\S+@\S+\.\S+$/.test(email)) return { error: 'Enter a valid email address.' };
     if (password.length < 8) return { error: 'Use a password with at least 8 characters.' };
@@ -154,7 +156,7 @@ export async function signUpAction(_state: AuthFormState, formData: FormData): P
             data: {
                 display_name: name,
             },
-            emailRedirectTo: `${origin}/auth/callback?next=/studio`,
+            emailRedirectTo: `${origin}/auth/callback?next=${encodeURIComponent(next)}`,
         },
     });
 
